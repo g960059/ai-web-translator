@@ -88,12 +88,28 @@ Rules:
 
             // Validate it is an array
             if (!Array.isArray(translatedTexts)) {
-                // If it returned a single object e.g. { "translations": [...] }, try to extract
-                // But for now, let's treat it as error or single string depending on context
-                if (texts.length === 1 && typeof translatedTexts === 'string') {
-                    translatedTexts = [translatedTexts];
-                } else {
-                    throw new Error("Response is not an array");
+                const values = Object.values(translatedTexts);
+
+                // Case 1: Wrapped Array (e.g. {"0": [...]} or {"result": [...]})
+                if (values.length === 1 && Array.isArray(values[0])) {
+                    translatedTexts = values[0];
+                }
+                // Case 2: Indexed Object (e.g. {"0": "...", "1": "..."})
+                else {
+                    const keys = Object.keys(translatedTexts);
+                    // Check if keys are all numeric strings
+                    if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
+                        // Convert to array by sorting keys numerically
+                        translatedTexts = Object.entries(translatedTexts)
+                            .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                            .map(entry => entry[1] as string);
+                    }
+                    // Handle single string response for single input (Edge case)
+                    else if (texts.length === 1 && typeof translatedTexts === 'string') {
+                        translatedTexts = [translatedTexts];
+                    } else {
+                        throw new Error("Response is not an array");
+                    }
                 }
             }
 
