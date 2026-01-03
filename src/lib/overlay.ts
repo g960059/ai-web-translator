@@ -193,6 +193,39 @@ export class TranslationOverlay {
         if (this.stopBtn) this.stopBtn!.style.display = 'none';
         if (this.resumeBtn) this.resumeBtn!.style.display = 'none';
     }
+
+    public showToast(message: string, duration = 3000) {
+        if (!this.shadowRoot) this.create();
+
+        const toast = document.createElement('div');
+        toast.textContent = message;
+        toast.style.position = 'absolute';
+        toast.style.bottom = '60px'; // Above controls
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        toast.style.color = 'white';
+        toast.style.padding = '8px 12px';
+        toast.style.borderRadius = '4px';
+        toast.style.fontSize = '12px';
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        toast.style.pointerEvents = 'none';
+
+        this.container?.appendChild(toast);
+
+        // Trigger reflow
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+        });
+
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, duration);
+    }
 }
 
 export const overlay = new TranslationOverlay();

@@ -55,11 +55,34 @@ export function getTranslatableBlocks(root: HTMLElement): BlockNodeData[] {
             }
         }
 
-        // Continue traversing children
-        for (let child = element.firstChild; child; child = child.nextSibling) {
+        // Mixed Block Traversal: Iterate all children (Elements and Text)
+        let child = element.firstChild;
+        while (child) {
+            const next = child.nextSibling;
+
             if (child.nodeType === Node.ELEMENT_NODE) {
                 traverse(child as HTMLElement);
+            } else if (child.nodeType === Node.TEXT_NODE) {
+                const text = child.textContent;
+                // Check if text is significant (not just whitespace)
+                if (text && text.trim().length > 0) {
+                    // Wrap in a span to make it a valid block for translation
+                    const span = document.createElement('span');
+                    span.setAttribute('data-tx-wrapper', 'true');
+                    // Replace text node with span
+                    element.replaceChild(span, child);
+                    span.textContent = text;
+
+                    // Add to blocks directly
+                    blocks.push({
+                        id: `block-${index++}`,
+                        originalHTML: span.innerHTML,
+                        element: span
+                    });
+                }
             }
+
+            child = next;
         }
     }
 
@@ -113,3 +136,5 @@ export function restoreHTML(minifiedHTML: string, map: Record<string, string>): 
     });
 }
 
+
+// Math sanitization functions removed as per user request to preserve original DOM structure

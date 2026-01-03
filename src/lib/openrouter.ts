@@ -1,4 +1,3 @@
-
 export interface TranslationResponse {
     success: boolean;
     data?: string[];
@@ -48,7 +47,30 @@ Rules:
 4. **Cleanup**:
    - Remove English articles (a, an, the) effectively. Do not leave "A" or "The" as text artifacts.
    - Remove spaces between Japanese characters unless necessary.
-5. **Robustness**:
+5. **Structure & Math**:
+   - **Headers**: If a snippet starts with a bold label followed by a period and then a sentence (e.g., "**Definition.** Let X be..."), separate them.
+     - Output: "**定義** Xを...とする。" (Do NOT say "定義。Xを...").
+   - **Math Punctuation**: 
+     - If a MathML/math string implies a pause or end of sentence (comma/period inside), respect it but do NOT add redundant Japanese punctuation like "。, " or "., ".
+     - **CRITICAL**: If a math tag ends with a period (e.g. "<math>G.</math>"), **MOVE the period OUTSIDE** the tag and use Japanese punctuation.
+       - Input: "...group <math>G.</math>"
+       - Output: "...群<math>G</math>。" (Period moved out and localized).
+     - **Images**:
+       - **Simple Math (Convert to Text)**: If an image represents a simple symbol ending in a period (e.g., "alt='G.'"), replace it with italicized text.
+         - Input: "<img alt='G.'>" -> Output: "<i>G</i>。" (Remove image, use text + Japanese period).
+       - **Complex Math (Suppress Period)**: If a complex image must be kept and includes a period, **DO NOT** add a Japanese period after it.
+         - Input: "...<img alt='Complex eq.'>" -> Output: "...<img alt='Complex eq.'>" (No "。" added).
+   - **Academic Phrasing**: Use natural academic phrasing for definitions and theorems.
+     - "Let X be Y" -> "XをYとする" (Not "XがYであるようにさせる").
+     - "uniquely determined" -> "一意に定まる".
+6. **Punctuation (Strict)**:
+   - **Do NOT** add a period (。) at the end of headers, titles, or short phrases/labels.
+     - Good: "定義（類関数）", "マッキーの既約判定法"
+     - Bad: "定義（類関数）。", "マッキーの既約判定法。"
+7. **Coverage**:
+   - **Translate EVERY header**, even if it is a single word (e.g. "Properties", "Lemma", "Proof").
+     - Input: "**Properties**" -> Output: "**性質**" (Do NOT skip!).
+8. **Robustness**:
    - If a snippet is just a number or symbol, return strict JSON string of it.
    - Do not add explanations. ONLY return the JSON array.`
                     },
@@ -73,46 +95,142 @@ Rules:
         // The model might return a JSON array string as requested, or just text.
         // We should parse it back.
         let translatedTexts: string[] = [];
+        let parsedData: any = null;
+
         try {
-            // Find the first '[' and last ']' to extract the JSON array if there's noise
-            const start = content.indexOf('[');
-            const end = content.lastIndexOf(']');
+            // Strategy A: Try parsing the whole content first.
+            parsedData = JSON.parse(content);
+        } catch (e) {
+            // Strategy B: Substring extraction. (Original logic)
+            try {
+                const start = content.indexOf('[');
+                const end = content.lastIndexOf(']');
 
-            if (start !== -1 && end !== -1 && end > start) {
-                const jsonStr = content.substring(start, end + 1);
-                translatedTexts = JSON.parse(jsonStr);
-            } else {
-                // Fallback: try parsing the whole thing
-                translatedTexts = JSON.parse(content);
-            }
-
-            // Validate it is an array
-            if (!Array.isArray(translatedTexts)) {
-                const values = Object.values(translatedTexts);
-
-                // Case 1: Wrapped Array (e.g. {"0": [...]} or {"result": [...]})
-                if (values.length === 1 && Array.isArray(values[0])) {
-                    translatedTexts = values[0];
+                // Only try if simple substring looks valid
+                if (start !== -1 && end !== -1 && end > start) {
+                    parsedData = JSON.parse(content.substring(start, end + 1));
                 }
-                // Case 2: Indexed Object (e.g. {"0": "...", "1": "..."})
+            } catch (e2) {
+                // Strategy C: Smart Recursive Extraction (New fix for trailing garbage)
+                const extracted = extractValidJsonArray(content);
+                if (extracted) {
+                    try {
+                        parsedData = JSON.parse(extracted);
+                    } catch (e3) {
+                        // Fallthrough
+                    }
+                }
+
+                if (!parsedData) {
+                    // Strategy D: JSON Object Wrapper check
+                    try {
+                        const startObj = content.indexOf('{');
+                        const endObj = content.lastIndexOf('}');
+                        if (startObj !== -1 && endObj !== -1 && endObj > startObj) {
+                            parsedData = JSON.parse(content.substring(startObj, endObj + 1));
+                        }
+                    } catch (e4) {
+                        // Fallthrough
+                    }
+                }
+            }
+        }
+
+        if (parsedData) {
+            if (Array.isArray(parsedData)) {
+                translatedTexts = parsedData;
+            } else if (typeof parsedData === 'object') {
+                // It is an object. We need to find the data.
+
+                // Check 1: Look for specific known keys first (Prioritized)
+                const knownKeys = ['output', 'result', 'translation', 'translations', 'data', 'response', 'translated', 'translated_text'];
+                let targetArray: string[] | undefined;
+
+                for (const key of knownKeys) {
+                    // Case-insensitive lookup (e.g. "Output" vs "output")
+                    const foundKey = Object.keys(parsedData).find(k => k.toLowerCase() === key);
+                    if (foundKey) {
+                        const value = parsedData[foundKey];
+                        if (Array.isArray(value) && value.every((i: any) => typeof i === 'string')) {
+                            targetArray = value;
+                            break;
+                        }
+                    }
+                }
+
+                if (targetArray) {
+                    translatedTexts = targetArray;
+                }
                 else {
-                    const keys = Object.keys(translatedTexts);
-                    // Check if keys are all numeric strings
-                    if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
-                        // Convert to array by sorting keys numerically
-                        translatedTexts = Object.entries(translatedTexts)
-                            .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-                            .map(entry => entry[1] as string);
+                    // Check 2: Fallback - find ANY array of strings, but exclude "input"-like keys
+                    const excludeKeys = ['input', 'source', 'original', 'query', 'prompt'];
+                    const potentialEntry = Object.entries(parsedData).find(([k, v]) =>
+                        !excludeKeys.includes(k.toLowerCase()) &&
+                        Array.isArray(v) &&
+                        v.every((i: any) => typeof i === 'string')
+                    );
+
+                    if (potentialEntry) {
+                        translatedTexts = potentialEntry[1] as string[];
                     }
-                    // Handle single string response for single input (Edge case)
-                    else if (texts.length === 1 && typeof translatedTexts === 'string') {
-                        translatedTexts = [translatedTexts];
-                    } else {
-                        throw new Error("Response is not an array");
+                    // Check 3: Key-Value Map (Existing logic for "Input" -> "Output")
+                    else {
+                        const keys = Object.keys(parsedData);
+                        // Case: Numeric Indexed Object (e.g. {"0": "...", "1": "..."})
+                        if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
+                            translatedTexts = Object.entries(parsedData)
+                                .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                                .map(entry => entry[1] as string);
+                        }
+                        // Case: Input Text -> Output Text Map
+                        else if (keys.length > 0) {
+                            const mappedTexts: string[] = [];
+                            let matchCount = 0;
+
+                            for (const text of texts) {
+                                const key = keys.find(k => k === text || k.trim() === text.trim());
+                                if (key !== undefined) {
+                                    mappedTexts.push((parsedData as any)[key]);
+                                    matchCount++;
+                                } else {
+                                    mappedTexts.push("");
+                                }
+                            }
+
+                            if (matchCount > 0 && matchCount >= texts.length * 0.5) {
+                                translatedTexts = mappedTexts;
+                            } else {
+                                // Handle single string response for single input (Edge case)
+                                if (texts.length === 1 && typeof parsedData === 'string') { // Unlikely 'typeof object' check above prevents this but strictly speaking...
+                                    translatedTexts = [parsedData as unknown as string];
+                                }
+                                // We don't throw immediately, we might fall through to regex if this logic fails to produce meaningful translatedTexts? 
+                                // Actually we should probably error here if we found JSON but couldn't make sense of it.
+                                if (translatedTexts.length === 0) {
+                                    // One last check: maybe the model returned {"translation": "single string"} for single input
+                                    const potentialString = Object.values(parsedData).find(v => typeof v === 'string');
+                                    if (texts.length === 1 && potentialString) {
+                                        translatedTexts = [potentialString as string];
+                                    } else {
+                                        // If it was a valid object but we couldn't extract, we might want to try regex just in case the JSON was "analysis" and the REAL array was text outside?
+                                        // But 'Strategy A' parses whole content. 
+                                        // If 'Strategy A' succeeded, then we trust the object structure.
+                                        // If 'Strategy B' succeeded, same.
+                                        throw new Error("Parsed JSON object but could not interpret as translation array or map");
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+        }
 
+        try {
+            if (translatedTexts.length === 0 && !parsedData) {
+                // Proceed to fallback regex logic (wrapping it in the try block as before for the structure)
+                throw new Error("JSON parse failed");
+            }
         } catch (e) {
             // If parsing specific JSON fails, maybe valid JSON wasn't returned.
             // Fallback: If we sent 1 text, and response is just text, assume it's the translation
@@ -131,7 +249,7 @@ Rules:
                     }
                 }
 
-                if (!translatedTexts || translatedTexts.length === 0) { // Ensure it runs if translatedTexts is still empty
+                if (!translatedTexts || translatedTexts.length === 0) {
                     let cleanContent = content.trim();
 
                     // Aggressive cleanup for common LLM hallucinations at the end of the string
@@ -175,4 +293,39 @@ Rules:
     } catch (error: any) {
         return { success: false, error: error.message };
     }
+}
+
+function extractValidJsonArray(str: string): string | null {
+    const start = str.indexOf('[');
+    if (start === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let i = start; i < str.length; i++) {
+        const char = str[i];
+
+        if (inString) {
+            if (escape) {
+                escape = false;
+            } else if (char === '\\') { // Backslash in string -> \\ in JS code
+                escape = true;
+            } else if (char === '"') {
+                inString = false;
+            }
+        } else {
+            if (char === '[') {
+                depth++;
+            } else if (char === ']') {
+                depth--;
+                if (depth === 0) {
+                    return str.substring(start, i + 1);
+                }
+            } else if (char === '"') {
+                inString = true;
+            }
+        }
+    }
+    return null;
 }
