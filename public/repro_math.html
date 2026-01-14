@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Math Repro</title>
+</head>
+
+<body>
+    <div id="content">
+        <h3>Theorem</h3>
+        <p>
+            <b>Theorem.</b> Let <span class="mwe-math-element"><math xmlns="http://www.w3.org/1998/Math/MathML"
+                    alttext="{\displaystyle (\rho ,V_{\rho })}">
+                    <semantics>
+                        <mrow class="MJX-TeXAtom-ORD">
+                            <mstyle displaystyle="true" scriptlevel="0">
+                                <mo stretchy="false">(</mo>
+                                <mi>ρ</mi>
+                                <mo>,</mo>
+                                <msub>
+                                    <mi>V</mi>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mi>ρ</mi>
+                                    </mrow>
+                                </msub>
+                                <mo stretchy="false">)</mo>
+                            </mstyle>
+                        </mrow>
+                        <annotation encoding="application/x-tex">{\displaystyle (\rho ,V_{\rho })}</annotation>
+                    </semantics>
+                </math></span> be the representation of <span class="mwe-math-element"><math
+                    xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle G}">
+                    <semantics>
+                        <mrow class="MJX-TeXAtom-ORD">
+                            <mstyle displaystyle="true" scriptlevel="0">
+                                <mi>G</mi>
+                            </mstyle>
+                        </mrow>
+                        <annotation encoding="application/x-tex">{\displaystyle G}</annotation>
+                    </semantics>
+                </math></span> induced by the representation <span class="mwe-math-element"><math
+                    xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle (\theta ,W_{\theta })}">
+                    <semantics>
+                        <mrow class="MJX-TeXAtom-ORD">
+                            <mstyle displaystyle="true" scriptlevel="0">
+                                <mo stretchy="false">(</mo>
+                                <mi>θ</mi>
+                                <mo>,</mo>
+                                <msub>
+                                    <mi>W</mi>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mi>θ</mi>
+                                    </mrow>
+                                </msub>
+                                <mo stretchy="false">)</mo>
+                            </mstyle>
+                        </mrow>
+                        <annotation encoding="application/x-tex">{\displaystyle (\theta ,W_{\theta })}</annotation>
+                    </semantics>
+                </math></span> of the subgroup <span class="mwe-math-element"><math
+                    xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle H.}">
+                    <semantics>
+                        <mrow class="MJX-TeXAtom-ORD">
+                            <mstyle displaystyle="true" scriptlevel="0">
+                                <mi>H</mi>
+                                <mo>.</mo>
+                            </mstyle>
+                        </mrow>
+                        <annotation encoding="application/x-tex">{\displaystyle H.}</annotation>
+                    </semantics>
+                </math></span>
+        </p>
+        <dl>
+            <dd>Let <span class="mwe-math-element"><math xmlns="http://www.w3.org/1998/Math/MathML"
+                        alttext="{\displaystyle \chi _{\rho }}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <msub>
+                                        <mi>χ</mi>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mi>ρ</mi>
+                                        </mrow>
+                                    </msub>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \chi _{\rho }}</annotation>
+                        </semantics>
+                    </math></span> and <span class="mwe-math-element"><math xmlns="http://www.w3.org/1998/Math/MathML"
+                        alttext="{\displaystyle \chi _{\theta }}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <msub>
+                                        <mi>χ</mi>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mi>θ</mi>
+                                        </mrow>
+                                    </msub>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \chi _{\theta }}</annotation>
+                        </semantics>
+                    </math></span> be the corresponding characters.</dd>
+        </dl>
+    </div>
+
+    <script>
+        // MOCK dom-utils.ts LOGIC (Simplified for testing)
+        // We need to see if these blocks are detected or skipped.
+
+        const BLOCK_TAGS = new Set([
+            'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'CANVAS', 'DD', 'DIV', 'DL', 'DT',
+            'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4',
+            'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'NOSCRIPT', 'OL', 'P', 'PRE',
+            'SECTION', 'TABLE', 'TFOOT', 'UL', 'VIDEO', 'TD', 'TH'
+        ]);
+
+        const EXCLUDE_SELECTOR = 'script, style, noscript, meta, link, math, svg, code, textarea, [translate="no"]';
+        const UI_TERMS = new Set(['read more', 'learn more', 'share', 'login', 'sign up', 'signup', 'menu', 'search', 'follow', 'subscribe', 'comment', 'reply', 'like', 'loading...', 'privacy policy', 'terms of use']);
+
+        function containsJapanese(text) {
+            return /[\u3040-\u309f\u30a0-\u30ff]/.test(text);
+        }
+
+        function isTrivialContent(html) {
+            const text = html.replace(/<[^>]*>/g, '').trim();
+            if (text.length === 0) return true;
+            if (/^[\d\s\W]+$/.test(text)) return true; // <--- SUSPECT
+            if (text.length < 50 && UI_TERMS.has(text.toLowerCase())) return true;
+            if (containsJapanese(text)) return true;
+            return false;
+        }
+
+        function isBlockElement(node) {
+            return node.nodeType === 1 && BLOCK_TAGS.has(node.tagName);
+        }
+
+        function hasBlockChildren(element) {
+            for (let child = element.firstChild; child; child = child.nextSibling) {
+                if (isBlockElement(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getTranslatableBlocks(root) {
+            const blocks = [];
+            let index = 0;
+
+            function traverse(element) {
+                if (element.matches && element.matches(EXCLUDE_SELECTOR)) return;
+
+                if (BLOCK_TAGS.has(element.tagName)) {
+                    if (!hasBlockChildren(element)) {
+                        // Check Triviality immediately to simulate likely filtration
+                        if (element.textContent && element.textContent.trim().length > 0) {
+                            const isTrivial = isTrivialContent(element.innerHTML);
+                            blocks.push({
+                                tagName: element.tagName,
+                                html: element.innerHTML,
+                                text: element.textContent,
+                                isTrivial: isTrivial
+                            });
+                        }
+                        return;
+                    }
+                }
+
+                for (let child = element.firstChild; child; child = child.nextSibling) {
+                    if (child.nodeType === 1) {
+                        traverse(child);
+                    }
+                }
+            }
+
+            traverse(root);
+            return blocks;
+        }
+
+        // Run detection
+        const blocks = getTranslatableBlocks(document.getElementById('content'));
+        console.log("Found Blocks:", blocks);
+        window.foundBlocks = blocks;
+    </script>
+</body>
+
+</html>

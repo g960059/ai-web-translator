@@ -6,10 +6,8 @@ export class TranslationOverlay {
     private statusText: HTMLElement | null = null;
     private resumeBtn: HTMLElement | null = null;
     private stopBtn: HTMLElement | null = null;
-    private toggleBtn: HTMLElement | null = null;
     public onStop: (() => void) | null = null;
     public onResume: (() => void) | null = null;
-    public onToggle: (() => void) | null = null;
 
     constructor() { }
 
@@ -80,7 +78,7 @@ export class TranslationOverlay {
 
         // Stop Button
         this.stopBtn = document.createElement('button');
-        this.stopBtn.textContent = 'Pause/Stop';
+        this.stopBtn.textContent = 'Done';
         this.stopBtn.style.fontSize = '12px';
         this.stopBtn.style.padding = '4px 10px';
         this.stopBtn.style.color = '#666';
@@ -115,36 +113,14 @@ export class TranslationOverlay {
         controlRow.appendChild(this.stopBtn);
         controlRow.appendChild(this.resumeBtn);
 
-        // View Row (Toggle Original/Translated)
         const viewRow = document.createElement('div');
-        viewRow.style.display = 'flex';
-        viewRow.style.marginTop = '4px';
-        viewRow.style.borderTop = '1px solid #eee';
-        viewRow.style.paddingTop = '8px';
-
-        this.toggleBtn = document.createElement('button');
-        this.toggleBtn.textContent = 'Show Original';
-        this.toggleBtn.style.fontSize = '12px';
-        this.toggleBtn.style.padding = '6px 10px';
-        this.toggleBtn.style.color = '#007bff';
-        this.toggleBtn.style.backgroundColor = 'transparent';
-        this.toggleBtn.style.border = '1px solid #007bff';
-        this.toggleBtn.style.borderRadius = '4px';
-        this.toggleBtn.style.cursor = 'pointer';
-        this.toggleBtn.style.width = '100%';
-        this.toggleBtn.style.display = 'none'; // Hidden initially
-
-        this.toggleBtn.onclick = () => {
-            if (this.onToggle) this.onToggle();
-        };
-
-        viewRow.appendChild(this.toggleBtn);
+        viewRow.style.display = 'none'; // Keep row structure if needed later, or remove. Let's remove content.
 
         this.container.appendChild(titleRow);
         this.container.appendChild(progressContainer);
         this.container.appendChild(controlRow);
-        this.container.appendChild(viewRow);
-        this.shadowRoot.appendChild(this.container);
+        // this.container.appendChild(viewRow); // Removed viewRow
+        this.shadowRoot!.appendChild(this.container);
     }
 
     public show() {
@@ -152,7 +128,12 @@ export class TranslationOverlay {
         if (this.container) this.container.style.display = 'flex';
         if (this.stopBtn) this.stopBtn!.style.display = 'block';
         if (this.resumeBtn) this.resumeBtn!.style.display = 'none';
-        // Toggle btn visibility depends on state, usually hidden at start
+    }
+
+    public hide() {
+        if (this.container) {
+            this.container.style.display = 'none';
+        }
     }
 
     public update(percent: number, status?: string) {
@@ -171,27 +152,16 @@ export class TranslationOverlay {
         if (this.resumeBtn) this.resumeBtn!.style.display = 'none';
     }
 
-    public showToggle(isTranslaed: boolean) {
-        if (!this.shadowRoot) this.create();
-        if (this.toggleBtn) {
-            this.toggleBtn.style.display = 'block';
-            this.toggleBtn.textContent = isTranslaed ? 'Show Original' : 'Show Translation';
-            this.toggleBtn.style.backgroundColor = isTranslaed ? 'transparent' : '#007bff';
-            this.toggleBtn.style.color = isTranslaed ? '#007bff' : 'white';
-        }
-    }
-
-    public hide() {
-        if (this.container) {
-            this.container.style.display = 'none';
-        }
-    }
-
     public complete() {
         if (this.statusText) this.statusText!.textContent = 'Done';
         if (this.progressBar) this.progressBar!.style.backgroundColor = '#28a745';
         if (this.stopBtn) this.stopBtn!.style.display = 'none';
         if (this.resumeBtn) this.resumeBtn!.style.display = 'none';
+
+        // Auto-hide after 2 seconds
+        setTimeout(() => {
+            this.hide();
+        }, 2000);
     }
 
     public showToast(message: string, duration = 3000) {

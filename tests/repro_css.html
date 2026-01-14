@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Line Break Reproduction</title>
+    <style>
+        /* Standard MediaWiki TextHidden/A11y styles */
+        .mwe-math-mathml-a11y {
+            clip: rect(1px, 1px, 1px, 1px);
+            overflow: hidden;
+            position: absolute;
+            white-space: nowrap;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            border: 0;
+            padding: 0;
+            opacity: 0;
+            /* Sometimes used too */
+        }
+
+        body {
+            padding: 20px;
+            font-family: sans-serif;
+        }
+
+        /* Proposed Fix: Force inline layout for sanitized MathML */
+        math[display="inline"],
+        math[style*="inline"] {
+            display: inline !important;
+        }
+
+        math[display="inline"] *,
+        math[style*="inline"] * {
+            display: inline-block !important;
+            /* using inline-block allows width:auto to work */
+            width: auto !important;
+            margin: 0 !important;
+            vertical-align: middle !important;
+        }
+
+        /* Specifically force semantics and mrow to be inline */
+        math semantics,
+        math mrow,
+        math mstyle {
+            display: inline !important;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Line Break Reproduction</h1>
+    <div id="container" style="width: 500px; border: 1px solid #ccc;">
+        <!-- User provided HTML snippet -->
+        <p style="outline: none;">群<span class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle G}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>G</mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle G}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/f5f3c8921a3b352de45446a6789b104458c9f90b"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.338ex; width:1.827ex; height:2.176ex;"
+                    alt="{\displaystyle G}"></span>の次数<span class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle 1}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mn>1</mn>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle 1}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/92d98b82a3778f043108d4e20960a9193df57cbf"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.338ex; width:1.162ex; height:2.176ex;"
+                    alt="{\displaystyle 1}"></span>の表現とは、乗法<a href="/wiki/Group_(mathematics)"
+                title="Group (mathematics)">群</a>への準同型のことである。</p>
+    </div>
+
+    <script>
+        // Use the same sanitization logic as before
+        window.sanitizeMathElements = function (container) {
+            const mathMockups = container.querySelectorAll('.mwe-math-element');
+            mathMockups.forEach(span => {
+                const img = span.querySelector('img');
+                const mathWrap = span.querySelector('.mwe-math-mathml-a11y');
+                if (!img || !mathWrap) return;
+
+                const math = mathWrap.querySelector('math');
+                if (!math) return;
+
+                // Simulating the fix:
+                // 1. Hide image
+                img.style.display = 'none';
+                // 2. Show MathML
+                math.style.display = 'inline';
+
+                // 3. Unhide parent
+                let parent = math.parentElement;
+                while (parent && parent !== span && span.contains(parent)) {
+                    if (parent.style.display === 'none') {
+                        parent.style.display = 'inline';
+                    }
+                    if (parent.classList.contains('mwe-math-mathml-a11y')) {
+                        parent.classList.remove('mwe-math-mathml-a11y');
+                        parent.classList.add('mwe-math-mathml-visible');
+                    }
+                    parent = parent.parentElement;
+                }
+            });
+        };
+
+        window.runSanitize = () => {
+            console.log("Running sanitize...");
+            window.sanitizeMathElements(document.body);
+
+            // Check computed styles
+            const maths = document.querySelectorAll('math');
+            maths.forEach(m => {
+                const style = window.getComputedStyle(m);
+                console.log('Math Display:', style.display);
+                console.log('Math Width:', m.getBoundingClientRect().width);
+            });
+        };
+    </script>
+</body>
+
+</html>

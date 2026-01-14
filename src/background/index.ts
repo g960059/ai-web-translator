@@ -3,42 +3,67 @@ import { translateText } from '../lib/openrouter';
 // State tracking
 const tabStates = new Map<number, boolean>(); // tabId -> isTranslated
 
+let lastMenuState: boolean | null = null;
+
 function updateContextMenu(isTranslated: boolean) {
+    // Prevent redundant updates to avoid race conditions/flicking
+    if (lastMenuState === isTranslated) return;
+    lastMenuState = isTranslated;
+
     chrome.contextMenus.removeAll(() => {
+        if (chrome.runtime.lastError) {
+            console.error("ContextMenus removeAll error:", chrome.runtime.lastError);
+        }
+
         if (!isTranslated) {
-            // State 1: Not Translated - Top Level Toggle
+            // State 1: Not Translated
+            // Top Level: Translate Selection
+            chrome.contextMenus.create({
+                id: "translate-selection",
+                title: "Translate Selection",
+                contexts: ["selection"]
+            }, () => {
+                if (chrome.runtime.lastError) console.error("Menu create error (translate-selection):", chrome.runtime.lastError);
+            });
+
+            // Top Level: Toggle Page
             chrome.contextMenus.create({
                 id: "toggle-translation",
                 title: "Toggle Page Translation",
                 contexts: ["all"]
+            }, () => {
+                if (chrome.runtime.lastError) console.error("Menu create error (toggle-translation):", chrome.runtime.lastError);
             });
+
         } else {
-            // State 2: Translated - Nested Menu
-            chrome.contextMenus.create({
-                id: "root-menu",
-                title: "AI Web Translator",
-                contexts: ["all"]
-            });
+            // State 2: Translated
+            // All items flattened as per user request
 
-            chrome.contextMenus.create({
-                id: "toggle-translation",
-                parentId: "root-menu",
-                title: "Toggle Page Translation", // Or "Stop / Restore"
-                contexts: ["all"]
-            });
-
-            chrome.contextMenus.create({
-                id: "retranslate-selection",
-                parentId: "root-menu",
-                title: "Re-translate Selection",
-                contexts: ["selection"]
-            });
-
+            // Top Level: Toggle Selection (Primary Action based on user request)
             chrome.contextMenus.create({
                 id: "toggle-selection",
-                parentId: "root-menu",
                 title: "Toggle Selection (Original/Translated)",
                 contexts: ["selection"]
+            }, () => {
+                if (chrome.runtime.lastError) console.error("Menu create error (toggle-selection):", chrome.runtime.lastError);
+            });
+
+            // Top Level: Toggle Page Translation
+            chrome.contextMenus.create({
+                id: "toggle-translation",
+                title: "Toggle Page Translation",
+                contexts: ["all"]
+            }, () => {
+                if (chrome.runtime.lastError) console.error("Menu create error (toggle-translation):", chrome.runtime.lastError);
+            });
+
+            // Top Level: Re-translate Selection
+            chrome.contextMenus.create({
+                id: "retranslate-selection",
+                title: "Re-translate Selection (Force)",
+                contexts: ["selection"]
+            }, () => {
+                if (chrome.runtime.lastError) console.error("Menu create error (retranslate-selection):", chrome.runtime.lastError);
             });
         }
     });
@@ -67,7 +92,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (tab?.id) {
-        if (info.menuItemId === "retranslate-selection") {
+        if (info.menuItemId === "translate-selection") {
+            chrome.tabs.sendMessage(tab.id, {
+                action: "translate_selection",
+                selectionText: info.selectionText
+            });
+        } else if (info.menuItemId === "retranslate-selection") {
             chrome.tabs.sendMessage(tab.id, {
                 action: "retranslate_selection",
                 selectionText: info.selectionText

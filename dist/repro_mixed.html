@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Mixed Content Repro</title>
+</head>
+
+<body>
+    <div id="content">
+        <!-- Case 1: List with text and nested list -->
+        <ul>
+            <li id="li-1">
+                Text in LI
+                <ul>
+                    <li>Attributes</li>
+                </ul>
+            </li>
+        </ul>
+
+        <!-- Case 2: Definition List (Wikipedia style) -->
+        <dl>
+            <dd id="dd-1">
+                Definition text.
+                <div class="math-display">Math Block</div>
+            </dd>
+        </dl>
+
+        <!-- Case 3: Paragraph with "Block" child (invalid but possible in DOM) -->
+        <div id="div-1">
+            Theorem text.
+            <div class="formula">Formula</div>
+            More text.
+        </div>
+    </div>
+
+    <script>
+        // MOCK dom-utils.ts LOGIC (Current implementation)
+        const BLOCK_TAGS = new Set([
+            'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'CANVAS', 'DD', 'DIV', 'DL', 'DT',
+            'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4',
+            'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'NOSCRIPT', 'OL', 'P', 'PRE',
+            'SECTION', 'TABLE', 'TFOOT', 'UL', 'VIDEO', 'TD', 'TH'
+        ]);
+
+        const EXCLUDE_SELECTOR = 'script, style, noscript, meta, link, math, svg, code, textarea, [translate="no"]';
+
+        function isBlockElement(node) {
+            return node.nodeType === 1 && BLOCK_TAGS.has(node.tagName);
+        }
+
+        function hasBlockChildren(element) {
+            for (let child = element.firstChild; child; child = child.nextSibling) {
+                if (isBlockElement(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getTranslatableBlocks(root) {
+            const blocks = [];
+            let index = 0;
+
+            function traverse(element) {
+                if (element.matches && element.matches(EXCLUDE_SELECTOR)) return;
+
+                if (BLOCK_TAGS.has(element.tagName)) {
+                    if (!hasBlockChildren(element)) {
+                        if (element.textContent && element.textContent.trim().length > 0) {
+                            blocks.push({
+                                id: element.id || ('block-' + index++),
+                                text: element.textContent.trim(),
+                                html: element.innerHTML,
+                                element: element
+                            });
+                        }
+                        return; // Stop traversal
+                    }
+                }
+
+                // Mixed Block Traversal
+                let child = element.firstChild;
+                while (child) {
+                    const next = child.nextSibling;
+                    if (child.nodeType === 1) { // ELEMENT_NODE
+                        traverse(child);
+                    } else if (child.nodeType === 3) { // TEXT_NODE
+                        const text = child.textContent;
+                        if (text && text.trim().length > 0) {
+                            // WRAP
+                            const span = document.createElement('span');
+                            span.setAttribute('data-tx-wrapper', 'true');
+                            element.replaceChild(span, child);
+                            span.textContent = text;
+
+                            blocks.push({
+                                id: 'wrapped-' + index++,
+                                text: span.textContent.trim(),
+                                html: span.innerHTML,
+                                element: span
+                            });
+                        }
+                    }
+                    child = next;
+                }
+            }
+
+            traverse(root);
+            return blocks;
+        }
+
+        const blocks = getTranslatableBlocks(document.getElementById('content'));
+        console.log("Found Blocks:", blocks.map(b => b.text.substring(0, 20)));
+        window.foundBlocks = blocks;
+    </script>
+</body>
+
+</html>

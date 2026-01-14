@@ -6,6 +6,7 @@ import { overlay } from '../lib/overlay';
 let currentMode: 'quality' | 'efficiency' = 'quality'; // Default
 let currentScope: 'page' | 'main' = 'page'; // Default
 let originalBlocks: BlockNodeData[] = [];
+let hasFullPageScan = false;
 let isTranslated = false;
 let shouldStop = false;
 
@@ -97,7 +98,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         if (isTranslated) {
             restoreOriginal();
             isTranslated = false;
-            overlay.showToggle(false);
+            // overlay.showToggle(false); // Removed
             sendResponse({ status: 'original' });
         } else {
             shouldStop = false;
@@ -107,7 +108,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             if (hasData) {
                 showTranslated();
                 isTranslated = true;
-                overlay.showToggle(true);
+                // overlay.showToggle(true); // Removed
                 sendResponse({ status: 'translated' });
             } else {
                 // FIRE AND FORGET - Do not await.
@@ -118,7 +119,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
                         isTranslated = true;
                         // Notify background to update menu
                         chrome.runtime.sendMessage({ action: 'state_update', isTranslated: true }).catch(() => { });
-                        // overlay.showToggle(true) called inside performTranslation
+                        // overlay.showToggle(true) // Removed
                     }
                 }).catch(console.error);
 
@@ -384,7 +385,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
                 // Global "isTranslated" flag implies "Mode is Active".
                 // If user selects text on original page and says "Re-translate", they effectively want "Translate".
                 isTranslated = true;
-                overlay.showToggle(true);
+                // overlay.showToggle(true); // Removed
             }
 
             // Re-run main loop
@@ -429,6 +430,170 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             quality: { charCount: qualityCharCount },
             efficiency: { charCount: efficiencyCharCount }
         });
+    } else if (request.action === 'translate_selection') {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+
+        const range = selection.getRangeAt(0);
+        // We ideally want to find all "translatable blocks" that are fully or partially within this range.
+        // We can use the common ancestor and then scan?
+        const commonAncestor = range.commonAncestorContainer;
+        let rootElement = (commonAncestor.nodeType === Node.ELEMENT_NODE)
+            ? commonAncestor as HTMLElement
+            : commonAncestor.parentElement;
+
+        if (!rootElement) rootElement = document.body;
+
+        // 1. Get potential blocks in this area
+        // We pass the rootElement to minimize scanning
+        const potentialBlocks = getTranslatableBlocks(rootElement);
+
+        const targetBlocks: BlockNodeData[] = [];
+
+        // 2. Filter by intersection with Range
+        potentialBlocks.forEach(block => {
+            if (range.intersectsNode(block.element)) {
+                // Check if we already have this block in originalBlocks to avoid duplicates/state mismatch
+                const existing = originalBlocks.find(b => b.element === block.element);
+                if (existing) {
+                    targetBlocks.push(existing);
+                } else {
+                    originalBlocks.push(block);
+                    targetBlocks.push(block);
+                }
+            }
+        });
+
+        if (targetBlocks.length > 0) {
+            // overlay.showToast(`Translating ${targetBlocks.length} selected blocks...`);
+
+            // 3. Trigger Translation for these specific blocks
+            // We can reuse the "queue" logic but we need to ensure they get pushed to API.
+            // Just push them to queue via checkCacheAndQueue or similar.
+
+            // Ensure settings are loaded or use defaults?
+            // performTranslation usually initializes everything. 
+            // If we are NOT in active translation mode, 'performTranslation' might not have run or variables like 'apiKey' are unset.
+            // We should initiate a "Targeted Translation" flow.
+
+            const settings = await chrome.storage.local.get(['apiKey', 'model', 'translationMode', 'translationScope']);
+            const apiKey = settings.apiKey;
+            if (!apiKey) {
+                alert('Please set your OpenRouter API Key in the extension popup.');
+                return;
+            }
+            const model = settings.model || 'openai/gpt-3.5-turbo';
+            // We use global vars? They might be stale if performTranslation wasn't called.
+            // Let's set them.
+            currentMode = (settings.translationMode as 'quality' | 'efficiency') || 'quality';
+
+            // We need to re-initialize 'contentStates' locally if not active? 
+            // OR just use a transient map for this operation.
+            // BUT we want to update the cache and global state.
+
+            // Let's manually process this batch to ensure immediate execution
+            const contentStates = new Map<string, ContentState>();
+            const blocksByContent = new Map<string, BlockNodeData[]>();
+
+            for (const block of targetBlocks) {
+                const content = block.originalHTML;
+                if (!blocksByContent.has(content)) {
+                    blocksByContent.set(content, []);
+                    contentStates.set(content, {
+                        status: 'queued',
+                        key: content,
+                        originalContent: content,
+                        rawLength: content.length,
+                        retryCount: 0
+                    });
+                }
+                blocksByContent.get(content)!.push(block);
+            }
+
+            const queue = Array.from(contentStates.values());
+
+            // "Manual" processBatch function logic...
+            // Or reuse processBatch but we need to hoist it or pass context.
+            // Since 'processBatch' is inside 'performTranslation', we can't easily call it.
+            // Let's duplicate the relevant "send batch" logic for this dedicated selection action 
+            // to avoid complex refactoring of the main loop right now.
+
+            try {
+                const contentsToSend = queue.map(item => {
+                    if (currentMode === 'efficiency') {
+                        const { minified, map } = minifyHTML(item.originalContent);
+                        item.minifiedContent = minified;
+                        item.minificationMap = map;
+                        return minified;
+                    }
+                    return item.originalContent;
+                });
+
+                const context = {
+                    title: document.title,
+                    description: document.querySelector('meta[name="description"]')?.getAttribute('content') || ''
+                };
+
+                const response = await sendTranslationRequest({
+                    action: 'translate_api',
+                    apiKey,
+                    model,
+                    text: contentsToSend,
+                    context
+                });
+
+                if (response.success && Array.isArray(response.data)) {
+                    const translations = response.data;
+                    queue.forEach((item, idx) => {
+                        let translated = translations[idx];
+                        if (translated) {
+                            if (item.minificationMap) {
+                                translated = restoreHTML(translated, item.minificationMap);
+                            }
+                            // Store in cache
+                            setCachedTranslation(item.originalContent, "Japanese", translated);
+
+                            // Apply to DOM
+                            const blocks = blocksByContent.get(item.originalContent);
+                            if (blocks) {
+                                blocks.forEach(block => {
+                                    replaceBlockHTML(block, translated);
+                                    block.translatedHTML = translated;
+                                });
+                            }
+                        }
+                    });
+                    // overlay.showToast("Selection translated");
+
+                    // IMPORTANT: If we are not in "IsTranslated" mode, do we switch?
+                    // User might just want partial translation.
+                    // If we switch `isTranslated = true`, the toggle button appears and "Show Original" works for page.
+                    // This seems appropriate if we want to allow toggling it back.
+                    // We DO NOT trigger global isTranslated state switch here,
+                    // To keep progress bar hidden.
+                    // But we DO want "Toggle Selection" context menu to work.
+                    // The context menu state is updated by background script independently?
+                    // Background script listens to 'state_update'. We didn't send it. 
+                    // So background thinks page is NOT translated.
+                    // But we modified `updateContextMenu` in background to ALWAYS show Toggle Selection on selection context.
+                    // So that's covered.
+                    if (!isTranslated) {
+                        isTranslated = true;
+                    }
+
+                } else {
+                    console.error("Selection translation failed", response.error);
+                    // overlay.showToast("Translation failed");
+                }
+            } catch (e) {
+                console.error("Selection translation error", e);
+                // overlay.showToast("Error translating selection");
+            }
+
+        } else {
+            // overlay.showToast("No translatable content found in selection");
+        }
+
     } else if (request.action === 'clear_page_cache') {
         let blocksToClear = originalBlocks;
         if (blocksToClear.length === 0) {
@@ -476,27 +641,28 @@ async function performTranslation() {
 
     overlay.onStop = () => {
         shouldStop = true;
-        overlay.setStoppedState();
+        // User requested: Stop should be "Complete" (hide overlay)
+        overlay.update(100, "Done");
+        overlay.complete();
     };
 
     overlay.onResume = () => {
         shouldStop = false;
         overlay.setProcessingState();
-        // With lazy translation, "resuming" just means we allow the observer/queue to run again.
-        // We might need to re-trigger observer if we disconnected it, but we won't disconnect it on stop, just gate logic.
     };
 
+    // overlay.onToggle removed as per user request to hide toggle button
+    /*
     overlay.onToggle = () => {
         if (isTranslated) {
             restoreOriginal();
             isTranslated = false;
-            overlay.showToggle(false);
         } else {
             showTranslated();
             isTranslated = true;
-            overlay.showToggle(true);
         }
     };
+    */
 
     const settings = await chrome.storage.local.get(['apiKey', 'model', 'translationMode', 'translationScope']);
     const apiKey = settings.apiKey;
@@ -511,13 +677,40 @@ async function performTranslation() {
     }
 
     // Prepare Items based on mode
-    if (originalBlocks.length === 0) {
+    // If we haven't scanned the full page yet (or if scope changed?), we must scan.
+    // Even if originalBlocks has items (from selection translation), we need the rest.
+    if (!hasFullPageScan || originalBlocks.length === 0) {
         let root = document.body;
         if (currentScope === 'main') {
             const main = document.querySelector('main') || document.querySelector('article') || document.querySelector('[role="main"]');
             if (main) root = main as HTMLElement;
         }
-        originalBlocks = getTranslatableBlocks(root);
+
+        const allBlocks = getTranslatableBlocks(root);
+
+        // Merge with existing logic:
+        // If we have existing "originalBlocks" (e.g. from selection), we want to PRESERVE them 
+        // because they might hold 'translatedHTML' state.
+        // We match by Element reference.
+
+        if (originalBlocks.length > 0) {
+            const mergedBlocks: BlockNodeData[] = [];
+            const existingMap = new Map<HTMLElement, BlockNodeData>();
+            originalBlocks.forEach(b => existingMap.set(b.element, b));
+
+            for (const newBlock of allBlocks) {
+                if (existingMap.has(newBlock.element)) {
+                    mergedBlocks.push(existingMap.get(newBlock.element)!);
+                } else {
+                    mergedBlocks.push(newBlock);
+                }
+            }
+            originalBlocks = mergedBlocks;
+        } else {
+            originalBlocks = allBlocks;
+        }
+
+        hasFullPageScan = true;
     }
 
     const blocksByContent = new Map<string, BlockNodeData[]>();
@@ -560,7 +753,7 @@ async function performTranslation() {
     if (totalChars === 0) {
         chrome.runtime.sendMessage({ action: 'progress', percent: 100 });
         overlay.update(100, "Done");
-        overlay.complete();
+        overlay.complete(); // This now auto-hides after 2s
         return;
     }
 

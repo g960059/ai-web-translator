@@ -2,13 +2,24 @@
   "manifest_version": 3,
   "name": "AI Web Translator",
   "version": "1.0.0",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "action": {
-    "default_popup": "src/popup/index.html"
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   },
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://openrouter.ai/*"
@@ -16,7 +27,7 @@
   "content_scripts": [
     {
       "js": [
-        "assets/index.ts-Cxs4mnlp.js"
+        "assets/index.ts-HDuWcdXx.js"
       ],
       "matches": [
         "<all_urls>"
@@ -33,7 +44,7 @@
         "<all_urls>"
       ],
       "resources": [
-        "assets/index.ts-Cxs4mnlp.js"
+        "assets/index.ts-HDuWcdXx.js"
       ],
       "use_dynamic_url": false
     }

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Matrix Reproduction</title>
+    <style>
+        body {
+            padding: 20px;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Matrix Disappearance Test</h1>
+    <p>
+        Currently:
+    </p>
+    <!-- User provided structure -->
+    <dl>
+        <dd style="outline: none; outline-offset: -2px;">
+            <span class="mwe-math-element mwe-math-element-inline">
+                <span class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;">
+                    <math xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho ...}"
+                        style="display: none;">
+                        <semantics>
+                            <mrow>
+                                <mi>P</mi>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle P}</annotation>
+                        </semantics>
+                    </math>
+                </span>
+                <img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/placeholder" alt="{\displaystyle P.}">
+            </span>
+        </dd>
+    </dl>
+
+    <div id="output"></div>
+
+    <script type="module">
+        import { sanitizeHTMLString } from '../src/lib/dom-utils.ts';
+
+        window.runTest = () => {
+            const html = document.querySelector('dl').innerHTML;
+            const sanitized = sanitizeHTMLString(html);
+            document.getElementById('output').innerHTML = sanitized;
+
+            // Check visibility
+            const outputDiv = document.getElementById('output');
+            const math = outputDiv.querySelector('math');
+
+            // Check if math is visible? 
+            // Ideally we check if it's effectively visible. 
+            // But checking computed style of parent span is enough.
+        };
+    </script>
+</body>
+
+</html>

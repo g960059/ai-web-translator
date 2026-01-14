@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Latest Layout Reproduction</title>
+    <style>
+        body {
+            padding: 20px;
+            font-family: sans-serif;
+        }
+
+        .mwe-math-mathml-a11y {
+            /* Hiding styles removed/ignored for this test as we assume sanitization worked */
+        }
+
+        /* The "Refined" CSS currently in the codebase (Step 245) */
+        math[display="inline"],
+        math[style*="inline"],
+        math {
+            display: inline !important;
+        }
+
+        math semantics {
+            display: inline !important;
+        }
+
+        math mrow {
+            display: inline !important;
+        }
+
+        /* Note: We strictly avoid 'math *' to protect matrix layouts (mtable/mtr/mtd) */
+
+        /* FIX for mstyle block math issue */
+        math mstyle {
+            display: inline !important;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Latest Layout Reproduction</h1>
+    <div id="container" style="width: 800px; border: 1px solid #ccc;">
+        <!-- User snippet pasted exactly -->
+        <p style="outline: none;">群<span class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle G}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>G</mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle G}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/f5f3c8921a3b352de45446a6789b104458c9f90b"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.338ex; width:1.827ex; height:2.176ex;"
+                    alt="{\displaystyle G}"></span>の次数<span class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle 1}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mn>1</mn>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle 1}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/92d98b82a3778f043108d4e20960a9193df57cbf"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.338ex; width:1.162ex; height:2.176ex;"
+                    alt="{\displaystyle 1}"></span>の表現とは、乗法<a href="/wiki/Group_(mathematics)"
+                title="Group (mathematics)">群</a><span
+                class="mwe-math-element mwe-math-element-inline ai-tx-math-sanitized"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-visible" style="display: inline;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML"
+                        alttext="{\displaystyle \rho :G\to {\text{GL}}_{1}(\mathbb {C} )=\mathbb {C} ^{\times }=\mathbb {C} \setminus \{0\}.}"
+                        style="display: inline;">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                    <mo>:</mo>
+                                    <mi>G</mi>
+                                    <mo stretchy="false">→<!-- → --></mo>
+                                    <msub>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mtext>GL</mtext>
+                                        </mrow>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>1</mn>
+                                        </mrow>
+                                    </msub>
+                                    <mo stretchy="false">(</mo>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mi mathvariant="double-struck">C</mi>
+                                    </mrow>
+                                    <mo stretchy="false">)</mo>
+                                    <mo>=</mo>
+                                    <msup>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mi mathvariant="double-struck">C</mi>
+                                        </mrow>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mo>×<!-- × --></mo>
+                                        </mrow>
+                                    </msup>
+                                    <mo>=</mo>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mi mathvariant="double-struck">C</mi>
+                                    </mrow>
+                                    <mo class="MJX-variant">∖<!-- ∖ --></mo>
+                                    <mo fence="false" stretchy="false">{</mo>
+                                    <mn>0</mn>
+                                    <mo fence="false" stretchy="false">}</mo>
+                                    <mo></mo>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho :G\to {\text{GL}}_{1}(\mathbb
+                                {C} )=\mathbb {C} ^{\times }=\mathbb {C} \setminus \{0\}.}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/aa1a1eb7960c6630c09c8c7332123c00894ddc05"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width: 33.791ex; height: 2.843ex; display: none;"
+                    alt="{\displaystyle \rho :G\to {\text{GL}}_{1}(\mathbb {C} )=\mathbb {C} ^{\times }=\mathbb {C} \setminus \{0\}.}"></span>への準同型のことである。<span
+                class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle G}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>G</mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle G}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/f5f3c8921a3b352de45446a6789b104458c9f90b"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.338ex; width:1.827ex; height:2.176ex;"
+                    alt="{\displaystyle G}"></span>のすべての元は有限位数であるため、<span
+                class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho (s)}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                    <mo stretchy="false">(</mo>
+                                    <mi>s</mi>
+                                    <mo stretchy="false">)</mo>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho (s)}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/b79657a35ea465af32cc2c9d19ce34fe4bfabfb3"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width:4.102ex; height:2.843ex;"
+                    alt="{\displaystyle \rho (s)}"></span>の値は<a href="/wiki/Root_of_unity"
+                title="Root of unity">1の冪根</a>となる。例えば、<span class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML"
+                        alttext="{\displaystyle \rho :G=\mathbb {Z} /4\mathbb {Z} \to \mathbb {C} ^{\times }}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                    <mo>:</mo>
+                                    <mi>G</mi>
+                                    <mo>=</mo>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mi mathvariant="double-struck">Z</mi>
+                                    </mrow>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mo>/</mo>
+                                    </mrow>
+                                    <mn>4</mn>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mi mathvariant="double-struck">Z</mi>
+                                    </mrow>
+                                    <mo stretchy="false">→<!-- → --></mo>
+                                    <msup>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mi mathvariant="double-struck">C</mi>
+                                        </mrow>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mo>×<!-- × --></mo>
+                                        </mrow>
+                                    </msup>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho :G=\mathbb {Z} /4\mathbb {Z}
+                                \to \mathbb {C} ^{\times }}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/228951d328a16af145a60beac6a0a96d37fd6fbd"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width:20.293ex; height:2.843ex;"
+                    alt="{\displaystyle \rho :G=\mathbb {Z} /4\mathbb {Z} \to \mathbb {C} ^{\times }}"></span>を非自明な線型表現とする。<span
+                class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho }">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho }</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/1f7d439671d1289b6a816e6af7a304be40608d64"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width:1.202ex; height:2.176ex;"
+                    alt="{\displaystyle \rho }"></span>は群準同型であるため、<span
+                class="mwe-math-element mwe-math-element-inline ai-tx-math-sanitized"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-visible" style="display: inline;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho ({0})=1.}"
+                        style="display: inline;">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                    <mo stretchy="false">(</mo>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mn>0</mn>
+                                    </mrow>
+                                    <mo stretchy="false">)</mo>
+                                    <mo>=</mo>
+                                    <mn>1</mn>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho ({0})=1.}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/71af48ae0987e9509a60e74fa3c839143c909c22"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width: 9.081ex; height: 2.843ex; display: none;"
+                    alt="{\displaystyle \rho ({0})=1.}"></span>を満たす必要がある。<span
+                class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle 1}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mn>1</mn>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle 1}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/92d98b82a3778f043108d4e20960a9193df57cbf"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.338ex; width:1.162ex; height:2.176ex;"
+                    alt="{\displaystyle 1}"></span>が<span class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle G,\rho }">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>G</mi>
+                                    <mo>,</mo>
+                                    <mi>ρ<!-- ρ --></mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle G,\rho }</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/66bafe22ad72721c13f527af0a6fb9f4a41f7197"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width:4.063ex; height:2.676ex;"
+                    alt="{\displaystyle G,\rho }"></span>を生成するため、<span
+                class="mwe-math-element mwe-math-element-inline ai-tx-math-sanitized"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-visible" style="display: inline;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho (1).}"
+                        style="display: inline;">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                    <mo stretchy="false">(</mo>
+                                    <mn>1</mn>
+                                    <mo stretchy="false">)</mo>
+                                    <mo></mo>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho (1).}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/ee40132e1413a2577545f81677794abfdcf573b9"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width: 4.821ex; height: 2.843ex; display: none;"
+                    alt="{\displaystyle \rho (1).}"></span>における値によって決定される。そして<span
+                class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho }">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho }</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/1f7d439671d1289b6a816e6af7a304be40608d64"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width:1.202ex; height:2.176ex;"
+                    alt="{\displaystyle \rho }"></span>は非自明であるから、<span
+                class="mwe-math-element mwe-math-element-inline ai-tx-math-sanitized"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-visible" style="display: inline;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho ({1})\in \{i,-1,-i\}.}"
+                        style="display: inline;">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                    <mo stretchy="false">(</mo>
+                                    <mrow class="MJX-TeXAtom-ORD">
+                                        <mn>1</mn>
+                                    </mrow>
+                                    <mo stretchy="false">)</mo>
+                                    <mo>∈<!-- ∈ --></mo>
+                                    <mo fence="false" stretchy="false">{</mo>
+                                    <mi>i</mi>
+                                    <mo>,</mo>
+                                    <mo>−<!-- − --></mo>
+                                    <mn>1</mn>
+                                    <mo>,</mo>
+                                    <mo>−<!-- − --></mo>
+                                    <mi>i</mi>
+                                    <mo fence="false" stretchy="false">}</mo>
+                                    <mo></mo>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho ({1})\in \{i,-1,-i\}.}
+                            </annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/8fa1ca3678cc79086c1e3718678d6ae0068b7865"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width: 18.438ex; height: 2.843ex; display: none;"
+                    alt="{\displaystyle \rho ({1})\in \{i,-1,-i\}.}"></span>である。したがって、<span
+                class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho }">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho }</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/1f7d439671d1289b6a816e6af7a304be40608d64"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width:1.202ex; height:2.176ex;"
+                    alt="{\displaystyle \rho }"></span>による<span class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle G}">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>G</mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle G}</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/f5f3c8921a3b352de45446a6789b104458c9f90b"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.338ex; width:1.827ex; height:2.176ex;"
+                    alt="{\displaystyle G}"></span>の像は、1の4乗根からなる群の非自明な部分群でなければならないという結果が得られる。言い換えれば、<span
+                class="mwe-math-element mwe-math-element-inline"><span
+                    class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math
+                        xmlns="http://www.w3.org/1998/Math/MathML" alttext="{\displaystyle \rho }">
+                        <semantics>
+                            <mrow class="MJX-TeXAtom-ORD">
+                                <mstyle displaystyle="true" scriptlevel="0">
+                                    <mi>ρ<!-- ρ --></mi>
+                                </mstyle>
+                            </mrow>
+                            <annotation encoding="application/x-tex">{\displaystyle \rho }</annotation>
+                        </semantics>
+                    </math></span><img
+                    src="https://wikimedia.org/api/rest_v1/media/math/render/svg/1f7d439671d1289b6a816e6af7a304be40608d64"
+                    class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                    style="vertical-align: -0.838ex; width:1.202ex; height:2.176ex;"
+                    alt="{\displaystyle \rho }"></span>は次の3つの写像のいずれかでなければならない。</p>
+
+        <dl>
+            <dd><span class="mwe-math-element mwe-math-element-inline ai-tx-math-sanitized"><span
+                        class="mwe-math-mathml-inline mwe-math-mathml-visible" style="display: inline;"><math
+                            xmlns="http://www.w3.org/1998/Math/MathML"
+                            alttext="{\displaystyle \rho ({0},{0})={\begin{pmatrix}1&amp;0\\0&amp;1\end{pmatrix}},\quad \rho ({1},{0})={\begin{pmatrix}-1&amp;0\\0&amp;-1\end{pmatrix}},\quad \rho ({0},{1})={\begin{pmatrix}0&amp;1\\1&amp;0\end{pmatrix}},\quad \rho ({1},{1})={\begin{pmatrix}0&amp;-1\\-1&amp;0\end{pmatrix}}.}"
+                            style="display: inline;">
+                            <semantics>
+                                <mrow class="MJX-TeXAtom-ORD">
+                                    <mstyle displaystyle="true" scriptlevel="0">
+                                        <mi>ρ<!-- ρ --></mi>
+                                        <mo stretchy="false">(</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>0</mn>
+                                        </mrow>
+                                        <mo>,</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>0</mn>
+                                        </mrow>
+                                        <mo stretchy="false">)</mo>
+                                        <mo>=</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mrow>
+                                                <mo>(</mo>
+                                                <mtable rowspacing="4pt" columnspacing="1em">
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                </mtable>
+                                                <mo>)</mo>
+                                            </mrow>
+                                        </mrow>
+                                        <mo>,</mo>
+                                        <mspace width="1em"></mspace>
+                                        <mi>ρ<!-- ρ --></mi>
+                                        <mo stretchy="false">(</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>1</mn>
+                                        </mrow>
+                                        <mo>,</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>0</mn>
+                                        </mrow>
+                                        <mo stretchy="false">)</mo>
+                                        <mo>=</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mrow>
+                                                <mo>(</mo>
+                                                <mtable rowspacing="4pt" columnspacing="1em">
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mo>−<!-- − --></mo>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mo>−<!-- − --></mo>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                </mtable>
+                                                <mo>)</mo>
+                                            </mrow>
+                                        </mrow>
+                                        <mo>,</mo>
+                                        <mspace width="1em"></mspace>
+                                        <mi>ρ<!-- ρ --></mi>
+                                        <mo stretchy="false">(</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>0</mn>
+                                        </mrow>
+                                        <mo>,</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>1</mn>
+                                        </mrow>
+                                        <mo stretchy="false">)</mo>
+                                        <mo>=</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mrow>
+                                                <mo>(</mo>
+                                                <mtable rowspacing="4pt" columnspacing="1em">
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                </mtable>
+                                                <mo>)</mo>
+                                            </mrow>
+                                        </mrow>
+                                        <mo>,</mo>
+                                        <mspace width="1em"></mspace>
+                                        <mi>ρ<!-- ρ --></mi>
+                                        <mo stretchy="false">(</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>1</mn>
+                                        </mrow>
+                                        <mo>,</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mn>1</mn>
+                                        </mrow>
+                                        <mo stretchy="false">)</mo>
+                                        <mo>=</mo>
+                                        <mrow class="MJX-TeXAtom-ORD">
+                                            <mrow>
+                                                <mo>(</mo>
+                                                <mtable rowspacing="4pt" columnspacing="1em">
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mo>−<!-- − --></mo>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                    <mtr>
+                                                        <mtd>
+                                                            <mo>−<!-- − --></mo>
+                                                            <mn>1</mn>
+                                                        </mtd>
+                                                        <mtd>
+                                                            <mn>0</mn>
+                                                        </mtd>
+                                                    </mtr>
+                                                </mtable>
+                                                <mo>)</mo>
+                                            </mrow>
+                                        </mrow>
+                                        <mo></mo>
+                                    </mstyle>
+                                </mrow>
+                                <annotation encoding="application/x-tex">{\displaystyle \rho
+                                    ({0},{0})={\begin{pmatrix}1&amp;0\\0&amp;1\end{pmatrix}},\quad \rho
+                                    ({1},{0})={\begin{pmatrix}-1&amp;0\\0&amp;-1\end{pmatrix}},\quad \rho
+                                    ({0},{1})={\begin{pmatrix}0&amp;1\\1&amp;0\end{pmatrix}},\quad \rho
+                                    ({1},{1})={\begin{pmatrix}0&amp;-1\\-1&amp;0\end{pmatrix}}.}</annotation>
+                            </semantics>
+                        </math></span><img
+                        src="https://wikimedia.org/api/rest_v1/media/math/render/svg/68f542ff73429b8fbf9292caa7114bd8bd7e2d19"
+                        class="mwe-math-fallback-image-inline mw-invert skin-invert" aria-hidden="true"
+                        style="vertical-align: -2.505ex; width: 91.104ex; height: 6.176ex; display: none;"
+                        alt="{\displaystyle \rho ({0},{0})={\begin{pmatrix}1&amp;0\\0&amp;1\end{pmatrix}},\quad \rho ({1},{0})={\begin{pmatrix}-1&amp;0\\0&amp;-1\end{pmatrix}},\quad \rho ({0},{1})={\begin{pmatrix}0&amp;1\\1&amp;0\end{pmatrix}},\quad \rho ({1},{1})={\begin{pmatrix}0&amp;-1\\-1&amp;0\end{pmatrix}}.}">。</span>
+            </dd>
+        </dl>
