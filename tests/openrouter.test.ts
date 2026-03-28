@@ -339,6 +339,7 @@ describe('translateWithOpenRouter', () => {
     const messages = (requestBody?.messages ?? []) as Array<{ content?: string }>;
     const systemPrompt = messages[0]?.content ?? '';
 
-    expect(systemPrompt).toContain('Keep tokens like [[TX0O]]');
+    expect(systemPrompt).toContain('[[TX0O]]');
+    expect(systemPrompt).toContain('[[HX0]]');
   });
 });

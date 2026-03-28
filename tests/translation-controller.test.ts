@@ -542,6 +542,144 @@ describe('TranslationController', () => {
     );
   });
 
+  it('isolates the lead reading group into the first immediate request', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="lead-visible">${'Lead paragraph for first-screen isolation. '.repeat(6)}</p>
+            <p id="visible-two">${'Second visible paragraph should be delayed until after the lead. '.repeat(6)}</p>
+            <p id="visible-three">${'Third visible paragraph should also wait behind the lead. '.repeat(6)}</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    setRect(document.getElementById('lead-visible') as HTMLElement, 24, 48);
+    setRect(document.getElementById('visible-two') as HTMLElement, 140, 48);
+    setRect(document.getElementById('visible-three') as HTMLElement, 260, 48);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+    const providerCalls: string[][] = [];
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: { type: string; request?: { fragments: string[] } }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          providerCalls.push(message.request.fragments);
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) => `${fragment} [ja]`),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(providerCalls.length).toBeGreaterThanOrEqual(1);
+    expect(providerCalls[0]).toEqual([
+      `${'Lead paragraph for first-screen isolation. '.repeat(6)}`.trim(),
+    ]);
+
+    await waitFor(() => {
+      expect((document.getElementById('visible-two') as HTMLElement).textContent).toContain('[ja]');
+      expect((document.getElementById('visible-three') as HTMLElement).textContent).toContain('[ja]');
+    });
+  });
+
+  it('raises deferred throughput after the lead batch by running multiple provider calls in parallel', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            ${Array.from(
+              { length: 60 },
+              (_, index) =>
+                `<p id="parallel-${index}">${`Visible paragraph ${index + 1} for deferred concurrency measurement. `.repeat(12)}</p>`,
+            ).join('')}
+          </main>
+        </body>
+      </html>
+    `);
+
+    Array.from({ length: 60 }, (_, index) => {
+      setRect(document.getElementById(`parallel-${index}`) as HTMLElement, 24 + index * 56, 48);
+    });
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+    let requestIndex = 0;
+    let inFlight = 0;
+    let peakInFlight = 0;
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: { type: string; request?: { fragments: string[] } }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          const { fragments } = message.request;
+          requestIndex += 1;
+          if (requestIndex === 1) {
+            return {
+              ok: true,
+              result: {
+                translations: fragments.map((fragment) => `${fragment} [ja]`),
+              },
+            };
+          }
+
+          inFlight += 1;
+          peakInFlight = Math.max(peakInFlight, inFlight);
+          return await new Promise<{ ok: boolean; result: { translations: string[] } }>((resolve) => {
+            setTimeout(() => {
+              inFlight -= 1;
+              resolve({
+                ok: true,
+                result: {
+                  translations: fragments.map((fragment) => `${fragment} [ja]`),
+                },
+              });
+            }, 40);
+          });
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+
+    await waitFor(() => {
+      expect(peakInFlight).toBeGreaterThanOrEqual(3);
+    });
+  });
+
   it('uses persistent cache when a lazy block becomes visible later', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
@@ -1048,6 +1186,103 @@ describe('TranslationController', () => {
     );
   });
 
+  it('restores protected math and media html after translating surrounding text', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="hybrid">
+              Let
+              <span class="mwe-math-element">
+                <span class="mwe-math-mathml-inline" style="display: none;"><math><mi>G</mi></math></span>
+                <img
+                  class="mwe-math-fallback-image-inline"
+                  src="/math/G.svg"
+                  alt="G"
+                />
+              </span>
+              guide the <a href="/wiki/Representation_theory">representation theory</a> discussion.
+            </p>
+            <p id="diagram">
+              This diagram
+              <img class="mw-file-element" src="/diagram/commutes.svg" alt="commutative diagram" />
+              commutes.
+            </p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+    const providerCalls: Array<{
+      fragments: string[];
+      contentMode: string;
+      hasProtectedMarkers?: boolean;
+    }> = [];
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: {
+        type: string;
+        request?: { fragments: string[]; contentMode: string; hasProtectedMarkers?: boolean };
+      }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          providerCalls.push(message.request);
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) =>
+                fragment
+                  .replace('Let', 'まず')
+                  .replace('guide the', 'が')
+                  .replace('representation theory', '表現論')
+                  .replace('discussion.', 'の議論を導きます。')
+                  .replace('This diagram', 'この図式は')
+                  .replace('commutes.', '可換です。'),
+              ),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const initialMathElements = document.querySelectorAll('.mwe-math-element').length;
+    const initialFallbackImages = document.querySelectorAll('.mwe-math-fallback-image-inline').length;
+    const initialMediaImages = document.querySelectorAll('img.mw-file-element').length;
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(providerCalls.some((request) => request.hasProtectedMarkers)).toBe(true);
+    expect(providerCalls.some((request) => request.fragments.some((fragment) => fragment.includes('[[HX')))).toBe(
+      true,
+    );
+    expect(document.querySelectorAll('.mwe-math-element')).toHaveLength(initialMathElements);
+    expect(document.querySelectorAll('.mwe-math-fallback-image-inline')).toHaveLength(
+      initialFallbackImages,
+    );
+    expect(document.querySelectorAll('img.mw-file-element')).toHaveLength(initialMediaImages);
+    expect((document.querySelector('#hybrid a') as HTMLAnchorElement).textContent).toBe('表現論');
+    expect((document.getElementById('hybrid') as HTMLElement).textContent).toContain(
+      '表現論',
+    );
+    expect((document.getElementById('diagram') as HTMLElement).textContent).toContain('可換です。');
+    expect((document.querySelector('#diagram img.mw-file-element') as HTMLImageElement).src).toContain(
+      '/diagram/commutes.svg',
+    );
+  });
+
   it('merges short adjacent text siblings into a single parent html fragment', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
@@ -1112,8 +1347,10 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(document.querySelector('#cluster p')?.textContent).toBe('アルファです。');
-    expect(document.querySelectorAll('#cluster p')[2]?.textContent).toBe('ガンマです。');
+    await waitFor(() => {
+      expect(document.querySelector('#cluster p')?.textContent).toBe('アルファです。');
+      expect(document.querySelectorAll('#cluster p')[2]?.textContent).toBe('ガンマです。');
+    });
   });
 
   it('splits oversized text blocks into multiple request fragments before translating', async () => {
@@ -1167,8 +1404,7 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(providerCalls).toHaveLength(1);
-    expect(providerCalls[0].length).toBeGreaterThan(1);
+    expect(providerCalls.some((fragments) => fragments.length > 1)).toBe(true);
     expect((document.getElementById('long') as HTMLElement).textContent).toContain('[part-1]');
     expect((document.getElementById('long') as HTMLElement).textContent).toContain('[part-2]');
   });
@@ -1461,12 +1697,13 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(providerCalls[0]?.length).toBeGreaterThan(2);
-    expect(providerCalls.some((fragments) => fragments.length < (providerCalls[0]?.length ?? 0))).toBe(
-      true,
-    );
-    expect(document.body.textContent).toContain('Alpha paragraph about representations. [ja]');
-    expect(document.body.textContent).toContain('Delta paragraph about decompositions. [ja]');
+    const largestBatch = Math.max(...providerCalls.map((fragments) => fragments.length));
+    expect(largestBatch).toBeGreaterThan(2);
+    expect(providerCalls.some((fragments) => fragments.length < largestBatch)).toBe(true);
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Alpha paragraph about representations. [ja]');
+      expect(document.body.textContent).toContain('Delta paragraph about decompositions. [ja]');
+    });
   });
 
   it('splits a single oversized fragment and recovers from an output-limit failure', async () => {
@@ -1651,12 +1888,13 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(providerCalls[0]?.length).toBeGreaterThan(2);
-    expect(providerCalls.some((fragments) => fragments.length < (providerCalls[0]?.length ?? 0))).toBe(
-      true,
-    );
-    expect(document.body.textContent).toContain('Alpha paragraph about representations. [ja]');
-    expect(document.body.textContent).toContain('Delta paragraph about decompositions. [ja]');
+    const largestBatch = Math.max(...providerCalls.map((fragments) => fragments.length));
+    expect(largestBatch).toBeGreaterThan(2);
+    expect(providerCalls.some((fragments) => fragments.length < largestBatch)).toBe(true);
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Alpha paragraph about representations. [ja]');
+      expect(document.body.textContent).toContain('Delta paragraph about decompositions. [ja]');
+    });
   });
 
   it('collapses an over-split single-fragment response instead of failing the page', async () => {
@@ -1768,12 +2006,13 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(providerCalls[0]?.length).toBeGreaterThan(2);
-    expect(providerCalls.some((fragments) => fragments.length < (providerCalls[0]?.length ?? 0))).toBe(
-      true,
-    );
-    expect(document.body.textContent).toContain('Alpha paragraph about representations. [ja]');
-    expect(document.body.textContent).toContain('Delta paragraph about decompositions. [ja]');
+    const largestBatch = Math.max(...providerCalls.map((fragments) => fragments.length));
+    expect(largestBatch).toBeGreaterThan(2);
+    expect(providerCalls.some((fragments) => fragments.length < largestBatch)).toBe(true);
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Alpha paragraph about representations. [ja]');
+      expect(document.body.textContent).toContain('Delta paragraph about decompositions. [ja]');
+    });
   });
 
   it('passes section context and learned glossary hints to later batches', async () => {
@@ -1857,7 +2096,9 @@ describe('TranslationController', () => {
       expect(requests.length).toBeGreaterThanOrEqual(2);
     });
 
-    expect(requests[0]?.sectionContext).toContain('Irreducible representations');
+    expect(
+      requests.some((request) => request.sectionContext?.includes('Irreducible representations')),
+    ).toBe(true);
     expect(requests.some((request) =>
       JSON.stringify(request.glossary) ===
       JSON.stringify([

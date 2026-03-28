@@ -6,23 +6,33 @@ Candidate: `/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-result
 Scenario:
 - URL: `https://en.wikipedia.org/wiki/Representation_theory`
 - Provider: `openrouter`
-- Model: `google/gemini-3-flash-preview`
+- Model: `google/gemini-3.1-flash-lite-preview`
 - Scope: `page`
 
 | Metric | Baseline | Candidate | Delta | Delta % | Interpretation |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Request count | 57 | 57 | 0 | 0.00% | no change |
-| Prompt tokens | 63908 | 63908 | 0 | 0.00% | no change |
-| Completion tokens | 64164 | 64164 | 0 | 0.00% | no change |
-| Total tokens | 128072 | 128072 | 0 | 0.00% | no change |
-| Time to first visible translation (ms) | 84315 | 84315 | 0 | 0.00% | no change |
-| Time to full completion (ms) | 226161 | 226161 | 0 | 0.00% | no change |
-| Peak in-flight requests | 2 | 2 | 0 | 0.00% | no change |
-| Cost (USD) | $0.224432 | $0.224432 | $0.000000 | 0.00% | no change |
+| Request count | 17 | 17 | 0 | 0.00% | no change |
+| Prompt tokens | 18079 | 18079 | 0 | 0.00% | no change |
+| Completion tokens | 17962 | 17962 | 0 | 0.00% | no change |
+| Total tokens | 36041 | 36041 | 0 | 0.00% | no change |
+| Time to first visible translation (ms) | 2428 | 2428 | 0 | 0.00% | no change |
+| Time to full completion (ms) | 50373 | 50373 | 0 | 0.00% | no change |
+| Peak in-flight requests | 3 | 3 | 0 | 0.00% | no change |
+| Cost (USD) | $0.031463 | $0.031463 | $0.000000 | 0.00% | no change |
+| Immediate phase complete (ms) | 0 | 2370 | +2370 | n/a | regressed |
+| Lazy-visible phase complete (ms) | 0 | 13120 | +13120 | n/a | regressed |
+| Retry count | 0 | 0 | 0 | n/a | no change |
+| Batch splits | 0 | 0 | 0 | n/a | no change |
+| Fragment splits | 0 | 0 | 0 | n/a | no change |
+| Persistent cache hits | 0 | 0 | 0 | n/a | no change |
+| Cache misses | 0 | 259 | +259 | n/a | regressed |
+| Immediate requests | 0 | 1 | +1 | n/a | regressed |
+| Lazy-visible requests | 0 | 4 | +4 | n/a | regressed |
+| Deferred requests | 0 | 12 | +12 | n/a | regressed |
 
 Cost source:
-- Baseline: `openrouter-activity-log`
-- Candidate: `openrouter-activity-log`
+- Baseline: `metrics-json`
+- Candidate: `metrics-json`
 
-Generated at: 2026-03-28T05:42:07.680Z
+Generated at: 2026-03-28T14:08:37.852Z
 

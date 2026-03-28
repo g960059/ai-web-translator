@@ -19,7 +19,9 @@ import {
   normalizeText,
   prepareContentForTranslation,
   preparePlaceholderRichTextForTranslation,
+  protectAtomicHtmlForTranslation,
   restorePreparedContent,
+  restoreProtectedHtml,
   restorePlaceholderRichText,
   sanitizeTranslatedHtml,
   splitHtmlIntoSafeSegments,
@@ -80,13 +82,14 @@ interface BlockRecord {
 interface TranslationGroup {
   groupKey: string;
   contentMode: TranslationContentMode;
-  requestFragments: Array<{
-    preparedContent: string;
-    requestContentMode: TranslationContentMode;
-    restoreContentMode: TranslationContentMode;
-    restoreMap: Record<string, string>;
-    placeholderTagMap?: Record<string, string>;
-  }>;
+    requestFragments: Array<{
+      preparedContent: string;
+      requestContentMode: TranslationContentMode;
+      restoreContentMode: TranslationContentMode;
+      restoreMap: Record<string, string>;
+      placeholderTagMap?: Record<string, string>;
+      protectedHtmlMap?: Record<string, string>;
+    }>;
   normalizedSource: string;
   joiner: string;
   cacheLookup: TranslationCacheLookup;
@@ -99,6 +102,7 @@ interface TranslationGroup {
   top: number;
   priorityScore: number;
   queueClass: 'immediate' | 'lazy-visible' | 'deferred';
+  isLead: boolean;
 }
 
 interface TranslationBatchItem {
@@ -109,6 +113,7 @@ interface TranslationBatchItem {
   preparedContent: string;
   restoreMap: Record<string, string>;
   placeholderTagMap?: Record<string, string>;
+  protectedHtmlMap?: Record<string, string>;
   estimatedTokens: number;
   rawEstimatedTokens: number;
 }
@@ -139,6 +144,8 @@ interface TranslationRuntimeState {
   glossaryCandidates: Map<string, { source: string; count: number }>;
   batchScale: Record<TranslationContentMode, number>;
   successStreak: Record<TranslationContentMode, number>;
+  maxConcurrency: number;
+  stableBatchWins: number;
 }
 
 interface PageScanSnapshot {
@@ -165,10 +172,10 @@ interface LazyPageSession {
   runtimeState: TranslationRuntimeState;
 }
 
-const IMMEDIATE_BATCH_TOKEN_LIMIT = 900;
+const IMMEDIATE_BATCH_TOKEN_LIMIT = 1050;
 const IMMEDIATE_BATCH_ITEM_LIMIT = 6;
-const DEFERRED_BATCH_TOKEN_LIMIT = 3200;
-const DEFERRED_BATCH_ITEM_LIMIT = 20;
+const DEFERRED_BATCH_TOKEN_LIMIT = 4200;
+const DEFERRED_BATCH_ITEM_LIMIT = 24;
 const MAX_BATCH_RETRIES = 1;
 const RETRY_BACKOFF_MS = 1200;
 const API_WAIT_NOTICE_MS = 5000;
@@ -180,13 +187,17 @@ const UNSPLITTABLE_HTML_TOKEN_THRESHOLD = 560;
 const OUTPUT_LIMIT_ERROR_MESSAGE = 'Provider response reached output limit.';
 const LAZY_FORCE_FLUSH_BOTTOM_THRESHOLD_PX = 96;
 const IMMEDIATE_GROUP_TOKEN_BUDGET = 780;
-const IMMEDIATE_GROUP_LIMIT = 3;
+const IMMEDIATE_GROUP_LIMIT = 1;
 const IMMEDIATE_CANDIDATE_VIEWPORT_MULTIPLIER = 0.95;
-const LAZY_PREFETCH_MIN_TOKENS = 1800;
+const LAZY_PREFETCH_MIN_TOKENS = 2400;
 const LAZY_PREFETCH_MAX_EXTRA_GROUPS = 6;
 const LAZY_PREFETCH_VIEWPORT_MULTIPLIER = 2.5;
 const BATCH_SCALE_MIN = 0.75;
 const BATCH_SCALE_BACKOFF = 0.75;
+const MIN_RUNTIME_CONCURRENCY = 2;
+const DEFAULT_RUNTIME_CONCURRENCY = 4;
+const MAX_RUNTIME_CONCURRENCY = 5;
+const RUNTIME_CONCURRENCY_PROMOTION_STREAK = 8;
 class OutputLimitTranslationError extends Error {
   constructor() {
     super(OUTPUT_LIMIT_ERROR_MESSAGE);
@@ -862,6 +873,7 @@ export class TranslationController {
         top: record.top,
         priorityScore: record.priorityScore,
         queueClass: 'deferred',
+        isLead: false,
       });
     });
 
@@ -1065,10 +1077,15 @@ export class TranslationController {
 
     immediateGroups.forEach((group) => {
       group.queueClass = 'immediate';
+      group.isLead = false;
     });
+    if (immediateGroups[0]) {
+      immediateGroups[0].isLead = true;
+    }
     deferredGroups.forEach((group) => {
       group.queueClass =
         group.isVisible || group.top <= lazyVisibleThreshold ? 'lazy-visible' : 'deferred';
+      group.isLead = false;
     });
 
     return {
@@ -1095,18 +1112,40 @@ export class TranslationController {
       return options.processedJobs;
     }
 
-    const batchItems = createBatchItems(options.groups, options.runtimeState.calibration);
-    const strategy = resolveBatchStrategy(
-      batchItems,
-      options.batchProfile,
-      options.runtimeState,
+    const buildPlan = (
+      groups: TranslationGroup[],
+    ): { strategy: BatchStrategy; batches: TranslationBatchItem[][] } => {
+      const batchItems = createBatchItems(groups, options.runtimeState.calibration);
+      const strategy = resolveBatchStrategy(
+        batchItems,
+        options.batchProfile,
+        options.runtimeState,
+      );
+      const batches = batchBatchItems(batchItems, {
+        tokenLimit: strategy.tokenLimit,
+        itemLimit: strategy.itemLimit,
+        minimumTokenFloor: strategy.minimumTokenFloor,
+      });
+      return { strategy, batches };
+    };
+
+    const leadGroups =
+      options.batchProfile === 'immediate'
+        ? options.groups.filter((group) => group.isLead)
+        : [];
+    const remainingGroups =
+      leadGroups.length > 0
+        ? options.groups.filter((group) => !group.isLead)
+        : options.groups;
+    const batchPlans =
+      leadGroups.length > 0
+        ? [buildPlan(leadGroups), buildPlan(remainingGroups)]
+        : [buildPlan(remainingGroups)];
+
+    this.recordRequestBatches(
+      options.metricsPhase,
+      batchPlans.reduce((sum, plan) => sum + plan.batches.length, 0),
     );
-    const batches = batchBatchItems(batchItems, {
-      tokenLimit: strategy.tokenLimit,
-      itemLimit: strategy.itemLimit,
-      minimumTokenFloor: strategy.minimumTokenFloor,
-    });
-    this.recordRequestBatches(options.metricsPhase, batches.length);
     const completedFragments = new Map<string, string[]>();
     const usageSamples: Array<{
       contentMode: TranslationContentMode;
@@ -1128,122 +1167,144 @@ export class TranslationController {
     }
 
     let processedJobs = options.processedJobs;
-    const workerCount = Math.min(strategy.concurrency, batches.length);
-    let nextBatchIndex = 0;
     let failure: unknown = null;
 
-    const runWorker = async (): Promise<void> => {
-      while (nextBatchIndex < batches.length && !failure) {
-        this.throwIfSessionCancelled(options.sessionId);
-        const batch = batches[nextBatchIndex++];
-        try {
-          let result: TranslationRequestResult;
-          try {
-            result = await this.requestTranslationsWithRetry({
-              items: batch,
-              settings: options.settings,
-              context: options.context,
-              runtimeState: options.runtimeState,
-              sessionId: options.sessionId,
-              overlayMessage: options.overlayMessage,
-              showOverlay: options.showOverlay,
-            });
-          } catch (error) {
-            if (shouldFallbackToOriginalBatch(batch, error)) {
-            logWithContext('warn', '[AI Web Translator] Falling back to source fragment after output-limit failure.', {
-              pageKey: this.pageKey,
-              sessionId: options.sessionId,
-              contentMode: batch[0]?.contentMode ?? 'unknown',
-              fragmentLength: batch[0]?.preparedContent.length ?? 0,
-            });
-              result = {
-                translations: batch.map((item) => item.preparedContent),
-              };
-            } else {
-              throw error;
-            }
-          }
-          this.throwIfSessionCancelled(options.sessionId);
-          const cacheEntries: Array<{
-            lookup: TranslationCacheLookup;
-            translation: string;
-          }> = [];
-
-          batch.forEach((item, index) => {
-            const preparedFragment = restorePreparedContent(
-              result.translations[index],
-              item.restoreContentMode,
-              item.restoreMap,
-            );
-            const normalizedProtectedFragment = item.placeholderTagMap
-              ? tightenProtectedMarkerSpacing(
-                  preparedFragment,
-                  options.settings.targetLanguage,
-                )
-              : preparedFragment;
-            const restoredFragment = item.placeholderTagMap
-              ? restorePlaceholderRichText(
-                  normalizedProtectedFragment,
-                  item.placeholderTagMap,
-                )
-              : normalizedProtectedFragment;
-            const bucket =
-              completedFragments.get(item.group.groupKey) ??
-              new Array(item.group.requestFragments.length).fill('');
-            bucket[item.fragmentIndex] = restoredFragment;
-            completedFragments.set(item.group.groupKey, bucket);
-
-            if (!bucket.every((fragment) => fragment.length > 0)) {
-              return;
-            }
-
-            const restored = joinTranslatedGroupOutput(item.group, bucket);
-            this.applyGroupTranslation(item.group, restored, false);
-            this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
-            processedJobs += 1;
-            if (options.settings.cacheEnabled) {
-              cacheEntries.push({
-                lookup: item.group.cacheLookup,
-                translation: restored,
-              });
-              options.cacheStore?.set(item.group.cacheLookupKey, restored);
-            }
-            this.updateProgress(
-              options.sessionId,
-              processedJobs,
-              options.totalJobs,
-              'Applying translations...',
-              options.showOverlay,
-            );
-          });
-
-          if (result.usage) {
-            const batchEstimate = toEstimateBatchShape(batch);
-            usageSamples.push({
-              contentMode: batchEstimate.contentMode,
-              estimatedPromptTokens: estimatePromptTokensForBatch(batchEstimate),
-              estimatedCompletionTokens: estimateCompletionTokensForBatch(batchEstimate),
-              usage: result.usage,
-            });
-          }
-
-          this.recordBatchSuccess(batch, options.runtimeState);
-
-          this.refreshDisplayState();
-
-          if (cacheEntries.length > 0) {
-            this.throwIfSessionCancelled(options.sessionId);
-            cacheWriteTasks.push(setCachedTranslations(cacheEntries));
-          }
-        } catch (error) {
-          this.recordBatchFailure(batch, error, options.runtimeState);
-          failure = error;
-          return;
-        }
+    const executePlan = async (
+      plan: { strategy: BatchStrategy; batches: TranslationBatchItem[][] },
+    ): Promise<void> => {
+      if (plan.batches.length === 0) {
+        return;
       }
+
+      const workerCount = Math.min(plan.strategy.concurrency, plan.batches.length);
+      let nextBatchIndex = 0;
+
+      const runWorker = async (): Promise<void> => {
+        while (nextBatchIndex < plan.batches.length && !failure) {
+          this.throwIfSessionCancelled(options.sessionId);
+          const batch = plan.batches[nextBatchIndex++];
+          try {
+            let result: TranslationRequestResult;
+            try {
+              result = await this.requestTranslationsWithRetry({
+                items: batch,
+                settings: options.settings,
+                context: options.context,
+                runtimeState: options.runtimeState,
+                sessionId: options.sessionId,
+                overlayMessage: options.overlayMessage,
+                showOverlay: options.showOverlay,
+              });
+            } catch (error) {
+              if (shouldFallbackToOriginalBatch(batch, error)) {
+                logWithContext('warn', '[AI Web Translator] Falling back to source fragment after output-limit failure.', {
+                  pageKey: this.pageKey,
+                  sessionId: options.sessionId,
+                  contentMode: batch[0]?.contentMode ?? 'unknown',
+                  fragmentLength: batch[0]?.preparedContent.length ?? 0,
+                });
+                result = {
+                  translations: batch.map((item) => item.preparedContent),
+                };
+              } else {
+                throw error;
+              }
+            }
+            this.throwIfSessionCancelled(options.sessionId);
+            const cacheEntries: Array<{
+              lookup: TranslationCacheLookup;
+              translation: string;
+            }> = [];
+
+            batch.forEach((item, index) => {
+              const preparedFragment = restorePreparedContent(
+                result.translations[index],
+                item.restoreContentMode,
+                item.restoreMap,
+              );
+              const normalizedProtectedFragment =
+                item.placeholderTagMap || item.protectedHtmlMap
+                ? tightenProtectedMarkerSpacing(
+                    preparedFragment,
+                    options.settings.targetLanguage,
+                  )
+                : preparedFragment;
+              const placeholderRestoredFragment = item.placeholderTagMap
+                ? restorePlaceholderRichText(
+                    normalizedProtectedFragment,
+                    item.placeholderTagMap,
+                  )
+                : normalizedProtectedFragment;
+              const restoredFragment = item.protectedHtmlMap
+                ? restoreProtectedHtml(
+                    placeholderRestoredFragment,
+                    item.protectedHtmlMap,
+                  )
+                : placeholderRestoredFragment;
+              const bucket =
+                completedFragments.get(item.group.groupKey) ??
+                new Array(item.group.requestFragments.length).fill('');
+              bucket[item.fragmentIndex] = restoredFragment;
+              completedFragments.set(item.group.groupKey, bucket);
+
+              if (!bucket.every((fragment) => fragment.length > 0)) {
+                return;
+              }
+
+              const restored = joinTranslatedGroupOutput(item.group, bucket);
+              this.applyGroupTranslation(item.group, restored, false);
+              this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
+              processedJobs += 1;
+              if (options.settings.cacheEnabled) {
+                cacheEntries.push({
+                  lookup: item.group.cacheLookup,
+                  translation: restored,
+                });
+                options.cacheStore?.set(item.group.cacheLookupKey, restored);
+              }
+              this.updateProgress(
+                options.sessionId,
+                processedJobs,
+                options.totalJobs,
+                'Applying translations...',
+                options.showOverlay,
+              );
+            });
+
+            if (result.usage) {
+              const batchEstimate = toEstimateBatchShape(batch);
+              usageSamples.push({
+                contentMode: batchEstimate.contentMode,
+                estimatedPromptTokens: estimatePromptTokensForBatch(batchEstimate),
+                estimatedCompletionTokens: estimateCompletionTokensForBatch(batchEstimate),
+                usage: result.usage,
+              });
+            }
+
+            this.recordBatchSuccess(batch, options.runtimeState);
+            this.refreshDisplayState();
+
+            if (cacheEntries.length > 0) {
+              this.throwIfSessionCancelled(options.sessionId);
+              cacheWriteTasks.push(setCachedTranslations(cacheEntries));
+            }
+          } catch (error) {
+            this.recordBatchFailure(batch, error, options.runtimeState);
+            failure = error;
+            return;
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
     };
 
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+    for (const plan of batchPlans) {
+      if (failure || plan.batches.length === 0) {
+        continue;
+      }
+      await executePlan(plan);
+    }
 
     if (failure) {
       throw failure;
@@ -1286,7 +1347,9 @@ export class TranslationController {
       fragmentIds,
       sectionContext: resolveBatchSectionContext(items),
       glossary: buildGlossaryHints(runtimeState, items),
-      hasProtectedMarkers: items.some((item) => Boolean(item.placeholderTagMap)),
+      hasProtectedMarkers: items.some(
+        (item) => Boolean(item.placeholderTagMap || item.protectedHtmlMap),
+      ),
       maxOutputTokens: estimateCompletionTokensForBatch(
         batchEstimate,
         runtimeState.calibration,
@@ -1585,13 +1648,21 @@ export class TranslationController {
     restoreContentMode: TranslationContentMode;
     restoreMap: Record<string, string>;
     placeholderTagMap?: Record<string, string>;
+    protectedHtmlMap?: Record<string, string>;
   }> {
     const sourceContent =
       record.contentMode === 'text' ? record.originalText : record.originalHtml;
+    const protectedHtml =
+      record.contentMode === 'html' ? protectAtomicHtmlForTranslation(sourceContent) : null;
+    const translatableSourceContent = protectedHtml?.content ?? sourceContent;
 
     if (record.contentMode === 'html') {
-      const placeholder = preparePlaceholderRichTextForTranslation(sourceContent);
-      const preparedHtml = prepareContentForTranslation(sourceContent, 'html', settings.style);
+      const placeholder = preparePlaceholderRichTextForTranslation(translatableSourceContent);
+      const preparedHtml = prepareContentForTranslation(
+        translatableSourceContent,
+        'html',
+        settings.style,
+      );
       if (
         placeholder &&
         placeholder.content.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS &&
@@ -1604,6 +1675,7 @@ export class TranslationController {
             restoreContentMode: 'text',
             restoreMap: {},
             placeholderTagMap: placeholder.tagMap,
+            protectedHtmlMap: protectedHtml?.htmlMap,
           },
         ];
       }
@@ -1612,7 +1684,7 @@ export class TranslationController {
     const segments =
       record.contentMode === 'text'
         ? splitTextIntoSegments(sourceContent)
-        : splitHtmlIntoSafeSegments(sourceContent, MAX_HTML_FRAGMENT_CHARS);
+        : splitHtmlIntoSafeSegments(translatableSourceContent, MAX_HTML_FRAGMENT_CHARS);
 
     return segments.map((segment) => {
       const prepared = prepareContentForTranslation(segment, record.contentMode, settings.style);
@@ -1621,6 +1693,7 @@ export class TranslationController {
         requestContentMode: record.contentMode,
         restoreContentMode: record.contentMode,
         restoreMap: prepared.restoreMap,
+        protectedHtmlMap: protectedHtml?.htmlMap,
       };
     });
   }
@@ -1880,6 +1953,7 @@ export class TranslationController {
       progressMessage: 'Using saved translations...',
       showOverlay: false,
     });
+    const prioritizedPendingGroups = [...hydrated.pendingGroups].sort(compareGroupsForLazyExecution);
 
     scheduledGroups.forEach((group) => {
       if (!hydrated.pendingGroups.includes(group)) {
@@ -1891,7 +1965,7 @@ export class TranslationController {
     try {
       if (hydrated.pendingGroups.length > 0) {
         session.processedJobs = await this.processGroupBatches({
-          groups: hydrated.pendingGroups,
+          groups: prioritizedPendingGroups,
           settings: session.settings,
           context: session.context,
           sessionId: session.sessionId,
@@ -2200,6 +2274,14 @@ export class TranslationController {
 
     const contentMode = batch[0].contentMode;
     runtimeState.successStreak[contentMode] += 1;
+    runtimeState.stableBatchWins += 1;
+    if (
+      runtimeState.stableBatchWins >= RUNTIME_CONCURRENCY_PROMOTION_STREAK &&
+      runtimeState.maxConcurrency < MAX_RUNTIME_CONCURRENCY
+    ) {
+      runtimeState.maxConcurrency += 1;
+      runtimeState.stableBatchWins = 0;
+    }
   }
 
   private recordBatchFailure(
@@ -2213,6 +2295,11 @@ export class TranslationController {
 
     const contentMode = batch[0].contentMode;
     runtimeState.successStreak[contentMode] = 0;
+    runtimeState.stableBatchWins = 0;
+    runtimeState.maxConcurrency = Math.max(
+      MIN_RUNTIME_CONCURRENCY,
+      runtimeState.maxConcurrency - 1,
+    );
     runtimeState.batchScale[contentMode] = Math.max(
       BATCH_SCALE_MIN,
       runtimeState.batchScale[contentMode] * BATCH_SCALE_BACKOFF,
@@ -2383,6 +2470,8 @@ export class TranslationController {
         text: 0,
         html: 0,
       },
+      maxConcurrency: DEFAULT_RUNTIME_CONCURRENCY,
+      stableBatchWins: 0,
     };
   }
 
@@ -2443,6 +2532,7 @@ function createBatchItems(
       preparedContent: fragment.preparedContent,
       restoreMap: fragment.restoreMap,
       placeholderTagMap: fragment.placeholderTagMap,
+      protectedHtmlMap: fragment.protectedHtmlMap,
       estimatedTokens: estimatePromptTokensForContent(
         fragment.requestContentMode,
         fragment.preparedContent.length,
@@ -2534,6 +2624,10 @@ function resolveBatchStrategy(
   profile: 'immediate' | 'deferred',
   runtimeState?: TranslationRuntimeState,
 ): BatchStrategy {
+  const concurrencyCap = runtimeState?.maxConcurrency ?? DEFAULT_RUNTIME_CONCURRENCY;
+  const capConcurrency = (value: number): number =>
+    Math.max(1, Math.min(value, concurrencyCap));
+
   if (items.length === 0) {
     return {
       tokenLimit:
@@ -2564,52 +2658,52 @@ function resolveBatchStrategy(
 
   if (profile === 'immediate') {
     if (textOnly && !hasLargeItem && averageEstimatedTokens <= 190) {
-      return { tokenLimit: scaled(1500), itemLimit: 10, concurrency: 2 };
+      return { tokenLimit: scaled(1150), itemLimit: 6, concurrency: 1 };
     }
 
     if (!hasLargeItem && !htmlHeavy && averageEstimatedTokens <= 240) {
-      return { tokenLimit: scaled(1350), itemLimit: 8, concurrency: 2 };
+      return { tokenLimit: scaled(1100), itemLimit: 5, concurrency: 1 };
     }
 
     return {
       tokenLimit: scaled(IMMEDIATE_BATCH_TOKEN_LIMIT),
       itemLimit: IMMEDIATE_BATCH_ITEM_LIMIT,
-      concurrency: 2,
+      concurrency: 1,
     };
   }
 
   if (textOnly && !hasLargeItem && averageEstimatedTokens <= 180) {
     return {
-      tokenLimit: scaled(2800),
-      itemLimit: 16,
-      concurrency: 3,
-      minimumTokenFloor: 1200,
+      tokenLimit: scaled(4200),
+      itemLimit: 24,
+      concurrency: capConcurrency(4),
+      minimumTokenFloor: 1800,
     };
   }
 
   if (!hasLargeItem && !htmlHeavy && averageEstimatedTokens <= 260) {
     return {
-      tokenLimit: scaled(2400),
-      itemLimit: 14,
-      concurrency: 3,
-      minimumTokenFloor: 1200,
+      tokenLimit: scaled(3600),
+      itemLimit: 18,
+      concurrency: capConcurrency(4),
+      minimumTokenFloor: 1600,
     };
   }
 
   if (!hasLargeItem && averageEstimatedTokens <= 340) {
     return {
-      tokenLimit: scaled(1900),
-      itemLimit: 10,
-      concurrency: 2,
-      minimumTokenFloor: 1000,
+      tokenLimit: scaled(2600),
+      itemLimit: 12,
+      concurrency: capConcurrency(3),
+      minimumTokenFloor: 1200,
     };
   }
 
   return {
-    tokenLimit: scaled(1600),
-    itemLimit: 8,
-    concurrency: 2,
-    minimumTokenFloor: 900,
+    tokenLimit: scaled(2100),
+    itemLimit: 10,
+    concurrency: capConcurrency(3),
+    minimumTokenFloor: 1000,
   };
 }
 
@@ -2687,6 +2781,20 @@ function compareGroupsForScheduling(left: TranslationGroup, right: TranslationGr
   }
 
   return left.groupKey.localeCompare(right.groupKey);
+}
+
+function compareGroupsForLazyExecution(left: TranslationGroup, right: TranslationGroup): number {
+  const leftPriority = left.queueClass === 'lazy-visible' ? 1 : 0;
+  const rightPriority = right.queueClass === 'lazy-visible' ? 1 : 0;
+  if (leftPriority !== rightPriority) {
+    return rightPriority - leftPriority;
+  }
+
+  if (left.top !== right.top) {
+    return left.top - right.top;
+  }
+
+  return compareGroupsForScheduling(left, right);
 }
 
 function compareGroupsForImmediateScheduling(
@@ -2780,7 +2888,7 @@ function tightenProtectedMarkerSpacing(content: string, targetLanguage: string):
   }
 
   return content
-    .replace(/\s*(\[\[TX\d+[OC]\]\])\s*/g, '$1')
+    .replace(/\s*(\[\[(?:TX\d+[OC]|HX\d+)\]\])\s*/g, '$1')
     .replace(/\s+([。、！？])/g, '$1');
 }
 

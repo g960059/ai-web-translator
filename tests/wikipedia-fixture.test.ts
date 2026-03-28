@@ -4,53 +4,16 @@ import { getChromeMock } from './setup';
 import { waitFor } from '@testing-library/react';
 
 function translateWikipediaFragment(fragment: string): string {
-  const root = parseFragment(fragment);
-  const normalizedFragment = fragment.replace(/\s+/g, ' ').trim();
-  const normalizedText = (root.textContent ?? '').replace(/\s+/g, ' ').trim();
-
-  if (
-    normalizedFragment.includes('A <b>linear representation</b>') ||
-    normalizedText.includes('A linear representation')
-  ) {
-    const math = root.querySelectorAll('.mwe-math-element');
-    const links = root.querySelectorAll('a');
-
-    return [
-      `まず ${math[0]?.outerHTML} を ${math[1]?.outerHTML}-ベクトル空間、${math[2]?.outerHTML} を有限群とします。`,
-      `${math[3]?.outerHTML} の <b>線形表現</b> とは、${links[0]?.outerHTML} ${math[4]?.outerHTML} のことです。`,
-      `ここで ${math[5]?.outerHTML} は ${links[1]?.outerHTML}、${math[6]?.outerHTML} は ${links[2]?.outerHTML} を表します。`,
-      `つまり、線形表現とは ${math[7]?.outerHTML} で、すべての ${math[9]?.outerHTML} に対して ${math[8]?.outerHTML} を満たす写像です。`,
-    ].join(' ');
-  }
-
-  if (/diagram commutes/i.test(normalizedText)) {
-    const math = root.querySelector('.mwe-math-element');
-    const diagram = root.querySelector('[typeof="mw:File"]');
-    return `言い換えると、すべての ${math?.outerHTML} に対して次の図式は可換です: ${diagram?.outerHTML}`;
-  }
-
-  if (/following three maps|three maps:/i.test(normalizedText)) {
-    const rho = root.querySelector('.mwe-math-element');
-    return `言い換えると、${rho?.outerHTML} は次の 3 つの写像のいずれかです:`;
-  }
-
-  if (/group homomorphism defined by/i.test(normalizedText)) {
-    const math = root.querySelectorAll('.mwe-math-element');
-    return `ここで ${math[0]?.outerHTML} とし、${math[1]?.outerHTML} を次で定まる群準同型とします:`;
-  }
-
-  if (normalizedText.includes('Such a map is also called')) {
-    const math = root.querySelector('.mwe-math-element');
-    const link = root.querySelector('a');
-    return `このような写像は <b>${math?.outerHTML}–線形写像</b>、または <b>${link?.outerHTML}</b> とも呼ばれます。`;
-  }
-
-  return fragment;
-}
-
-function parseFragment(fragment: string): HTMLElement {
-  const parsed = new DOMParser().parseFromString(`<div>${fragment}</div>`, 'text/html');
-  return parsed.body.firstElementChild as HTMLElement;
+  return fragment
+    .replace(/\blinear representation\b/gi, '線形表現')
+    .replace(/\bfollowing three maps\b/gi, '次の 3 つの写像')
+    .replace(/\bthree maps:\b/gi, '3 つの写像:')
+    .replace(/\bgroup homomorphism defined by\b/gi, '次で定まる群準同型')
+    .replace(/\bthe following diagram commutes\b/gi, '次の図式は可換')
+    .replace(/\bdiagram commutes\b/gi, '図式は可換')
+    .replace(/\bSuch a map is also called\b/gi, 'このような写像は')
+    .replace(/\bequivariant map\b/gi, '線形写像')
+    .replace(/\brepresentation theory\b/gi, '表現論');
 }
 
 describe('Wikipedia-derived mathematical fixture', () => {

@@ -10,6 +10,11 @@ export interface PlaceholderRichTextContent {
   tagMap: Record<string, string>;
 }
 
+export interface ProtectedHtmlContent {
+  content: string;
+  htmlMap: Record<string, string>;
+}
+
 const ATOMIC_HTML_SELECTOR = 'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg';
 const DANGEROUS_TRANSLATED_TAGS = new Set([
   'SCRIPT',
@@ -60,8 +65,11 @@ const PLACEHOLDER_RICH_TEXT_TAGS = new Set([
 ]);
 const PLACEHOLDER_MARKER_PREFIX = '[[TX';
 const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*TX(\d+)(O|C)\s*\]\]/g;
+const PROTECTED_HTML_MARKER_PREFIX = '[[HX';
+const PROTECTED_HTML_MARKER_PATTERN = /\[\[\s*HX(\d+)\s*\]\]/g;
 const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
   'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"]';
+const PROTECTED_HTML_SELECTOR = '.mwe-math-element, img.mw-file-element';
 
 export function normalizeHtml(html: string): string {
   return html.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
@@ -185,6 +193,47 @@ export function restorePlaceholderRichText(
   );
 
   return Object.entries(tagMap).reduce(
+    (restored, [token, html]) => restored.split(token).join(html),
+    normalizedMarkers,
+  );
+}
+
+export function protectAtomicHtmlForTranslation(html: string): ProtectedHtmlContent | null {
+  const parsed = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const container = parsed.body.firstElementChild as HTMLElement | null;
+  if (!container) {
+    return null;
+  }
+
+  const htmlMap: Record<string, string> = {};
+  let nextId = 0;
+  const protectedNodes = Array.from(
+    container.querySelectorAll<HTMLElement>(PROTECTED_HTML_SELECTOR),
+  ).filter((element) => !element.parentElement?.closest(PROTECTED_HTML_SELECTOR));
+
+  protectedNodes.forEach((element) => {
+    const marker = `${PROTECTED_HTML_MARKER_PREFIX}${nextId++}]]`;
+    htmlMap[marker] = element.outerHTML;
+    element.replaceWith(parsed.createTextNode(marker));
+  });
+
+  if (Object.keys(htmlMap).length === 0) {
+    return null;
+  }
+
+  return {
+    content: container.innerHTML,
+    htmlMap,
+  };
+}
+
+export function restoreProtectedHtml(content: string, htmlMap: Record<string, string>): string {
+  const normalizedMarkers = content.replace(
+    PROTECTED_HTML_MARKER_PATTERN,
+    (_match, id: string) => `${PROTECTED_HTML_MARKER_PREFIX}${id}]]`,
+  );
+
+  return Object.entries(htmlMap).reduce(
     (restored, [token, html]) => restored.split(token).join(html),
     normalizedMarkers,
   );
