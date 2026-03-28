@@ -58,10 +58,10 @@ const PLACEHOLDER_RICH_TEXT_TAGS = new Set([
   'TIME',
   'U',
 ]);
-const PLACEHOLDER_MARKER_PREFIX = '[[AIWEBTX_';
-const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*AIWEBTX_(\d+)_(OPEN|CLOSE)\s*\]\]/g;
+const PLACEHOLDER_MARKER_PREFIX = '[[TX';
+const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*TX(\d+)(O|C)\s*\]\]/g;
 const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
-  'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6';
+  'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"]';
 
 export function normalizeHtml(html: string): string {
   return html.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
@@ -154,6 +154,10 @@ export function preparePlaceholderRichTextForTranslation(
     return null;
   }
 
+  if (container.querySelectorAll('a').length === 0) {
+    return null;
+  }
+
   const tagMap: Record<string, string> = {};
   let nextId = 0;
   const content = Array.from(container.childNodes)
@@ -177,7 +181,7 @@ export function restorePlaceholderRichText(
 ): string {
   const normalizedMarkers = content.replace(
     PLACEHOLDER_MARKER_PATTERN,
-    (_match, id: string, edge: string) => `${PLACEHOLDER_MARKER_PREFIX}${id}_${edge}]]`,
+    (_match, id: string, edge: string) => `${PLACEHOLDER_MARKER_PREFIX}${id}${edge}]]`,
   );
 
   return Object.entries(tagMap).reduce(
@@ -233,8 +237,8 @@ function serializePlaceholderRichTextNode(
   }
 
   const id = String(nextId());
-  const openToken = `${PLACEHOLDER_MARKER_PREFIX}${id}_OPEN]]`;
-  const closeToken = `${PLACEHOLDER_MARKER_PREFIX}${id}_CLOSE]]`;
+  const openToken = `${PLACEHOLDER_MARKER_PREFIX}${id}O]]`;
+  const closeToken = `${PLACEHOLDER_MARKER_PREFIX}${id}C]]`;
   tagMap[openToken] = buildOpeningTag(node);
   tagMap[closeToken] = `</${node.tagName.toLowerCase()}>`;
 

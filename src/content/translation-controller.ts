@@ -165,8 +165,8 @@ interface LazyPageSession {
   runtimeState: TranslationRuntimeState;
 }
 
-const IMMEDIATE_BATCH_TOKEN_LIMIT = 1200;
-const IMMEDIATE_BATCH_ITEM_LIMIT = 8;
+const IMMEDIATE_BATCH_TOKEN_LIMIT = 900;
+const IMMEDIATE_BATCH_ITEM_LIMIT = 6;
 const DEFERRED_BATCH_TOKEN_LIMIT = 3200;
 const DEFERRED_BATCH_ITEM_LIMIT = 20;
 const MAX_BATCH_RETRIES = 1;
@@ -179,9 +179,9 @@ const MAX_PLACEHOLDER_RICH_TEXT_CHARS = 860;
 const UNSPLITTABLE_HTML_TOKEN_THRESHOLD = 560;
 const OUTPUT_LIMIT_ERROR_MESSAGE = 'Provider response reached output limit.';
 const LAZY_FORCE_FLUSH_BOTTOM_THRESHOLD_PX = 96;
-const IMMEDIATE_GROUP_TOKEN_BUDGET = 1200;
-const IMMEDIATE_GROUP_LIMIT = 6;
-const IMMEDIATE_CANDIDATE_VIEWPORT_MULTIPLIER = 1.35;
+const IMMEDIATE_GROUP_TOKEN_BUDGET = 780;
+const IMMEDIATE_GROUP_LIMIT = 3;
+const IMMEDIATE_CANDIDATE_VIEWPORT_MULTIPLIER = 0.95;
 const LAZY_PREFETCH_MIN_TOKENS = 1800;
 const LAZY_PREFETCH_MAX_EXTRA_GROUPS = 6;
 const LAZY_PREFETCH_VIEWPORT_MULTIPLIER = 2.5;
@@ -1023,26 +1023,37 @@ export class TranslationController {
     const immediateCandidates = sortedGroups.filter(
       (group) => group.top <= viewportHeight * IMMEDIATE_CANDIDATE_VIEWPORT_MULTIPLIER,
     );
-    const candidatePool = immediateCandidates.length > 0 ? immediateCandidates : sortedGroups;
+    const candidatePool = (immediateCandidates.length > 0 ? immediateCandidates : sortedGroups).sort(
+      (left, right) => compareGroupsForImmediateScheduling(left, right, viewportHeight),
+    );
     const immediateGroups: TranslationGroup[] = [];
     let scheduledTokens = 0;
+    const textCandidates = candidatePool.filter((group) => group.contentMode === 'text');
+    const fallbackCandidates = candidatePool.filter((group) => group.contentMode !== 'text');
 
-    candidatePool.forEach((group) => {
-      if (immediateGroups.length >= IMMEDIATE_GROUP_LIMIT) {
-        return;
-      }
+    const trySchedule = (pool: TranslationGroup[]): void => {
+      pool.forEach((group) => {
+        if (immediateGroups.length >= IMMEDIATE_GROUP_LIMIT) {
+          return;
+        }
 
-      const estimatedTokens = getGroupPromptTokens(group, calibration);
-      const exceedsBudget =
-        immediateGroups.length > 0 &&
-        scheduledTokens + estimatedTokens > IMMEDIATE_GROUP_TOKEN_BUDGET;
-      if (exceedsBudget) {
-        return;
-      }
+        const estimatedTokens = getGroupPromptTokens(group, calibration);
+        const exceedsBudget =
+          immediateGroups.length > 0 &&
+          scheduledTokens + estimatedTokens > IMMEDIATE_GROUP_TOKEN_BUDGET;
+        if (exceedsBudget) {
+          return;
+        }
 
-      immediateGroups.push(group);
-      scheduledTokens += estimatedTokens;
-    });
+        immediateGroups.push(group);
+        scheduledTokens += estimatedTokens;
+      });
+    };
+
+    trySchedule(textCandidates.length > 0 ? textCandidates : candidatePool);
+    if (immediateGroups.length === 0 || textCandidates.length === 0) {
+      trySchedule(fallbackCandidates);
+    }
 
     if (immediateGroups.length === 0 && sortedGroups[0]) {
       immediateGroups.push(sortedGroups[0]);
@@ -1580,7 +1591,12 @@ export class TranslationController {
 
     if (record.contentMode === 'html') {
       const placeholder = preparePlaceholderRichTextForTranslation(sourceContent);
-      if (placeholder && placeholder.content.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) {
+      const preparedHtml = prepareContentForTranslation(sourceContent, 'html', settings.style);
+      if (
+        placeholder &&
+        placeholder.content.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS &&
+        placeholder.content.length + 12 < preparedHtml.content.length
+      ) {
         return [
           {
             preparedContent: placeholder.content,
@@ -2673,6 +2689,40 @@ function compareGroupsForScheduling(left: TranslationGroup, right: TranslationGr
   return left.groupKey.localeCompare(right.groupKey);
 }
 
+function compareGroupsForImmediateScheduling(
+  left: TranslationGroup,
+  right: TranslationGroup,
+  viewportHeight: number,
+): number {
+  const leftScore = resolveImmediateSchedulingScore(left, viewportHeight);
+  const rightScore = resolveImmediateSchedulingScore(right, viewportHeight);
+  if (leftScore !== rightScore) {
+    return rightScore - leftScore;
+  }
+
+  return compareGroupsForScheduling(left, right);
+}
+
+function resolveImmediateSchedulingScore(
+  group: TranslationGroup,
+  viewportHeight: number,
+): number {
+  let score = group.priorityScore;
+  if (group.contentMode === 'text') {
+    score += 180;
+  }
+  if (group.top <= Math.max(220, viewportHeight * 0.4)) {
+    score += 240;
+  }
+  if (group.records.some((record) => /^H[1-3]$/.test(record.element.tagName))) {
+    score += 160;
+  }
+  if (group.sectionContext && group.records.some((record) => record.element.tagName === 'P')) {
+    score += 90;
+  }
+  return score;
+}
+
 function resolveBatchSectionContext(items: TranslationBatchItem[]): string | undefined {
   const counts = new Map<string, number>();
   items.forEach((item) => {
@@ -2730,7 +2780,7 @@ function tightenProtectedMarkerSpacing(content: string, targetLanguage: string):
   }
 
   return content
-    .replace(/\s*(\[\[AIWEBTX_\d+_(?:OPEN|CLOSE)\]\])\s*/g, '$1')
+    .replace(/\s*(\[\[TX\d+[OC]\]\])\s*/g, '$1')
     .replace(/\s+([。、！？])/g, '$1');
 }
 

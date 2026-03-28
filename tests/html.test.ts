@@ -104,7 +104,7 @@ describe('core html and block extraction', () => {
     const prepared = preparePlaceholderRichTextForTranslation(html);
 
     expect(prepared).not.toBeNull();
-    expect(prepared?.content).toContain('[[AIWEBTX_');
+    expect(prepared?.content).toContain('[[TX');
     expect(supportsPlaceholderRichTextHtml(html)).toBe(true);
 
     const restored = restorePlaceholderRichText(prepared!.content, prepared!.tagMap);
@@ -116,6 +116,14 @@ describe('core html and block extraction', () => {
 
     expect(preparePlaceholderRichTextForTranslation(html)).toBeNull();
     expect(supportsPlaceholderRichTextHtml(html)).toBe(false);
+  });
+
+  it('rejects citation and math-adjacent inline html for placeholder-rich text mode', () => {
+    const citationHtml =
+      '<a href="/wiki/representation_theory">Representation theory</a><sup class="reference"><a href="#cite_note-1">[1]</a></sup>';
+
+    expect(preparePlaceholderRichTextForTranslation(citationHtml)).toBeNull();
+    expect(supportsPlaceholderRichTextHtml(citationHtml)).toBe(false);
   });
 
   it('splits oversized html at safe node boundaries while preserving markup order', () => {

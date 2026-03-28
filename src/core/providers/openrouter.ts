@@ -35,7 +35,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     ? 'Use s/g only as soft context.'
     : null;
   const markerInstruction = request.hasProtectedMarkers
-    ? 'Keep tokens like [[AIWEBTX_0_OPEN]] and [[AIWEBTX_0_CLOSE]] exactly unchanged.'
+    ? 'Keep tokens like [[TX0O]] and [[TX0C]] exactly unchanged.'
     : null;
   if (request.contentMode === 'html') {
     return [

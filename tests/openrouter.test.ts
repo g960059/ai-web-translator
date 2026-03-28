@@ -321,7 +321,7 @@ describe('translateWithOpenRouter', () => {
             choices: [
               {
                 message: {
-                  content: '{"translations":["[[AIWEBTX_0_OPEN]]表現論[[AIWEBTX_0_CLOSE]]"]}',
+                  content: '{"translations":["[[TX0O]]表現論[[TX0C]]"]}',
                 },
               },
             ],
@@ -332,13 +332,13 @@ describe('translateWithOpenRouter', () => {
 
     await translateWithOpenRouter({
       ...BASE_REQUEST,
-      fragments: ['[[AIWEBTX_0_OPEN]]Representation theory[[AIWEBTX_0_CLOSE]]'],
+      fragments: ['[[TX0O]]Representation theory[[TX0C]]'],
       hasProtectedMarkers: true,
     });
 
     const messages = (requestBody?.messages ?? []) as Array<{ content?: string }>;
     const systemPrompt = messages[0]?.content ?? '';
 
-    expect(systemPrompt).toContain('Keep tokens like [[AIWEBTX_0_OPEN]]');
+    expect(systemPrompt).toContain('Keep tokens like [[TX0O]]');
   });
 });
