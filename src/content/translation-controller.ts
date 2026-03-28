@@ -18,7 +18,9 @@ import {
   normalizeHtml,
   normalizeText,
   prepareContentForTranslation,
+  preparePlaceholderRichTextForTranslation,
   restorePreparedContent,
+  restorePlaceholderRichText,
   sanitizeTranslatedHtml,
   splitHtmlIntoSafeSegments,
 } from '../core/html';
@@ -80,7 +82,10 @@ interface TranslationGroup {
   contentMode: TranslationContentMode;
   requestFragments: Array<{
     preparedContent: string;
+    requestContentMode: TranslationContentMode;
+    restoreContentMode: TranslationContentMode;
     restoreMap: Record<string, string>;
+    placeholderTagMap?: Record<string, string>;
   }>;
   normalizedSource: string;
   joiner: string;
@@ -100,8 +105,10 @@ interface TranslationBatchItem {
   group: TranslationGroup;
   fragmentIndex: number;
   contentMode: TranslationContentMode;
+  restoreContentMode: TranslationContentMode;
   preparedContent: string;
   restoreMap: Record<string, string>;
+  placeholderTagMap?: Record<string, string>;
   estimatedTokens: number;
   rawEstimatedTokens: number;
 }
@@ -168,6 +175,7 @@ const API_WAIT_NOTICE_MS = 5000;
 const PROGRESS_EMIT_INTERVAL_MS = 250;
 const MAX_TEXT_FRAGMENT_CHARS = 420;
 const MAX_HTML_FRAGMENT_CHARS = 680;
+const MAX_PLACEHOLDER_RICH_TEXT_CHARS = 860;
 const UNSPLITTABLE_HTML_TOKEN_THRESHOLD = 560;
 const OUTPUT_LIMIT_ERROR_MESSAGE = 'Provider response reached output limit.';
 const LAZY_FORCE_FLUSH_BOTTOM_THRESHOLD_PX = 96;
@@ -795,12 +803,17 @@ export class TranslationController {
       }
 
       const requestFragments = this.buildRequestFragments(record, settings);
+      const requestContentMode = requestFragments[0]?.requestContentMode ?? record.contentMode;
       const normalizedSource = requestFragments
         .map((fragment) =>
-          this.normalizePreparedContent(fragment.preparedContent, record.contentMode),
+          this.normalizePreparedContent(fragment.preparedContent, fragment.requestContentMode),
         )
-        .join(record.contentMode === 'text' ? '\n[[AIWEBTX_TEXT_SPLIT]]\n' : '\n[[AIWEBTX_HTML_SPLIT]]\n');
-      const groupKey = `${record.contentMode}:${normalizedSource}`;
+        .join(
+          requestContentMode === 'text'
+            ? '\n[[AIWEBTX_TEXT_SPLIT]]\n'
+            : '\n[[AIWEBTX_HTML_SPLIT]]\n',
+        );
+      const groupKey = `${requestContentMode}:${normalizedSource}`;
       const existing = groups.get(groupKey);
       if (existing) {
         existing.records.push(record);
@@ -821,13 +834,13 @@ export class TranslationController {
         sourceLanguage: context.sourceLanguage,
         targetLanguage: settings.targetLanguage,
         style: settings.style,
-        contentMode: record.contentMode,
+        contentMode: requestContentMode,
         normalizedSource,
       };
 
       groups.set(groupKey, {
         groupKey,
-        contentMode: record.contentMode,
+        contentMode: requestContentMode,
         requestFragments,
         normalizedSource,
         joiner: record.contentMode === 'text' ? textJoiner : '',
@@ -842,6 +855,7 @@ export class TranslationController {
         isUnsafeOversizedHtml:
           record.contentMode === 'html' &&
           requestFragments.length === 1 &&
+          requestFragments[0]?.requestContentMode === 'html' &&
           estimateTokensFromChars(requestFragments[0]?.preparedContent.length ?? 0) >=
             UNSPLITTABLE_HTML_TOKEN_THRESHOLD,
         sectionContext: record.sectionContext,
@@ -1145,11 +1159,23 @@ export class TranslationController {
           }> = [];
 
           batch.forEach((item, index) => {
-            const restoredFragment = restorePreparedContent(
+            const preparedFragment = restorePreparedContent(
               result.translations[index],
-              item.contentMode,
+              item.restoreContentMode,
               item.restoreMap,
             );
+            const normalizedProtectedFragment = item.placeholderTagMap
+              ? tightenProtectedMarkerSpacing(
+                  preparedFragment,
+                  options.settings.targetLanguage,
+                )
+              : preparedFragment;
+            const restoredFragment = item.placeholderTagMap
+              ? restorePlaceholderRichText(
+                  normalizedProtectedFragment,
+                  item.placeholderTagMap,
+                )
+              : normalizedProtectedFragment;
             const bucket =
               completedFragments.get(item.group.groupKey) ??
               new Array(item.group.requestFragments.length).fill('');
@@ -1234,6 +1260,7 @@ export class TranslationController {
   ): Promise<TranslationRequestResult> {
     this.throwIfSessionCancelled(sessionId);
     const requestFragments = items.map((item) => item.preparedContent);
+    const fragmentIds = items.map((_, index) => `f${index}`);
     const batchEstimate = toEstimateBatchShape(items);
     const request: TranslationBatchRequest = {
       provider: settings.provider,
@@ -1245,8 +1272,10 @@ export class TranslationController {
       contentMode: items[0]?.contentMode ?? 'html',
       context,
       fragments: requestFragments,
+      fragmentIds,
       sectionContext: resolveBatchSectionContext(items),
       glossary: buildGlossaryHints(runtimeState, items),
+      hasProtectedMarkers: items.some((item) => Boolean(item.placeholderTagMap)),
       maxOutputTokens: estimateCompletionTokensForBatch(
         batchEstimate,
         runtimeState.calibration,
@@ -1541,10 +1570,28 @@ export class TranslationController {
     settings: ExtensionSettings,
   ): Array<{
     preparedContent: string;
+    requestContentMode: TranslationContentMode;
+    restoreContentMode: TranslationContentMode;
     restoreMap: Record<string, string>;
+    placeholderTagMap?: Record<string, string>;
   }> {
     const sourceContent =
       record.contentMode === 'text' ? record.originalText : record.originalHtml;
+
+    if (record.contentMode === 'html') {
+      const placeholder = preparePlaceholderRichTextForTranslation(sourceContent);
+      if (placeholder && placeholder.content.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) {
+        return [
+          {
+            preparedContent: placeholder.content,
+            requestContentMode: 'text',
+            restoreContentMode: 'text',
+            restoreMap: {},
+            placeholderTagMap: placeholder.tagMap,
+          },
+        ];
+      }
+    }
 
     const segments =
       record.contentMode === 'text'
@@ -1555,6 +1602,8 @@ export class TranslationController {
       const prepared = prepareContentForTranslation(segment, record.contentMode, settings.style);
       return {
         preparedContent: prepared.content,
+        requestContentMode: record.contentMode,
+        restoreContentMode: record.contentMode,
         restoreMap: prepared.restoreMap,
       };
     });
@@ -2373,11 +2422,13 @@ function createBatchItems(
     group.requestFragments.map((fragment, fragmentIndex) => ({
       group,
       fragmentIndex,
-      contentMode: group.contentMode,
+      contentMode: fragment.requestContentMode,
+      restoreContentMode: fragment.restoreContentMode,
       preparedContent: fragment.preparedContent,
       restoreMap: fragment.restoreMap,
+      placeholderTagMap: fragment.placeholderTagMap,
       estimatedTokens: estimatePromptTokensForContent(
-        group.contentMode,
+        fragment.requestContentMode,
         fragment.preparedContent.length,
         calibration,
       ),
@@ -2484,7 +2535,10 @@ function resolveBatchStrategy(
   const hasLargeItem = items.some(
     (item) =>
       item.rawEstimatedTokens >= UNSPLITTABLE_HTML_TOKEN_THRESHOLD ||
-      item.preparedContent.length >= MAX_HTML_FRAGMENT_CHARS,
+      item.preparedContent.length >=
+        (item.contentMode === 'html'
+          ? MAX_HTML_FRAGMENT_CHARS
+          : MAX_PLACEHOLDER_RICH_TEXT_CHARS),
   );
   const textOnly = items.every((item) => item.contentMode === 'text');
   const contentMode = items[0]?.contentMode ?? 'html';
@@ -2668,6 +2722,16 @@ function isGlossaryCandidateGroup(group: TranslationGroup): boolean {
 
 function joinTranslatedGroupOutput(group: TranslationGroup, translatedFragments: string[]): string {
   return translatedFragments.join(group.joiner);
+}
+
+function tightenProtectedMarkerSpacing(content: string, targetLanguage: string): string {
+  if (!/^(ja|zh|ko)\b/i.test(targetLanguage)) {
+    return content;
+  }
+
+  return content
+    .replace(/\s*(\[\[AIWEBTX_\d+_(?:OPEN|CLOSE)\]\])\s*/g, '$1')
+    .replace(/\s+([。、！？])/g, '$1');
 }
 
 function splitTextIntoSegments(text: string, maxChars = MAX_TEXT_FRAGMENT_CHARS): string[] {

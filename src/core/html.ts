@@ -5,6 +5,11 @@ export interface PreparedContent {
   restoreMap: Record<string, string>;
 }
 
+export interface PlaceholderRichTextContent {
+  content: string;
+  tagMap: Record<string, string>;
+}
+
 const ATOMIC_HTML_SELECTOR = 'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg';
 const DANGEROUS_TRANSLATED_TAGS = new Set([
   'SCRIPT',
@@ -35,6 +40,28 @@ const SPLITTABLE_HTML_CONTAINER_TAGS = new Set([
   'FIGCAPTION',
   'SPAN',
 ]);
+const PLACEHOLDER_RICH_TEXT_TAGS = new Set([
+  'A',
+  'ABBR',
+  'B',
+  'CITE',
+  'EM',
+  'I',
+  'MARK',
+  'Q',
+  'S',
+  'SMALL',
+  'SPAN',
+  'STRONG',
+  'SUB',
+  'SUP',
+  'TIME',
+  'U',
+]);
+const PLACEHOLDER_MARKER_PREFIX = '[[AIWEBTX_';
+const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*AIWEBTX_(\d+)_(OPEN|CLOSE)\s*\]\]/g;
+const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
+  'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6';
 
 export function normalizeHtml(html: string): string {
   return html.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
@@ -114,6 +141,51 @@ export function sanitizeTranslatedHtml(content: string): string {
   return container.innerHTML;
 }
 
+export function supportsPlaceholderRichTextHtml(html: string): boolean {
+  return Boolean(preparePlaceholderRichTextForTranslation(html));
+}
+
+export function preparePlaceholderRichTextForTranslation(
+  html: string,
+): PlaceholderRichTextContent | null {
+  const parsed = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const container = parsed.body.firstElementChild as HTMLElement | null;
+  if (!container || container.querySelector(PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR)) {
+    return null;
+  }
+
+  const tagMap: Record<string, string> = {};
+  let nextId = 0;
+  const content = Array.from(container.childNodes)
+    .map((node) => serializePlaceholderRichTextNode(node, tagMap, () => nextId++))
+    .join('');
+
+  const normalized = normalizeText(content);
+  if (!normalized || Object.keys(tagMap).length === 0) {
+    return null;
+  }
+
+  return {
+    content: normalized,
+    tagMap,
+  };
+}
+
+export function restorePlaceholderRichText(
+  content: string,
+  tagMap: Record<string, string>,
+): string {
+  const normalizedMarkers = content.replace(
+    PLACEHOLDER_MARKER_PATTERN,
+    (_match, id: string, edge: string) => `${PLACEHOLDER_MARKER_PREFIX}${id}_${edge}]]`,
+  );
+
+  return Object.entries(tagMap).reduce(
+    (restored, [token, html]) => restored.split(token).join(html),
+    normalizedMarkers,
+  );
+}
+
 export function splitHtmlIntoSafeSegments(
   html: string,
   maxChars: number,
@@ -141,6 +213,36 @@ function splitHtmlChildNodes(nodes: ChildNode[], maxChars: number): string[] {
   });
 
   return pieces.filter((piece) => normalizeHtml(piece).length > 0);
+}
+
+function serializePlaceholderRichTextNode(
+  node: ChildNode,
+  tagMap: Record<string, string>,
+  nextId: () => number,
+): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? '';
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return '';
+  }
+
+  if (!PLACEHOLDER_RICH_TEXT_TAGS.has(node.tagName)) {
+    return '';
+  }
+
+  const id = String(nextId());
+  const openToken = `${PLACEHOLDER_MARKER_PREFIX}${id}_OPEN]]`;
+  const closeToken = `${PLACEHOLDER_MARKER_PREFIX}${id}_CLOSE]]`;
+  tagMap[openToken] = buildOpeningTag(node);
+  tagMap[closeToken] = `</${node.tagName.toLowerCase()}>`;
+
+  const inner = Array.from(node.childNodes)
+    .map((child) => serializePlaceholderRichTextNode(child, tagMap, nextId))
+    .join('');
+
+  return `${openToken}${inner}${closeToken}`;
 }
 
 function splitHtmlNode(node: ChildNode, maxChars: number): string[] {

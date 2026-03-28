@@ -123,11 +123,13 @@ export interface TranslationBatchRequest {
   contentMode: TranslationContentMode;
   context: TranslationContext;
   fragments: string[];
+  fragmentIds?: string[];
   sectionContext?: string;
   glossary?: Array<{
     source: string;
     target: string;
   }>;
+  hasProtectedMarkers?: boolean;
   maxOutputTokens?: number;
 }
 

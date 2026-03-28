@@ -1,5 +1,5 @@
 import { estimateTokensFromChars } from './analysis';
-import { normalizeText } from './html';
+import { normalizeText, supportsPlaceholderRichTextHtml } from './html';
 import type {
   DefaultTranslationScope,
   TranslationContentMode,
@@ -161,11 +161,11 @@ const MERGEABLE_CHILD_TAGS = new Set([
   'H6',
 ]);
 const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
-const MERGEABLE_CHILD_MAX_CHARS = 220;
+const MERGEABLE_CHILD_MAX_CHARS = 280;
 const MERGED_BLOCK_MIN_CHARS = 40;
-const MERGED_BLOCK_MAX_CHARS = 900;
+const MERGED_BLOCK_MAX_CHARS = 1100;
 const MERGED_CHILD_COUNT_MIN = 2;
-const MERGED_CHILD_COUNT_MAX = 8;
+const MERGED_CHILD_COUNT_MAX = 10;
 const UI_LIKE_TEXT_PATTERN =
   /^(menu|search|share|copy link|next|previous|prev|home|login|log in|sign in|sign up|subscribe|download|print|comments?|related|table of contents|contents?|toc|cookie|accept|reject|close|open)$/i;
 const META_LIKE_TEXT_PATTERN =
@@ -306,8 +306,11 @@ function getMergeableTextChildren(element: HTMLElement): HTMLElement[] | null {
 
     const text = child.textContent ?? '';
     const normalizedText = normalizeText(text);
+    const canMergeRichText =
+      resolveContentMode(child) === 'html' &&
+      supportsPlaceholderRichTextHtml(child.innerHTML);
     if (
-      resolveContentMode(child) !== 'text' ||
+      (!canMergeRichText && resolveContentMode(child) !== 'text') ||
       !isTranslatableText(text) ||
       isBoilerplateBlock(child, text) ||
       normalizedText.length > MERGEABLE_CHILD_MAX_CHARS

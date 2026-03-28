@@ -809,7 +809,7 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(providerCalls.every((call) => call.contentMode === 'html')).toBe(true);
+    expect(providerCalls.every((call) => call.contentMode === 'text')).toBe(true);
     expect(new Set(providerCalls.flatMap((call) => call.fragments)).size).toBe(1);
   });
 
@@ -973,6 +973,76 @@ describe('TranslationController', () => {
     expect(providerCalls[0].fragments).toEqual(['Alpha beta gamma.']);
     expect((document.getElementById('inline') as HTMLElement).textContent).toBe(
       '[fr] Alpha beta gamma.',
+    );
+  });
+
+  it('uses protected-marker text mode for inline links while restoring html markup', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="inline">
+              <a href="/wiki/representation_theory">Representation theory</a> uses <em>characters</em>.
+            </p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+    const providerCalls: Array<{
+      fragments: string[];
+      contentMode: string;
+      hasProtectedMarkers?: boolean;
+    }> = [];
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: {
+        type: string;
+        request?: { fragments: string[]; contentMode: string; hasProtectedMarkers?: boolean };
+      }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          providerCalls.push(message.request);
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) =>
+                fragment
+                  .replace('Representation theory', '表現論')
+                  .replace('uses', 'では')
+                  .replace('characters', '指標')
+                  .replace('.', 'を使います。'),
+              ),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(providerCalls).toHaveLength(1);
+    expect(providerCalls[0].contentMode).toBe('text');
+    expect(providerCalls[0].hasProtectedMarkers).toBe(true);
+    expect(providerCalls[0].fragments[0]).toContain('[[AIWEBTX_');
+    expect((document.querySelector('#inline a') as HTMLAnchorElement).textContent).toBe('表現論');
+    expect((document.querySelector('#inline em') as HTMLElement).textContent).toBe('指標');
+    expect((document.getElementById('inline') as HTMLElement).textContent).toContain(
+      '表現論では指標を使います。',
     );
   });
 

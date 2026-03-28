@@ -27,9 +27,15 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       ? request.sourceLanguage
       : 'the detected source language';
   const hasHints = Boolean(request.sectionContext || request.glossary?.length);
+  const hasFragmentIds = Boolean(
+    request.fragmentIds?.length && request.fragmentIds.length === request.fragments.length,
+  );
   const hintShape = hasHints ? 'Input is JSON object {"s","g","f"}.' : 'Input is JSON array.';
   const hintInstruction = hasHints
     ? 'Use s/g only as soft context.'
+    : null;
+  const markerInstruction = request.hasProtectedMarkers
+    ? 'Keep tokens like [[AIWEBTX_0_OPEN]] and [[AIWEBTX_0_CLOSE]] exactly unchanged.'
     : null;
   if (request.contentMode === 'html') {
     return [
@@ -39,8 +45,11 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       'Keep tags, URLs, emphasis, and inline math intact.',
       buildStyleInstruction(request.style),
       hintInstruction,
-      'Return JSON: {"translations":["<html>","<html>"]}.',
-      'Same count. No prose.',
+      markerInstruction,
+      hasFragmentIds
+        ? 'Return JSON: {"translations":[{"i":"f0","t":"<html>"},{"i":"f1","t":"<html>"}]}.'
+        : 'Return JSON: {"translations":["<html>","<html>"]}.',
+      hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. No prose.',
     ]
       .filter(Boolean)
       .join('\n');
@@ -52,8 +61,11 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     'Each fragment is plain text.',
     buildStyleInstruction(request.style),
     hintInstruction,
-    'Return JSON: {"translations":["...","..."]}.',
-    'Same count. Plain text only. No prose.',
+    markerInstruction,
+    hasFragmentIds
+      ? 'Return JSON: {"translations":[{"i":"f0","t":"..."},{"i":"f1","t":"..."}]}.'
+      : 'Return JSON: {"translations":["...","..."]}.',
+    hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. Plain text only. No prose.',
   ]
     .filter(Boolean)
     .join('\n');
@@ -73,12 +85,17 @@ function buildStyleInstruction(style: TranslationBatchRequest['style']): string 
   }
 }
 
-function parseTranslations(content: string): string[] {
+function parseTranslations(content: string, request: TranslationBatchRequest): string[] {
   const candidates = buildJsonCandidates(content);
 
   for (const candidate of candidates) {
     try {
-      return normalizeTranslationsPayload(JSON.parse(candidate) as { translations?: string[] } | string[]);
+      return normalizeTranslationsPayload(
+        JSON.parse(candidate) as
+          | { translations?: string[] | Array<{ i?: string; id?: string; t?: string; text?: string }> }
+          | string[],
+        request.fragmentIds,
+      );
     } catch {
       continue;
     }
@@ -88,7 +105,10 @@ function parseTranslations(content: string): string[] {
 }
 
 function normalizeTranslationsPayload(
-  parsed: { translations?: string[] } | string[],
+  parsed:
+    | { translations?: string[] | Array<{ i?: string; id?: string; t?: string; text?: string }> }
+    | string[],
+  fragmentIds?: string[],
 ): string[] {
   if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
     return parsed;
@@ -99,9 +119,43 @@ function normalizeTranslationsPayload(
     typeof parsed === 'object' &&
     parsed !== null &&
     Array.isArray(parsed.translations) &&
-    parsed.translations.every((item: string) => typeof item === 'string')
+    parsed.translations.every((item) => typeof item === 'string')
   ) {
-    return parsed.translations;
+    return parsed.translations as string[];
+  }
+
+  if (
+    !Array.isArray(parsed) &&
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    Array.isArray(parsed.translations) &&
+    parsed.translations.every(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof ((item as { i?: string; id?: string }).i ?? (item as { id?: string }).id) ===
+          'string' &&
+        typeof ((item as { t?: string; text?: string }).t ?? (item as { text?: string }).text) ===
+          'string',
+    )
+  ) {
+    const translations = parsed.translations as Array<{
+      i?: string;
+      id?: string;
+      t?: string;
+      text?: string;
+    }>;
+
+    if (!fragmentIds?.length) {
+      return translations.map((item) => item.t ?? item.text ?? '');
+    }
+
+    const byId = new Map(
+      translations.map((item) => [item.i ?? item.id ?? '', item.t ?? item.text ?? '']),
+    );
+    return fragmentIds
+      .map((id) => byId.get(id))
+      .filter((value): value is string => typeof value === 'string');
   }
 
   throw new Error('Provider returned an invalid translations payload.');
@@ -209,14 +263,22 @@ function extractBalancedJsonFrom(content: string, startIndex: number): string | 
 }
 
 function buildUserPayload(request: TranslationBatchRequest): string {
+  const fragments =
+    request.fragmentIds?.length === request.fragments.length
+      ? request.fragments.map((text, index) => ({
+          i: request.fragmentIds?.[index] ?? `f${index}`,
+          t: text,
+        }))
+      : request.fragments;
+
   if (!request.sectionContext && !request.glossary?.length) {
-    return JSON.stringify(request.fragments);
+    return JSON.stringify(fragments);
   }
 
   return JSON.stringify({
     s: request.sectionContext,
     g: request.glossary,
-    f: request.fragments,
+    f: fragments,
   });
 }
 
@@ -296,7 +358,7 @@ export async function translateWithOpenRouter(
 
   let translations: string[];
   try {
-    translations = parseTranslations(content);
+    translations = parseTranslations(content, request);
   } catch (error) {
     if (finishReason === 'length') {
       throw new Error('Provider response reached output limit.');

@@ -2,9 +2,12 @@ import { collectTranslatableBlocks, resolveScopeRoot } from '../src/core/blocks'
 import {
   normalizeHtml,
   prepareContentForTranslation,
+  preparePlaceholderRichTextForTranslation,
   restorePreparedContent,
+  restorePlaceholderRichText,
   sanitizeTranslatedHtml,
   splitHtmlIntoSafeSegments,
+  supportsPlaceholderRichTextHtml,
 } from '../src/core/html';
 import { loadFixture, setDocumentHtml } from './test-utils';
 
@@ -63,6 +66,28 @@ describe('core html and block extraction', () => {
     expect(blocks.some((block) => /share search menu/i.test(block.originalText))).toBe(false);
   });
 
+  it('merges adjacent inline-link paragraphs into one bounded section block', () => {
+    setDocumentHtml(`<!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <section id="cluster">
+              <p><a href="/wiki/representation_theory">Representation theory</a> studies symmetry.</p>
+              <p><a href="/wiki/character_theory">Character theory</a> refines this viewpoint.</p>
+              <p><em>Module theory</em> links algebra and geometry.</p>
+            </section>
+          </main>
+        </body>
+      </html>`);
+
+    const blocks = collectTranslatableBlocks(resolveScopeRoot(document, 'main'));
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.element.id).toBe('cluster');
+    expect(blocks[0]?.contentMode).toBe('html');
+    expect(blocks[0]?.originalText).toContain('Representation theory studies symmetry.');
+  });
+
   it('round-trips readable mode HTML preparation', () => {
     const html = '<a href="/wiki">Representation Theory</a>';
     const prepared = prepareContentForTranslation(html, 'html', 'readable');
@@ -70,6 +95,27 @@ describe('core html and block extraction', () => {
 
     expect(prepared.content).toContain('data-ai-tx-attrs');
     expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
+  });
+
+  it('round-trips placeholder-rich inline html through protected markers', () => {
+    const html =
+      '<a href="/wiki/representation_theory">Representation theory</a> uses <em>characters</em> and <strong>modules</strong>.';
+
+    const prepared = preparePlaceholderRichTextForTranslation(html);
+
+    expect(prepared).not.toBeNull();
+    expect(prepared?.content).toContain('[[AIWEBTX_');
+    expect(supportsPlaceholderRichTextHtml(html)).toBe(true);
+
+    const restored = restorePlaceholderRichText(prepared!.content, prepared!.tagMap);
+    expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
+  });
+
+  it('rejects block-heavy html for placeholder-rich text mode', () => {
+    const html = '<p>Alpha</p><p><a href="/beta">Beta</a></p>';
+
+    expect(preparePlaceholderRichTextForTranslation(html)).toBeNull();
+    expect(supportsPlaceholderRichTextHtml(html)).toBe(false);
   });
 
   it('splits oversized html at safe node boundaries while preserving markup order', () => {

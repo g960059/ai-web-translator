@@ -85,6 +85,33 @@ describe('translateWithOpenRouter', () => {
     expect(result.translations).toEqual(['数式を保ったまま翻訳します。']);
   });
 
+  it('accepts id-tagged translation objects and restores the requested order', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"translations":[{"i":"f1","t":"第二"},{"i":"f0","t":"第一"}]}',
+              },
+            },
+          ],
+        }),
+      })),
+    );
+
+    const result = await translateWithOpenRouter({
+      ...BASE_REQUEST,
+      fragments: ['First', 'Second'],
+      fragmentIds: ['f0', 'f1'],
+    });
+
+    expect(result.translations).toEqual(['第一', '第二']);
+  });
+
   it('times out stalled provider requests', async () => {
     vi.useFakeTimers();
 
@@ -279,5 +306,39 @@ describe('translateWithOpenRouter', () => {
     await expect(translateWithOpenRouter(BASE_REQUEST)).rejects.toThrow(
       'Provider response reached output limit.',
     );
+  });
+
+  it('tells the provider to preserve protected placeholder markers', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_, init?: RequestInit) => {
+        requestBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: '{"translations":["[[AIWEBTX_0_OPEN]]表現論[[AIWEBTX_0_CLOSE]]"]}',
+                },
+              },
+            ],
+          }),
+        };
+      }),
+    );
+
+    await translateWithOpenRouter({
+      ...BASE_REQUEST,
+      fragments: ['[[AIWEBTX_0_OPEN]]Representation theory[[AIWEBTX_0_CLOSE]]'],
+      hasProtectedMarkers: true,
+    });
+
+    const messages = (requestBody?.messages ?? []) as Array<{ content?: string }>;
+    const systemPrompt = messages[0]?.content ?? '';
+
+    expect(systemPrompt).toContain('Keep tokens like [[AIWEBTX_0_OPEN]]');
   });
 });
