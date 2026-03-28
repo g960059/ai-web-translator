@@ -1,41 +1,43 @@
 {
-    "manifest_version": 3,
-    "name": "AI Web Translator",
-    "version": "1.0.0",
-    "icons": {
-        "16": "icon16.png",
-        "48": "icon48.png",
-        "128": "icon128.png"
-    },
-    "action": {
-        "default_popup": "src/popup/index.html",
-        "default_icon": {
-            "16": "icon16.png",
-            "48": "icon48.png",
-            "128": "icon128.png"
-        }
-    },
-    "permissions": [
-        "storage",
-        "activeTab",
-        "scripting",
-        "contextMenus"
-    ],
-    "host_permissions": [
-        "https://openrouter.ai/*"
-    ],
-    "content_scripts": [
-        {
-            "js": [
-                "src/content/index.ts"
-            ],
-            "matches": [
-                "<all_urls>"
-            ]
-        }
-    ],
-    "background": {
-        "service_worker": "src/background/index.ts",
-        "type": "module"
+  "manifest_version": 3,
+  "name": "AI Web Translator",
+  "version": "2.0.0",
+  "description": "Translate web pages with AI and manage translation sessions from a focused popup.",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
     }
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "contextMenus",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://openrouter.ai/*"
+  ],
+  "content_scripts": [
+    {
+      "js": [
+        "src/entrypoints/content.ts"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "src/entrypoints/background.ts",
+    "type": "module"
+  }
 }

@@ -16,13 +16,20 @@
         "isolatedModules": true,
         "noEmit": true,
         "jsx": "react-jsx",
+        "types": [
+            "chrome",
+            "vitest/globals"
+        ],
         /* Linting */
         "strict": true,
-        "noUnusedLocals": false, // relaxed for now
-        "noUnusedParameters": false,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true
     },
     "include": [
-        "src"
+        "src",
+        "tests",
+        "vite.config.ts",
+        "vitest.config.ts"
     ]
 }

@@ -1,0 +1,31 @@
+{
+  "scenarioId": "wikipedia-representation-theory-full-page-ja",
+  "capturedAt": "2026-03-28T08:42:46.881Z",
+  "targetUrl": "https://en.wikipedia.org/wiki/Representation_theory",
+  "provider": "openrouter",
+  "modelId": "google/gemini-3.1-flash-lite-preview",
+  "scope": "page",
+  "targetLanguage": "ja",
+  "style": "auto",
+  "cacheEnabled": false,
+  "requestCount": 101,
+  "elapsedMs": {
+    "toFirstVisibleTranslation": 3800,
+    "toFullCompletion": 244049
+  },
+  "usage": {
+    "promptTokens": 63404,
+    "completionTokens": 57447,
+    "totalTokens": 120851
+  },
+  "concurrency": {
+    "peakInFlightRequests": 2
+  },
+  "costUsd": 0.1020215,
+  "costSource": "metrics-json",
+  "artifacts": {
+    "docPath": "/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory-gemini-runtime-improvements.md",
+    "metricsPath": "/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-gemini-3-1-flash-lite-preview-optimized-2026-03-28-metrics.json",
+    "screenshotPath": "/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-gemini-3-1-flash-lite-preview-optimized-2026-03-28-translated.png"
+  }
+}
