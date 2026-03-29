@@ -17,6 +17,7 @@
     "test:e2e:live:page": "npm run build && node tests/e2e/run-live-page-metrics.mjs",
     "metrics:stability": "npm run build && node tests/e2e/run-live-page-stability.mjs",
     "metrics:compare": "node tests/e2e/compare-live-metrics.mjs",
+    "metrics:gate": "node tests/e2e/evaluate-stability-summary.mjs",
     "metrics:model-eval": "npm run build && node tests/e2e/run-live-fixture-model-eval.mjs"
   },
   "dependencies": {

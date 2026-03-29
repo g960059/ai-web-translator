@@ -1,0 +1,47 @@
+{
+  "id": "yoneda-lemma-xhtml-stability",
+  "checks": [
+    {
+      "label": "Median first visible stays under 4s",
+      "metric": "toFirstVisibleTranslationMs.median",
+      "operator": "<=",
+      "threshold": 4000
+    },
+    {
+      "label": "Median full completion stays under 35s",
+      "metric": "toFullCompletionMs.median",
+      "operator": "<=",
+      "threshold": 35000
+    },
+    {
+      "label": "Median request count stays at or below 5",
+      "metric": "requestCount.median",
+      "operator": "<=",
+      "threshold": 5
+    },
+    {
+      "label": "Median total tokens stay under 13k",
+      "metric": "totalTokens.median",
+      "operator": "<=",
+      "threshold": 13000
+    },
+    {
+      "label": "Sampled English residual ratio stays at zero",
+      "metric": "englishResidualRatio.median",
+      "operator": "<=",
+      "threshold": 0
+    },
+    {
+      "label": "Source fragment fallback stays at zero",
+      "metric": "sourceFallbackFragments.median",
+      "operator": "<=",
+      "threshold": 0
+    },
+    {
+      "label": "Protected marker fallback stays low",
+      "metric": "protectedMarkerFallbackFragments.median",
+      "operator": "<=",
+      "threshold": 1
+    }
+  ]
+}

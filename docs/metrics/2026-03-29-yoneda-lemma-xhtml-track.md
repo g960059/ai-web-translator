@@ -25,6 +25,9 @@ Execution:
 - Stability harness: [run-live-page-stability.mjs](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/tests/e2e/run-live-page-stability.mjs)
 - Stability summary: [ncatlab-org-yoneda-lemma-yoneda-stability-v1-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-yoneda-stability-v1-summary.json)
 - Latest stability summary: [ncatlab-org-yoneda-lemma-yoneda-stability-v2-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-yoneda-stability-v2-summary.json)
+- Latest gate summary: [ncatlab-org-yoneda-lemma-yoneda-stability-v3-gate-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-yoneda-stability-v3-gate-summary.json)
+- Latest gate config: [yoneda-lemma-xhtml-stability.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/gates/yoneda-lemma-xhtml-stability.json)
+- Latest gate report: [ncatlab-org-yoneda-lemma-yoneda-stability-v3-gate-summary-gate.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons/ncatlab-org-yoneda-lemma-yoneda-stability-v3-gate-summary-gate.md)
 
 Outcome:
 - The page now completes instead of failing on XHTML/XML insertion.
@@ -192,3 +195,17 @@ Latest stability sample with durable quality metrics:
   - the XHTML lane is no longer just “compatible”; it is now also stable on request volume and sampled language outcome
   - the remaining variance again tracks the first provider round-trip more than request shaping
   - the next XHTML work, if resumed later, should focus on reducing immediate provider variance rather than further routing changes
+
+Gate status update:
+- The newer `yoneda-stability-v3-gate` sample fails the XHTML stability gate on one check only:
+  - first visible median `5,270 ms` vs required `<= 4,000 ms`
+- The rest of the gate is green:
+  - full completion median `28,876 ms`
+  - requests median `5`
+  - total tokens median `12,033`
+  - sampled English residual ratio `0`
+  - source fallback median `0`
+  - protected marker fallback median `1`
+- Interpretation:
+  - the XHTML lane is now durable on cost, request volume, and sampled Japanese output
+  - the remaining blocker is immediate provider latency variance, not structural routing or content completeness

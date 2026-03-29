@@ -13,6 +13,7 @@ Files:
 - Real-page comparison note: [2026-03-28-representation-theory-real-page-model-comparison.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory-real-page-model-comparison.md)
 - Optimization comparison note: [en-wikipedia-org-representation-theory-gemini-3-1-flash-lite-preview-optimized-2026-03-28-vs-pre-optimization.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons/en-wikipedia-org-representation-theory-gemini-3-1-flash-lite-preview-optimized-2026-03-28-vs-pre-optimization.md)
 - Baselines: [baselines](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/baselines)
+- Gates: [gates](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/gates)
 - Comparisons: [comparisons](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons)
 - Latest live metrics JSON: [test-results](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results)
 - Operational procedure: [live-full-page-metrics.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/runbook/live-full-page-metrics.md)
@@ -27,6 +28,14 @@ Run a repeated stability sample:
 
 ```bash
 npm run metrics:stability -- https://en.wikipedia.org/wiki/Representation_theory --runs 3 --label stability
+```
+
+Evaluate a stability sample against a gate:
+
+```bash
+npm run metrics:gate -- \
+  test-results/en-wikipedia-org-representation-theory-stability-v5-summary.json \
+  docs/metrics/gates/representation-theory-stability.json
 ```
 
 Run the small high-difficulty model shootout:
@@ -66,6 +75,15 @@ Tracked comparison metrics:
 - `concurrency.peakInFlightRequests`
 - `costUsd`
 - coarse structure counts, fixture assertions, and lead fluency belong to the quality scorecard note rather than this numeric comparison table
+
+Tracked stability-gate signals:
+- median first visible
+- median full completion
+- median request count
+- median total tokens
+- median sampled English residual ratio
+- median source-fragment fallback count
+- median protected-marker fallback count
 
 Cost note:
 - If an OpenRouter activity log is available, prefer replacing `costUsd` in the metrics JSON with the activity-log verified value before comparing runs.

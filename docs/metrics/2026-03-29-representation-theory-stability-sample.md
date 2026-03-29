@@ -29,6 +29,9 @@ Per-run artifacts:
 - Run 3 metrics: [en-wikipedia-org-representation-theory-stability-v5-run-3-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v5-run-3-metrics.json)
 - Run 3 screenshot: [en-wikipedia-org-representation-theory-stability-v5-run-3-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v5-run-3-translated.png)
 - Current durable baseline note: [2026-03-29-representation-theory-durable-baseline.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-durable-baseline.md)
+- Latest gate summary: [en-wikipedia-org-representation-theory-stability-v7-gate-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v7-gate-summary.json)
+- Latest gate config: [representation-theory-stability.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/gates/representation-theory-stability.json)
+- Latest gate report: [en-wikipedia-org-representation-theory-stability-v7-gate-summary-gate.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons/en-wikipedia-org-representation-theory-stability-v7-gate-summary-gate.md)
 
 Median metrics across 3 runs:
 - First visible translation: `1,999 ms`
@@ -94,3 +97,15 @@ What this means for next work:
   - investigating whether an even smaller invite/lead request is useful in practice
   - treating the bridge path as solved and focusing on provider-facing mitigation only
   - keeping exact coarse counts while reducing the user-visible impact of a `2s+` first provider round-trip
+
+Gate status update:
+- The newer `stability-v7-gate` sample passes the HTML stability gate on median:
+  - first visible `2,076 ms`
+  - full completion `30,801 ms`
+  - requests `15`
+  - total tokens `29,116`
+  - sampled English residual ratio `0`
+  - source/protected fallback medians `0 / 0`
+- Important nuance:
+  - one of the three runs still produced a split and a `17`-request outlier
+  - the gate passes because the median is healthy, not because the tail is fully solved

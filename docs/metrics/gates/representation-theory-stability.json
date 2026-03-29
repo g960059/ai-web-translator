@@ -1,0 +1,47 @@
+{
+  "id": "representation-theory-stability",
+  "checks": [
+    {
+      "label": "Median first visible stays under 2.5s",
+      "metric": "toFirstVisibleTranslationMs.median",
+      "operator": "<=",
+      "threshold": 2500
+    },
+    {
+      "label": "Median full completion stays under 40s",
+      "metric": "toFullCompletionMs.median",
+      "operator": "<=",
+      "threshold": 40000
+    },
+    {
+      "label": "Median request count stays at or below 15",
+      "metric": "requestCount.median",
+      "operator": "<=",
+      "threshold": 15
+    },
+    {
+      "label": "Median total tokens stay under 30k",
+      "metric": "totalTokens.median",
+      "operator": "<=",
+      "threshold": 30000
+    },
+    {
+      "label": "Sampled English residual ratio stays at zero",
+      "metric": "englishResidualRatio.median",
+      "operator": "<=",
+      "threshold": 0
+    },
+    {
+      "label": "Source fragment fallback stays at zero",
+      "metric": "sourceFallbackFragments.median",
+      "operator": "<=",
+      "threshold": 0
+    },
+    {
+      "label": "Protected marker fallback stays at zero",
+      "metric": "protectedMarkerFallbackFragments.median",
+      "operator": "<=",
+      "threshold": 0
+    }
+  ]
+}

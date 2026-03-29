@@ -26,6 +26,7 @@ Current durable baseline:
 - Metrics JSON: [en-wikipedia-org-representation-theory-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-metrics.json)
 - Note: [2026-03-29-representation-theory-durable-baseline.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-durable-baseline.md)
 - Stability sample: [2026-03-29-representation-theory-stability-sample.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-stability-sample.md)
+- Stability gate report: [en-wikipedia-org-representation-theory-stability-v7-gate-summary-gate.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons/en-wikipedia-org-representation-theory-stability-v7-gate-summary-gate.md)
 
 What this track answers:
 - Is first readable paint still fast?
@@ -47,6 +48,7 @@ Current score:
 | Lead Japanese fluency acceptable | pass | lead sample paragraphs in metrics JSON |
 | English residual ratio in sampled paragraphs stays low | pass | `pageQuality.after.englishResidualRatio` in metrics JSON |
 | Protected/source fallback counts remain explainable | pass | `finalState.metrics.qualitySignals` in metrics JSON |
+| Stability gate on median | pass | v7 gate passes all configured checks; one outlier run still split once |
 
 ## 2. High-Difficulty Fixture Bench
 
@@ -92,6 +94,7 @@ Current durable expectations:
 Separate compatibility track:
 - XHTML/XML documents such as `https://ncatlab.org/nlab/show/Yoneda+lemma`
 - Current note: [2026-03-29-yoneda-lemma-xhtml-track.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-yoneda-lemma-xhtml-track.md)
+- XHTML gate report: [ncatlab-org-yoneda-lemma-yoneda-stability-v3-gate-summary-gate.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons/ncatlab-org-yoneda-lemma-yoneda-stability-v3-gate-summary-gate.md)
 - Status:
   - XML-safe apply path: pass
   - real Japanese output in the lead XHTML content: pass
@@ -100,5 +103,6 @@ Separate compatibility track:
   - split-free generic XHTML lane: pass in the latest stability sample
   - sampled English residual ratio: pass (`0` across the latest 3-run sample)
   - source-fragment fallback count: pass (`0` across the latest 3-run sample)
+  - XHTML stability gate: fail on first visible only; all other checks pass
   - remaining blocker: runtime variance from immediate provider latency
   - latest XHTML stability median: `5 requests / 29.6s full completion / 12.1k total tokens / 0 splits`

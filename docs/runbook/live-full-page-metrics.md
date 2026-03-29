@@ -31,10 +31,19 @@ Run a small stability sample against the same page:
 npm run metrics:stability -- https://en.wikipedia.org/wiki/Representation_theory --runs 3 --label stability
 ```
 
+Evaluate the resulting stability summary against the scenario gate:
+
+```bash
+npm run metrics:gate -- \
+  test-results/en-wikipedia-org-representation-theory-stability-summary.json \
+  docs/metrics/gates/representation-theory-stability.json
+```
+
 Artifacts produced:
 - metrics JSON in [test-results](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results)
 - screenshot in [test-results](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results)
 - stability summary JSON in [test-results](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results) when using `metrics:stability`
+- stability gate report in [docs/metrics/comparisons](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons) when using `metrics:gate`
 
 Compare against the durable baseline:
 

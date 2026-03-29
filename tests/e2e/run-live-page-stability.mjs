@@ -57,6 +57,7 @@ for (let runIndex = 1; runIndex <= runs; runIndex += 1) {
     immediateBatch: metrics.immediateBatch ?? null,
     retryCounts: metrics.retryCounts ?? null,
     pageQuality: metrics.pageQuality?.after ?? null,
+    qualitySignals: metrics.finalState?.metrics?.qualitySignals ?? null,
   });
 }
 
@@ -71,6 +72,21 @@ const immediateLatencyValues = numberSeries(
 );
 const englishResidualRatioValues = numberSeries(
   runsSummary.map((run) => run.pageQuality?.englishResidualRatio ?? null),
+);
+const sourceFallbackValues = numberSeries(
+  runsSummary.map((run) => run.qualitySignals?.sourceFallbackFragments ?? null),
+);
+const protectedFallbackValues = numberSeries(
+  runsSummary.map((run) => run.qualitySignals?.protectedMarkerFallbackFragments ?? null),
+);
+const mathElementValues = numberSeries(
+  runsSummary.map((run) => run.pageQuality?.mathElements ?? null),
+);
+const fallbackImageValues = numberSeries(
+  runsSummary.map((run) => run.pageQuality?.fallbackImages ?? null),
+);
+const mediaImageValues = numberSeries(
+  runsSummary.map((run) => run.pageQuality?.mediaImages ?? null),
 );
 
 const summary = {
@@ -92,6 +108,11 @@ const summary = {
     peakInFlightRequests: buildStats(concurrencyValues),
     immediateProviderLatencyMs: buildStats(immediateLatencyValues),
     englishResidualRatio: buildStats(englishResidualRatioValues),
+    sourceFallbackFragments: buildStats(sourceFallbackValues),
+    protectedMarkerFallbackFragments: buildStats(protectedFallbackValues),
+    mathElements: buildStats(mathElementValues),
+    fallbackImages: buildStats(fallbackImageValues),
+    mediaImages: buildStats(mediaImageValues),
   },
   runsSummary,
   artifacts: {
