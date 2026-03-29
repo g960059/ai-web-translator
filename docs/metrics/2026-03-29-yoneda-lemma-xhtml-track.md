@@ -105,3 +105,23 @@ Latest experimental note:
 - Interpretation:
   - XHTML throughput clearly improved versus the original `42 requests / ~49s` track
   - the remaining work is to keep the lower request count while driving `batchSplits` back to `0`
+
+Latest wrapped-placeholder experiment:
+- After enabling raw MathML protection and wrapped placeholder-rich text for safe XHTML paragraphs, the latest live run reached:
+  - first visible `3,008 ms`
+  - full completion `73,250 ms`
+  - `13` requests
+  - `16,219` total tokens
+  - estimated cost `$0.0145885`
+- The new split shape is now:
+  - `2` batch splits
+  - both are `html + marked + 5+ items`
+- This means the change successfully collapsed request volume and token cost, but it did not yet solve the hardest marked-HTML lane.
+- Quality is mixed:
+  - the second sampled body paragraph is translated into Japanese
+  - the opening Yoneda paragraph is still left in English
+  - later definition/theorem text also still shows English in the sample
+- Interpretation:
+  - wrapped placeholder routing is promising for XHTML cost and request count
+  - but the remaining marked-HTML batches are now the dominant correctness risk
+  - next XHTML work should target those marked-HTML groups directly before promoting a new XHTML baseline
