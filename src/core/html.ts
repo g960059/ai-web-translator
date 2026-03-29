@@ -406,10 +406,6 @@ function buildPlaceholderRichTextContent(
     return null;
   }
 
-  if (container.querySelectorAll('a').length === 0) {
-    return null;
-  }
-
   const tagMap: Record<string, string> = {};
   let nextId = 0;
   const content = Array.from(container.childNodes)
@@ -417,7 +413,8 @@ function buildPlaceholderRichTextContent(
     .join('');
 
   const normalized = normalizeText(content);
-  if (!normalized || Object.keys(tagMap).length === 0) {
+  const hasProtectedMarkers = containsProtectedHtmlMarker(normalized);
+  if (!normalized || (Object.keys(tagMap).length === 0 && !hasProtectedMarkers)) {
     return null;
   }
 
@@ -449,10 +446,6 @@ function buildWrappedPlaceholderRichTextContent(
     return null;
   }
 
-  if (soleChild.querySelectorAll('a').length === 0) {
-    return null;
-  }
-
   const inner = buildPlaceholderRichTextContent(soleChild);
   if (!inner) {
     return null;
@@ -464,6 +457,11 @@ function buildWrappedPlaceholderRichTextContent(
     wrapperPrefix: buildOpeningTag(soleChild),
     wrapperSuffix: `</${soleChild.tagName.toLowerCase()}>`,
   };
+}
+
+function containsProtectedHtmlMarker(content: string): boolean {
+  const matches = content.matchAll(new RegExp(PROTECTED_HTML_MARKER_PATTERN.source, 'gi'));
+  return !matches.next().done;
 }
 
 function splitTextForHtml(text: string, maxChars: number): string[] {

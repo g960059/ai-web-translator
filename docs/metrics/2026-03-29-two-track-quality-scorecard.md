@@ -90,7 +90,7 @@ Separate compatibility track:
 - Current note: [2026-03-29-yoneda-lemma-xhtml-track.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-yoneda-lemma-xhtml-track.md)
 - Status:
   - XML-safe apply path: pass
-  - real Japanese output in the main content: partial
+  - real Japanese output in the lead XHTML content: pass
   - wrapped-placeholder XHTML routing now reduces request volume and token cost substantially
-  - the remaining blocker is marked-HTML correctness on the opening theorem/paragraph lane
-  - latest live sample: `13 requests / 73.3s full completion / 16.2k total tokens / 2 marked-html batch splits`
+  - the remaining blocker is the later plain-html theorem/definition wrapper lane
+  - latest live sample: `10 requests / 30.7s full completion / 14.6k total tokens / 1 plain-html batch split`

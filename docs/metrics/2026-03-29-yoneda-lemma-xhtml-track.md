@@ -108,20 +108,20 @@ Latest experimental note:
 
 Latest wrapped-placeholder experiment:
 - After enabling raw MathML protection and wrapped placeholder-rich text for safe XHTML paragraphs, the latest live run reached:
-  - first visible `3,008 ms`
-  - full completion `73,250 ms`
-  - `13` requests
-  - `16,219` total tokens
-  - estimated cost `$0.0145885`
+  - first visible `2,460 ms`
+  - full completion `30,693 ms`
+  - `10` requests
+  - `14,555` total tokens
+  - estimated cost `$0.01286875`
 - The new split shape is now:
-  - `2` batch splits
-  - both are `html + marked + 5+ items`
-- This means the change successfully collapsed request volume and token cost, but it did not yet solve the hardest marked-HTML lane.
-- Quality is mixed:
+  - `1` batch split
+  - it is now `html + plain + 5+ items`
+- This means the wrapped-placeholder path successfully collapsed request volume and token cost, and it removed the earlier marked-HTML bottleneck from the lead paragraph.
+- Quality is now improved but still incomplete:
+  - the opening Yoneda paragraph is translated into Japanese
   - the second sampled body paragraph is translated into Japanese
-  - the opening Yoneda paragraph is still left in English
-  - later definition/theorem text also still shows English in the sample
+  - later definition/theorem text in the sampled output is still English
 - Interpretation:
-  - wrapped placeholder routing is promising for XHTML cost and request count
-  - but the remaining marked-HTML batches are now the dominant correctness risk
-  - next XHTML work should target those marked-HTML groups directly before promoting a new XHTML baseline
+  - wrapped placeholder routing is now the correct generic direction for XHTML inline-rich paragraphs
+  - the remaining XHTML problem has narrowed to a smaller plain-html wrapper lane
+  - next XHTML work should target structured theorem/definition wrappers before promoting a new XHTML baseline

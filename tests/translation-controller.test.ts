@@ -2752,6 +2752,55 @@ describe('TranslationController', () => {
     expect(lightGroup?.fragmentCount).toBeLessThan(heavyGroup?.fragmentCount ?? Infinity);
   });
 
+  it('routes safe XHTML paragraphs with inline links and MathML through the text placeholder lane', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="yoneda-paragraph">
+              The <strong>Yoneda lemma</strong> says that the <a href="/nlab/show/set">set</a> of
+              <a href="/nlab/show/morphisms">morphisms</a> from a
+              <a href="/nlab/show/representable+presheaf">representable presheaf</a>
+              <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>y</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>
+              into an arbitrary <a href="/nlab/show/presheaf">presheaf</a>
+              <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>X</mi></math>
+              is in <a href="/nlab/show/natural+bijection">natural bijection</a> with the set
+              <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>X</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>.
+            </p>
+          </main>
+        </body>
+      </html>
+    `);
+    Object.defineProperty(document, 'contentType', {
+      configurable: true,
+      value: 'application/xhtml+xml',
+    });
+
+    setRect(document.getElementById('yoneda-paragraph') as HTMLElement, 24, 420, 520);
+
+    const settings = createSettings({ cacheEnabled: false });
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'GET_DEBUG_BLOCKS',
+      settings,
+      scope: 'main',
+    }) as DebugBlocksResponse;
+
+    expect(response.ok).toBe(true);
+    if (!response.ok) {
+      throw new Error('Expected debug response.');
+    }
+    const debug = response.debug as { groups: DebugGroup[] };
+    const yonedaGroup = debug.groups.find((group: DebugGroup) =>
+      group.preview.includes('The Yoneda lemma says'),
+    );
+
+    expect(yonedaGroup).toBeDefined();
+    expect(yonedaGroup?.contentMode).toBe('text');
+    expect(yonedaGroup?.fragmentCount).toBe(1);
+  });
+
   it('keeps deferred plain html batches on regular html pages from growing without bound', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>

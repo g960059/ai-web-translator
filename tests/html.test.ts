@@ -342,6 +342,28 @@ describe('core html and block extraction', () => {
     expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
   });
 
+  it('supports placeholder-rich text for a wrapped paragraph with protected MathML and no links', () => {
+    const html =
+      '<p>This is representable when <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi><mo>:</mo><mi>C</mi><mo>&#x2192;</mo><mi>Set</mi></math> preserves limits.</p>';
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    expect(protectedHtml).not.toBeNull();
+
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.wrapperPrefix).toBe('<p>');
+    expect(placeholder?.wrapperSuffix).toBe('</p>');
+
+    const restoredInner = restorePlaceholderRichText(placeholder!.content, placeholder!.tagMap);
+    const restored = restoreProtectedHtml(
+      `${placeholder!.wrapperPrefix}${restoredInner}${placeholder!.wrapperSuffix}`,
+      protectedHtml!.htmlMap,
+    );
+
+    expect(normalizeHtml(restored)).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML">');
+    expect(normalizeHtml(restored)).toContain('preserves limits.</p>');
+  });
+
   it('protects raw MathML before placeholder-rich text preparation', () => {
     const html =
       '<p><a href="/nlab/show/Yoneda+lemma">Yoneda lemma</a> says <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi><mo>:</mo><mi>C</mi><mo>&#x2192;</mo><mi>Set</mi></math> is representable.</p>';

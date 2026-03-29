@@ -1881,7 +1881,7 @@ export class TranslationController {
       if (
         placeholder &&
         placeholder.content.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS &&
-        placeholder.content.length + 12 < preparedHtml.content.length
+        (Boolean(protectedHtml) || placeholder.content.length + 12 < preparedHtml.content.length)
       ) {
         return [
           {
