@@ -161,6 +161,7 @@ try {
   const pricing = await fetchModelPricing(modelId);
   const estimatedCostUsd = calculateCost(pricing, promptTokens, completionTokens);
   const afterQuality = await collectPageQuality(page);
+  const warningBlocks = await collectWarningBlocks(page);
   const runtimeMetrics = finalState?.metrics ?? null;
   const metrics = {
     targetUrl,
@@ -191,6 +192,7 @@ try {
       before: beforeQuality,
       after: afterQuality,
     },
+    warningBlocks,
     finalState,
     screenshotPath,
     startedAt: new Date(startedAt).toISOString(),
@@ -450,6 +452,33 @@ async function collectPageQuality(page) {
       englishResidualRatio:
         paragraphs.length > 0 ? Number((englishLikeCount / paragraphs.length).toFixed(3)) : null,
     };
+  });
+}
+
+async function collectWarningBlocks(page) {
+  return page.evaluate(() => {
+    return Array.from(document.querySelectorAll('[data-aiwt-warning]'))
+      .slice(0, 8)
+      .map((element) => {
+        const warning = element.getAttribute('data-aiwt-warning') || 'none';
+        const tagName = element.tagName.toLowerCase();
+        const id = element.getAttribute('id');
+        const className = (element.getAttribute('class') || '')
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 6)
+          .join(' ');
+        const text = (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+        const html = element.innerHTML.replace(/\s+/g, ' ').trim().slice(0, 320);
+        return {
+          warning,
+          tagName,
+          id: id || null,
+          className: className || null,
+          text,
+          html,
+        };
+      });
   });
 }
 

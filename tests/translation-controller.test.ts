@@ -1493,6 +1493,151 @@ describe('TranslationController', () => {
     );
   });
 
+  it('keeps protected-marker fallback warnings when the affected group completes in a later batch', async () => {
+    const longHybridHtml = Array.from(
+      { length: 36 },
+      (_, index) => `
+        Clause ${index + 1} keeps the discussion near
+        <span class="mwe-math-element">
+          <span class="mwe-math-mathml-inline" style="display: none;"><math><mi>G</mi></math></span>
+          <img class="mwe-math-fallback-image-inline" src="/math/G-${index}.svg" alt="G${index}" />
+        </span>
+        while the surrounding prose remains split-friendly.
+      `,
+    ).join(' ');
+
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="hybrid-late">${longHybridHtml}</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+    let providerCallCount = 0;
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: {
+        type: string;
+        request?: { fragments: string[] };
+      }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          providerCallCount += 1;
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment, index) =>
+                index === 0
+                  ? fragment.replace(/\[\[x\d+\]\]/g, '').replace(/Clause/g, '節')
+                  : fragment.replace(/Clause/g, '節'),
+              ),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(providerCallCount).toBeGreaterThan(1);
+
+    const snapshotResponse = await controller.handleMessage({
+      type: 'GET_SESSION_SNAPSHOT',
+    }) as { ok: boolean; snapshot?: { status?: string; warnings?: any; metrics?: any } };
+    expect(snapshotResponse.snapshot?.status).toBe('completed_with_warnings');
+    expect(snapshotResponse.snapshot?.warnings?.fallbackSourceBlocks).toBe(1);
+    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBeGreaterThanOrEqual(1);
+    expect((document.getElementById('hybrid-late') as HTMLElement).dataset.aiwtWarning).toBe(
+      'fallback-source',
+    );
+  });
+
+  it('does not warn when protected markers only change bracket style or spacing', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="hybrid">
+              The theorem uses
+              <span class="mwe-math-element">
+                <span class="mwe-math-mathml-inline" style="display: none;"><math><mi>G</mi></math></span>
+                <img class="mwe-math-fallback-image-inline" src="/math/G.svg" alt="G" />
+              </span>
+              in the proof.
+            </p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: {
+        type: string;
+        request?: { fragments: string[] };
+      }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) =>
+                fragment
+                  .replace('The theorem uses', 'この定理は')
+                  .replace('in the proof.', 'を証明で用いる。')
+                  .replace('[[x0]]', '【 X0 】'),
+              ),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+
+    const snapshotResponse = await controller.handleMessage({
+      type: 'GET_SESSION_SNAPSHOT',
+    }) as { ok: boolean; snapshot?: { status?: string; warnings?: any; metrics?: any } };
+
+    expect(snapshotResponse.snapshot?.status).toBe('completed');
+    expect(snapshotResponse.snapshot?.warnings).toBeNull();
+    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBe(0);
+    expect((document.getElementById('hybrid') as HTMLElement).dataset.aiwtWarning).toBeUndefined();
+    expect(document.querySelectorAll('img.mwe-math-fallback-image-inline')).toHaveLength(1);
+  });
+
   it('merges short adjacent text siblings into a single parent html fragment', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
@@ -1724,14 +1869,17 @@ describe('TranslationController', () => {
       scope: 'main',
     });
 
-    const htmlCalls = providerCalls.filter((call) => call.contentMode === 'html');
+    const richCalls = providerCalls.filter((call) =>
+      call.fragments.some((fragment) => fragment.includes('Term 1 with extended inline explanation')),
+    );
     expect(response.ok).toBe(true);
-    expect(htmlCalls.length).toBeGreaterThan(0);
-    expect(htmlCalls.flatMap((call) => call.fragments).length).toBeGreaterThan(1);
-    expect(htmlCalls.every((call) => call.fragments.length <= 8)).toBe(true);
+    expect(richCalls.length).toBeGreaterThan(0);
+    expect(richCalls.flatMap((call) => call.fragments).length).toBeGreaterThan(1);
+    expect(richCalls.every((call) => call.fragments.length <= 8)).toBe(true);
     expect(
-      htmlCalls.flatMap((call) => call.fragments).every((fragment) => fragment.length <= 900),
+      richCalls.flatMap((call) => call.fragments).every((fragment) => fragment.length <= 900),
     ).toBe(true);
+    expect(richCalls.some((call) => call.contentMode === 'text')).toBe(true);
     expect((document.getElementById('giant') as HTMLElement).innerHTML).toContain('data-fr="1"');
   });
 
@@ -2931,7 +3079,7 @@ describe('TranslationController', () => {
 
     expect(yonedaGroup).toBeDefined();
     expect(yonedaGroup?.contentMode).toBe('text');
-    expect(yonedaGroup?.fragmentCount).toBe(1);
+    expect(yonedaGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
   });
 
   it('routes nLab-style structured definition wrappers through the text placeholder lane', async () => {
@@ -3085,7 +3233,7 @@ describe('TranslationController', () => {
 
     const chromeMock = getChromeMock();
     const settings = createSettings({ cacheEnabled: false });
-    const deferredHtmlBatchSizes: number[] = [];
+    const deferredRichBatchSizes: number[] = [];
 
     (chromeMock.runtime.sendMessage as any).mockImplementation(
       async (message: {
@@ -3101,10 +3249,9 @@ describe('TranslationController', () => {
 
         if (message.type === 'TRANSLATE_API' && message.request) {
           if (
-            message.request.contentMode === 'html' &&
             message.request.fragments.some((fragment) => fragment.includes('Deferred html paragraph'))
           ) {
-            deferredHtmlBatchSizes.push(message.request.fragments.length);
+            deferredRichBatchSizes.push(message.request.fragments.length);
           }
           return {
             ok: true,
@@ -3128,10 +3275,10 @@ describe('TranslationController', () => {
     expect(response.ok).toBe(true);
 
     await waitFor(() => {
-      expect(deferredHtmlBatchSizes.length).toBeGreaterThan(0);
+      expect(deferredRichBatchSizes.length).toBeGreaterThan(0);
     });
 
-    expect(Math.max(...deferredHtmlBatchSizes)).toBeLessThanOrEqual(18);
+    expect(Math.max(...deferredRichBatchSizes)).toBeLessThanOrEqual(18);
   });
 
   it('keeps marked XHTML text batches from growing without bound', async () => {

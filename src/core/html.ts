@@ -87,6 +87,8 @@ const PLACEHOLDER_MARKER_NAME = 't';
 const PROTECTED_HTML_MARKER_NAME = 'x';
 const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*(\/?)\s*t(\d+)\s*\]\]/gi;
 const PROTECTED_HTML_MARKER_PATTERN = /\[\[\s*x(\d+)\s*\]\]/gi;
+const PROTECTED_HTML_MARKER_VARIANT_BRACKETS = '[\\[\\]［］【】〔〕「」『』⟦⟧⟨⟩<>＜＞]';
+const PROTECTED_PLACEHOLDER_SEGMENT_CHARS = 240;
 const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
   'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"]';
 const PROTECTED_HTML_SELECTOR = 'math, .mwe-math-element, img.mw-file-element';
@@ -231,17 +233,30 @@ export function splitPlaceholderRichTextIntoSafeSegments(
   maxChars: number,
 ): string[] {
   const normalized = normalizeText(content);
-  if (normalized.length <= maxChars) {
+  const protectedMarkerPieces = extractProtectedMarkerSegments(normalized);
+  const protectedMarkerCount = protectedMarkerPieces.filter((piece) =>
+    isProtectedMarkerPiece(piece),
+  ).length;
+  const effectiveMaxChars =
+    protectedMarkerCount > 0
+      ? Math.min(maxChars, PROTECTED_PLACEHOLDER_SEGMENT_CHARS)
+      : maxChars;
+
+  if (normalized.length <= effectiveMaxChars) {
     return [normalized];
   }
 
   const topLevelSegments = extractTopLevelPlaceholderSegments(normalized);
-  if (topLevelSegments.length <= 1) {
+  const candidateSegments =
+    topLevelSegments.length > 1
+      ? topLevelSegments
+      : protectedMarkerPieces;
+  if (candidateSegments.length <= 1) {
     return [normalized];
   }
 
-  const packed = packPlaceholderTextPieces(topLevelSegments, maxChars);
-  if (packed.length <= 1 || packed.some((segment) => segment.length > maxChars)) {
+  const packed = packPlaceholderTextPieces(candidateSegments, effectiveMaxChars);
+  if (packed.length <= 1 || packed.some((segment) => segment.length > effectiveMaxChars)) {
     return [normalized];
   }
 
@@ -278,15 +293,39 @@ export function protectAtomicHtmlForTranslation(html: string): ProtectedHtmlCont
 }
 
 export function restoreProtectedHtml(content: string, htmlMap: Record<string, string>): string {
-  const normalizedMarkers = content.replace(
-    PROTECTED_HTML_MARKER_PATTERN,
-    (_match, id: string) => `[[${PROTECTED_HTML_MARKER_NAME}${id}]]`,
-  );
+  const normalizedMarkers = canonicalizeProtectedHtmlMarkers(content, htmlMap);
 
   return Object.entries(htmlMap).reduce(
     (restored, [token, html]) => restored.split(token).join(html),
     normalizedMarkers,
   );
+}
+
+export function canonicalizeProtectedHtmlMarkers(
+  content: string,
+  htmlMap: Record<string, string>,
+): string {
+  let normalized = content.replace(
+    PROTECTED_HTML_MARKER_PATTERN,
+    (_match, id: string) => `[[${PROTECTED_HTML_MARKER_NAME}${id}]]`,
+  );
+
+  Object.keys(htmlMap).forEach((marker) => {
+    const markerIdMatch = marker.match(/\[\[\s*x(\d+)\s*\]\]/i);
+    if (!markerIdMatch) {
+      return;
+    }
+
+    const markerId = markerIdMatch[1];
+    const canonical = `[[${PROTECTED_HTML_MARKER_NAME}${markerId}]]`;
+    const variantPattern = new RegExp(
+      `${PROTECTED_HTML_MARKER_VARIANT_BRACKETS}{1,2}\\s*[xX]\\s*${markerId}\\s*${PROTECTED_HTML_MARKER_VARIANT_BRACKETS}{1,2}`,
+      'g',
+    );
+    normalized = normalized.replace(variantPattern, canonical);
+  });
+
+  return normalized;
 }
 
 export function splitHtmlIntoSafeSegments(
@@ -607,11 +646,22 @@ function extractTopLevelPlaceholderSegments(content: string): string[] {
 }
 
 function packPlaceholderTextPieces(pieces: string[], maxChars: number): string[] {
+  const normalizedPieces = pieces.flatMap((piece) => {
+    if (isProtectedMarkerPiece(piece) || piece.length <= maxChars) {
+      return [piece];
+    }
+    return splitTextForPlaceholder(piece, maxChars);
+  });
+
   const packed: string[] = [];
   let current = '';
 
-  pieces.forEach((piece) => {
-    const candidate = current ? `${current} ${piece}` : piece;
+  normalizedPieces.forEach((piece) => {
+    const candidate = current
+      ? shouldConcatenatePlaceholderPiecesWithoutSpace(current, piece)
+        ? `${current}${piece}`
+        : `${current} ${piece}`
+      : piece;
     if (candidate.length <= maxChars) {
       current = candidate;
       return;
@@ -630,6 +680,38 @@ function packPlaceholderTextPieces(pieces: string[], maxChars: number): string[]
   return packed;
 }
 
+function extractProtectedMarkerSegments(content: string): string[] {
+  const pattern = new RegExp(PROTECTED_HTML_MARKER_PATTERN.source, 'gi');
+  const pieces: string[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content))) {
+    const before = normalizeText(content.slice(lastIndex, match.index));
+    if (before) {
+      pieces.push(before);
+    }
+
+    pieces.push(`[[${PROTECTED_HTML_MARKER_NAME}${match[1]}]]`);
+    lastIndex = pattern.lastIndex;
+  }
+
+  const trailing = normalizeText(content.slice(lastIndex));
+  if (trailing) {
+    pieces.push(trailing);
+  }
+
+  return pieces;
+}
+
+function shouldConcatenatePlaceholderPiecesWithoutSpace(left: string, right: string): boolean {
+  return isProtectedMarkerPiece(left) || isProtectedMarkerPiece(right);
+}
+
+function isProtectedMarkerPiece(piece: string): boolean {
+  return /^\[\[\s*x\d+\s*\]\]$/i.test(piece);
+}
+
 function isDisallowedStructuredPlaceholderElement(element: HTMLElement): boolean {
   return (
     element.matches('.reference, .references, .reflist') ||
@@ -639,6 +721,50 @@ function isDisallowedStructuredPlaceholderElement(element: HTMLElement): boolean
 }
 
 function splitTextForHtml(text: string, maxChars: number): string[] {
+  const normalized = normalizeText(text);
+  if (normalized.length <= maxChars) {
+    return [normalized];
+  }
+
+  const chunks: string[] = [];
+  const sentences =
+    normalized.match(/[^.!?。！？]+(?:[.!?。！？]+|$)/g)?.map((sentence) => sentence.trim()) ??
+    [normalized];
+  let current = '';
+
+  sentences.forEach((sentence) => {
+    const candidate = current ? `${current} ${sentence}` : sentence;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      return;
+    }
+
+    if (current) {
+      chunks.push(current);
+    }
+
+    if (sentence.length <= maxChars) {
+      current = sentence;
+      return;
+    }
+
+    for (let start = 0; start < sentence.length; start += maxChars) {
+      const piece = sentence.slice(start, start + maxChars).trim();
+      if (piece) {
+        chunks.push(piece);
+      }
+    }
+    current = '';
+  });
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+function splitTextForPlaceholder(text: string, maxChars: number): string[] {
   const normalized = normalizeText(text);
   if (normalized.length <= maxChars) {
     return [normalized];

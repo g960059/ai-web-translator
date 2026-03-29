@@ -22,6 +22,7 @@ import {
   preparePlaceholderRichTextForTranslation,
   protectAtomicHtmlForTranslation,
   restorePreparedContent,
+  canonicalizeProtectedHtmlMarkers,
   restoreProtectedHtml,
   restorePlaceholderRichText,
   setElementHtmlContent,
@@ -1431,6 +1432,7 @@ export class TranslationController {
       batchPlans.reduce((sum, plan) => sum + plan.batches.length, 0),
     );
     const completedFragments = new Map<string, string[]>();
+    const pendingFallbackWarnings = new Map<string, string | undefined>();
     const usageSamples: Array<{
       contentMode: TranslationContentMode;
       estimatedPromptTokens: number;
@@ -1493,6 +1495,9 @@ export class TranslationController {
                   fragmentLength: batch[0]?.preparedContent.length ?? 0,
                 });
                 this.recordQualitySignal('sourceFallbackFragments', batch.length);
+                batch.forEach((item) => {
+                  pendingFallbackWarnings.set(item.group.groupKey, sourceFallbackMessage ?? undefined);
+                });
                 result = {
                   translations: batch.map((item) => item.preparedContent),
                 };
@@ -1520,21 +1525,28 @@ export class TranslationController {
                       options.settings.targetLanguage,
                     )
                   : preparedFragment;
+              const canonicalProtectedFragment = item.protectedHtmlMap
+                ? canonicalizeProtectedHtmlMarkers(
+                    normalizedProtectedFragment,
+                    item.protectedHtmlMap,
+                  )
+                : normalizedProtectedFragment;
               const protectedSafeFragment =
                 item.protectedHtmlMap &&
                 !hasAllProtectedMarkers(
-                  normalizedProtectedFragment,
+                  canonicalProtectedFragment,
                   item.protectedHtmlMap,
                 )
                   ? item.preparedContent
-                  : normalizedProtectedFragment;
+                  : canonicalProtectedFragment;
               if (
                 item.protectedHtmlMap &&
                 protectedSafeFragment === item.preparedContent &&
-                normalizedProtectedFragment !== item.preparedContent
+                canonicalProtectedFragment !== item.preparedContent
               ) {
                 this.recordQualitySignal('protectedMarkerFallbackFragments');
                 fallbackGroupKeys.add(item.group.groupKey);
+                pendingFallbackWarnings.set(item.group.groupKey, undefined);
               }
               const placeholderRestoredFragment = item.placeholderTagMap
                 ? restorePlaceholderRichText(
@@ -1566,15 +1578,19 @@ export class TranslationController {
 
               const restored = joinTranslatedGroupOutput(item.group, bucket);
               const hasFallbackWarning =
-                usedSourceFallback || fallbackGroupKeys.has(item.group.groupKey);
+                usedSourceFallback ||
+                fallbackGroupKeys.has(item.group.groupKey) ||
+                pendingFallbackWarnings.has(item.group.groupKey);
               this.applyGroupTranslation(item.group, restored, false, {
                 clearWarnings: !hasFallbackWarning,
               });
               if (hasFallbackWarning) {
+                const fallbackMessage = pendingFallbackWarnings.get(item.group.groupKey);
                 this.markItemsFallback(
                   batch.filter((candidate) => candidate.group.groupKey === item.group.groupKey),
-                  sourceFallbackMessage ?? undefined,
+                  fallbackMessage ?? sourceFallbackMessage ?? undefined,
                 );
+                pendingFallbackWarnings.delete(item.group.groupKey);
               }
               this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
               processedJobs += 1;
@@ -4076,7 +4092,7 @@ function resolvePlaceholderRequestSegments(
   }
 
   const wrapperTag = wrapperPrefix.match(/^<([a-z0-9-]+)/i)?.[1]?.toLowerCase() ?? '';
-  if (!['div', 'section', 'article', 'blockquote', 'figcaption'].includes(wrapperTag)) {
+  if (!['div', 'section', 'article', 'blockquote', 'figcaption', 'p', 'li', 'dd', 'dt'].includes(wrapperTag)) {
     return [content];
   }
 

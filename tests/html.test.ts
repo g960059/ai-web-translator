@@ -1,5 +1,6 @@
 import { collectTranslatableBlocks, resolveScopeRoot } from '../src/core/blocks';
 import {
+  canonicalizeProtectedHtmlMarkers,
   normalizeHtml,
   prepareContentForTranslation,
   preparePlaceholderRichTextForTranslation,
@@ -392,6 +393,20 @@ describe('core html and block extraction', () => {
     expect(normalizeHtml(restored)).toContain('<mi>Set</mi></math> is representable.</p>');
   });
 
+  it('canonicalizes protected marker variants before restoring protected html', () => {
+    const html =
+      '<p>Apply <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi></math> to the object.</p>';
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    expect(protectedHtml).not.toBeNull();
+
+    const canonical = canonicalizeProtectedHtmlMarkers('<p>Apply 【 X0 】 to the object.</p>', protectedHtml!.htmlMap);
+    const restored = restoreProtectedHtml(canonical, protectedHtml!.htmlMap);
+
+    expect(canonical).toContain('[[x0]]');
+    expect(normalizeHtml(restored)).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML">');
+  });
+
   it('supports structured wrapper placeholder-rich text for theorem-like blocks', () => {
     const html = `
       <div class="proof">
@@ -449,6 +464,33 @@ describe('core html and block extraction', () => {
     );
 
     expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
+  });
+
+  it('splits placeholder-rich text around protected html markers even without link markers', () => {
+    const html =
+      '<p>This generalizes to any field <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi></math> and any vector space <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>V</mi></math> over it, with linear maps replacing matrices.</p>';
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    const segments = splitPlaceholderRichTextIntoSafeSegments(placeholder!.content, 70);
+
+    expect(segments.length).toBeGreaterThan(1);
+    expect(segments.join('')).toContain('[[x0]]');
+    expect(segments.join('')).toContain('[[x1]]');
+  });
+
+  it('proactively splits protected-marker placeholder text with a lower soft cap', () => {
+    const html = `<p>${'This paragraph carries inline protected math markers through a long explanatory sentence. '.repeat(10)}<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi></math> and <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>V</mi></math> remain atomic while the surrounding prose can still be segmented safely.</p>`;
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    const segments = splitPlaceholderRichTextIntoSafeSegments(placeholder!.content, 860);
+
+    expect(placeholder!.content.length).toBeGreaterThan(240);
+    expect(segments.length).toBeGreaterThan(1);
+    expect(segments.every((segment) => segment.length <= 240)).toBe(true);
+    expect(segments.join('')).toContain('[[x0]]');
+    expect(segments.join('')).toContain('[[x1]]');
   });
 
   it('rejects block-heavy html for placeholder-rich text mode', () => {
