@@ -1434,6 +1434,7 @@ export class TranslationController {
                   contentMode: batch[0]?.contentMode ?? 'unknown',
                   fragmentLength: batch[0]?.preparedContent.length ?? 0,
                 });
+                this.recordQualitySignal('sourceFallbackFragments', batch.length);
                 result = {
                   translations: batch.map((item) => item.preparedContent),
                 };
@@ -1468,6 +1469,13 @@ export class TranslationController {
                 )
                   ? item.preparedContent
                   : normalizedProtectedFragment;
+              if (
+                item.protectedHtmlMap &&
+                protectedSafeFragment === item.preparedContent &&
+                normalizedProtectedFragment !== item.preparedContent
+              ) {
+                this.recordQualitySignal('protectedMarkerFallbackFragments');
+              }
               const placeholderRestoredFragment = item.placeholderTagMap
                 ? restorePlaceholderRichText(
                     protectedSafeFragment,
@@ -2559,6 +2567,10 @@ export class TranslationController {
         },
       },
       immediateBatch: null,
+      qualitySignals: {
+        sourceFallbackFragments: 0,
+        protectedMarkerFallbackFragments: 0,
+      },
     };
   }
 
@@ -2611,6 +2623,17 @@ export class TranslationController {
 
     this.sessionMetrics.retryCounts.total += 1;
     this.sessionMetrics.retryCounts[reason] += 1;
+  }
+
+  private recordQualitySignal(
+    signal: keyof SessionRuntimeMetrics['qualitySignals'],
+    count = 1,
+  ): void {
+    if (!this.sessionMetrics || count <= 0) {
+      return;
+    }
+
+    this.sessionMetrics.qualitySignals[signal] += count;
   }
 
   private recordBatchSplitStats(items: TranslationBatchItem[]): void {

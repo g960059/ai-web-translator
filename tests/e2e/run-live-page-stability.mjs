@@ -69,6 +69,9 @@ const concurrencyValues = numberSeries(runsSummary.map((run) => run.peakInFlight
 const immediateLatencyValues = numberSeries(
   runsSummary.map((run) => run.immediateBatch?.providerLatencyMs ?? null),
 );
+const englishResidualRatioValues = numberSeries(
+  runsSummary.map((run) => run.pageQuality?.englishResidualRatio ?? null),
+);
 
 const summary = {
   scenarioId: `${targetSlug}-${toFileSlug(label)}`,
@@ -88,6 +91,7 @@ const summary = {
     costUsd: buildStats(costValues),
     peakInFlightRequests: buildStats(concurrencyValues),
     immediateProviderLatencyMs: buildStats(immediateLatencyValues),
+    englishResidualRatio: buildStats(englishResidualRatioValues),
   },
   runsSummary,
   artifacts: {

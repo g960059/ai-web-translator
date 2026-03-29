@@ -1481,6 +1481,11 @@ describe('TranslationController', () => {
     expect(document.querySelectorAll('.mwe-math-element')).toHaveLength(1);
     expect(document.querySelectorAll('img.mwe-math-fallback-image-inline')).toHaveLength(1);
     expect((document.getElementById('hybrid') as HTMLElement).innerHTML).toContain('/math/G.svg');
+
+    const snapshotResponse = await controller.handleMessage({
+      type: 'GET_SESSION_SNAPSHOT',
+    }) as { ok: boolean; snapshot?: { metrics?: any } };
+    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBe(1);
   });
 
   it('merges short adjacent text siblings into a single parent html fragment', async () => {
@@ -2603,6 +2608,8 @@ describe('TranslationController', () => {
     expect(snapshotResponse.snapshot?.metrics?.requestCountsByPhase.deferred).toBeGreaterThan(0);
     expect(snapshotResponse.snapshot?.metrics?.splitStats.batchByContentMode.text).toBeGreaterThanOrEqual(0);
     expect(snapshotResponse.snapshot?.metrics?.splitStats.batchByMarkerPresence.marked).toBeGreaterThanOrEqual(0);
+    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.sourceFallbackFragments).toBeGreaterThanOrEqual(0);
+    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBeGreaterThanOrEqual(0);
   });
 
   it('routes heavier safe XHTML wrappers through multi-fragment text groups', async () => {

@@ -403,11 +403,36 @@ async function collectPageQuality(page) {
     ].join(', ');
 
     const normalize = (text) => text.replace(/\s+/g, ' ').trim();
+    const countMatches = (text, pattern) => (text.match(pattern) || []).length;
+    const classifyParagraph = (text) => {
+      const japaneseCount = countMatches(text, /[ぁ-んァ-ン一-龯]/g);
+      const latinCount = countMatches(text, /[A-Za-z]/g);
+      if (japaneseCount >= 12 && japaneseCount > latinCount * 0.25) {
+        return 'japanese';
+      }
+      if (latinCount >= 24 && japaneseCount <= 4) {
+        return 'english';
+      }
+      return 'mixed';
+    };
     const paragraphs = Array.from(root.querySelectorAll('p'))
       .filter((element) => !element.closest(excludedParagraphSelector))
       .map((element) => normalize(element.textContent || ''))
       .filter((text) => text.length >= 40)
       .slice(0, 4);
+    const paragraphClassifications = paragraphs.map((text) => ({
+      text,
+      languageGuess: classifyParagraph(text),
+    }));
+    const englishLikeCount = paragraphClassifications.filter(
+      (entry) => entry.languageGuess === 'english',
+    ).length;
+    const japaneseLikeCount = paragraphClassifications.filter(
+      (entry) => entry.languageGuess === 'japanese',
+    ).length;
+    const mixedCount = paragraphClassifications.filter(
+      (entry) => entry.languageGuess === 'mixed',
+    ).length;
 
     return {
       title: document.title,
@@ -415,6 +440,14 @@ async function collectPageQuality(page) {
       fallbackImages: root.querySelectorAll('.mwe-math-fallback-image-inline').length,
       mediaImages: root.querySelectorAll('img.mw-file-element').length,
       sampleParagraphs: paragraphs,
+      sampleParagraphLanguageGuesses: paragraphClassifications.map((entry) => entry.languageGuess),
+      sampleParagraphLanguageCounts: {
+        englishLike: englishLikeCount,
+        japaneseLike: japaneseLikeCount,
+        mixed: mixedCount,
+      },
+      englishResidualRatio:
+        paragraphs.length > 0 ? Number((englishLikeCount / paragraphs.length).toFixed(3)) : null,
     };
   });
 }

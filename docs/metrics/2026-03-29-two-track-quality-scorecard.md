@@ -32,6 +32,8 @@ What this track answers:
 - Does full completion stay fast on a long, math-heavy, real Wikipedia page?
 - Did request count, tokens, or cost regress?
 - Are the coarse structure counts still exact?
+- Did sample paragraphs actually become Japanese?
+- Did the runtime have to fall back to source fragments to preserve protected markers?
 
 Current score:
 
@@ -43,6 +45,8 @@ Current score:
 | Total tokens under `30k` | pass | durable best run `28,323`; v5 stability median `28,428` |
 | Coarse structure exact | pass | `129 / 118 / 5` before and after |
 | Lead Japanese fluency acceptable | pass | lead sample paragraphs in metrics JSON |
+| English residual ratio in sampled paragraphs stays low | pass | `pageQuality.after.englishResidualRatio` in metrics JSON |
+| Protected/source fallback counts remain explainable | pass | `finalState.metrics.qualitySignals` in metrics JSON |
 
 ## 2. High-Difficulty Fixture Bench
 

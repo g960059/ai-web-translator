@@ -122,6 +122,11 @@ export interface SessionImmediateBatchMetrics {
   bridgeLatencyMs: number | null;
 }
 
+export interface SessionQualitySignals {
+  sourceFallbackFragments: number;
+  protectedMarkerFallbackFragments: number;
+}
+
 export interface SessionRuntimeMetrics {
   phaseTimings: SessionPhaseTimings;
   retryCounts: SessionRetryCounts;
@@ -129,6 +134,7 @@ export interface SessionRuntimeMetrics {
   requestCountsByPhase: SessionRequestCountsByPhase;
   splitStats: SessionSplitStats;
   immediateBatch: SessionImmediateBatchMetrics | null;
+  qualitySignals: SessionQualitySignals;
 }
 
 export interface SessionSnapshot {
