@@ -58,6 +58,7 @@ for (let runIndex = 1; runIndex <= runs; runIndex += 1) {
     retryCounts: metrics.retryCounts ?? null,
     pageQuality: metrics.pageQuality?.after ?? null,
     qualitySignals: metrics.finalState?.metrics?.qualitySignals ?? null,
+    splitEventSamples: metrics.finalState?.metrics?.splitEventSamples ?? null,
   });
 }
 

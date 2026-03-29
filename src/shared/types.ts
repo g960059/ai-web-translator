@@ -110,6 +110,19 @@ export interface SessionSplitStats {
   };
 }
 
+export interface SessionSplitEvent {
+  phase: keyof SessionRequestCountsByPhase;
+  bucketKey: string;
+  contentMode: TranslationContentMode;
+  hasMarkers: boolean;
+  itemCount: number;
+  flattenedFragmentCount: number;
+  averageEstimatedTokens: number;
+  maxGroupEstimatedTokens: number;
+  maxGroupFragmentCount: number;
+  reason: string;
+}
+
 export interface SessionImmediateBatchMetrics {
   groupCount: number;
   fragmentCount: number;
@@ -133,6 +146,7 @@ export interface SessionRuntimeMetrics {
   cacheStats: SessionCacheStats;
   requestCountsByPhase: SessionRequestCountsByPhase;
   splitStats: SessionSplitStats;
+  splitEventSamples: SessionSplitEvent[];
   immediateBatch: SessionImmediateBatchMetrics | null;
   qualitySignals: SessionQualitySignals;
 }

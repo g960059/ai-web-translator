@@ -2608,6 +2608,7 @@ describe('TranslationController', () => {
     expect(snapshotResponse.snapshot?.metrics?.requestCountsByPhase.deferred).toBeGreaterThan(0);
     expect(snapshotResponse.snapshot?.metrics?.splitStats.batchByContentMode.text).toBeGreaterThanOrEqual(0);
     expect(snapshotResponse.snapshot?.metrics?.splitStats.batchByMarkerPresence.marked).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(snapshotResponse.snapshot?.metrics?.splitEventSamples)).toBe(true);
     expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.sourceFallbackFragments).toBeGreaterThanOrEqual(0);
     expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBeGreaterThanOrEqual(0);
   });

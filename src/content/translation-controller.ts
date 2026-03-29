@@ -1830,6 +1830,7 @@ export class TranslationController {
           });
           this.recordRetry('batchSplits');
           this.recordBatchSplitStats(options.items);
+          this.recordBatchSplitEvent(options.items, options.metricsPhase, message);
 
           const combined: TranslationRequestResult = {
             translations: [],
@@ -2566,6 +2567,7 @@ export class TranslationController {
           html: 0,
         },
       },
+      splitEventSamples: [],
       immediateBatch: null,
       qualitySignals: {
         sourceFallbackFragments: 0,
@@ -2657,6 +2659,48 @@ export class TranslationController {
       this.sessionMetrics.splitStats.batchBySize.threeOrFour += 1;
     } else {
       this.sessionMetrics.splitStats.batchBySize.fiveOrMore += 1;
+    }
+  }
+
+  private recordBatchSplitEvent(
+    items: TranslationBatchItem[],
+    phase: keyof SessionRuntimeMetrics['requestCountsByPhase'],
+    reason: string,
+  ): void {
+    if (!this.sessionMetrics || items.length === 0) {
+      return;
+    }
+
+    const bucketKey = getBatchBucketKey(items[0], isXmlLikeRuntimeDocument(this.documentRef));
+    const averageEstimatedTokens =
+      items.reduce((sum, item) => sum + item.estimatedTokens, 0) / items.length;
+    const flattenedFragmentCount = items.reduce(
+      (sum, item) => sum + item.group.requestFragments.length,
+      0,
+    );
+    const maxGroupEstimatedTokens = Math.max(...items.map((item) => item.group.estimatedTokens));
+    const maxGroupFragmentCount = Math.max(
+      ...items.map((item) => item.group.requestFragments.length),
+    );
+    const hasMarkers = items.some(
+      (item) => Boolean(item.placeholderTagMap) || Boolean(item.protectedHtmlMap),
+    );
+
+    this.sessionMetrics.splitEventSamples.push({
+      phase,
+      bucketKey,
+      contentMode: items[0].contentMode,
+      hasMarkers,
+      itemCount: items.length,
+      flattenedFragmentCount,
+      averageEstimatedTokens: Number(averageEstimatedTokens.toFixed(3)),
+      maxGroupEstimatedTokens,
+      maxGroupFragmentCount,
+      reason,
+    });
+
+    if (this.sessionMetrics.splitEventSamples.length > 5) {
+      this.sessionMetrics.splitEventSamples.shift();
     }
   }
 
