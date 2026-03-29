@@ -95,7 +95,7 @@ describe('translateWithOpenRouter', () => {
             {
               message: {
                 content:
-                  '{"translations":[{"i":"f1","t":"第二"},{"i":"f0","t":"第一"}]}',
+                  '{"translations":[{"i":"1","t":"第二"},{"i":"0","t":"第一"}]}',
               },
             },
           ],
@@ -106,7 +106,7 @@ describe('translateWithOpenRouter', () => {
     const result = await translateWithOpenRouter({
       ...BASE_REQUEST,
       fragments: ['First', 'Second'],
-      fragmentIds: ['f0', 'f1'],
+      fragmentIds: ['0', '1'],
     });
 
     expect(result.translations).toEqual(['第一', '第二']);
@@ -321,7 +321,7 @@ describe('translateWithOpenRouter', () => {
             choices: [
               {
                 message: {
-                  content: '{"translations":["[[TX0O]]表現論[[TX0C]]"]}',
+                  content: '{"translations":["[[t0]]表現論[[/t0]]"]}',
                 },
               },
             ],
@@ -332,14 +332,14 @@ describe('translateWithOpenRouter', () => {
 
     await translateWithOpenRouter({
       ...BASE_REQUEST,
-      fragments: ['[[TX0O]]Representation theory[[TX0C]]'],
+      fragments: ['[[t0]]Representation theory[[/t0]]'],
       hasProtectedMarkers: true,
     });
 
     const messages = (requestBody?.messages ?? []) as Array<{ content?: string }>;
     const systemPrompt = messages[0]?.content ?? '';
 
-    expect(systemPrompt).toContain('[[TX0O]]');
-    expect(systemPrompt).toContain('[[HX0]]');
+    expect(systemPrompt).toContain('[[t0]]');
+    expect(systemPrompt).toContain('[[x0]]');
   });
 });

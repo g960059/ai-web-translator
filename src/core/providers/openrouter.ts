@@ -31,11 +31,9 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     request.fragmentIds?.length && request.fragmentIds.length === request.fragments.length,
   );
   const hintShape = hasHints ? 'Input is JSON object {"s","g","f"}.' : 'Input is JSON array.';
-  const hintInstruction = hasHints
-    ? 'Use s/g only as soft context.'
-    : null;
+  const hintInstruction = hasHints ? 'Use s/g only as soft context.' : null;
   const markerInstruction = request.hasProtectedMarkers
-    ? 'Keep marker tokens like [[TX0O]], [[TX0C]], and [[HX0]] exactly unchanged.'
+    ? 'Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged.'
     : null;
   if (request.contentMode === 'html') {
     return [
@@ -47,7 +45,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       hintInstruction,
       markerInstruction,
       hasFragmentIds
-        ? 'Return JSON: {"translations":[{"i":"f0","t":"<html>"},{"i":"f1","t":"<html>"}]}.'
+        ? 'Return JSON: {"translations":[{"i":"0","t":"<html>"},{"i":"1","t":"<html>"}]}.'
         : 'Return JSON: {"translations":["<html>","<html>"]}.',
       hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. No prose.',
     ]
@@ -63,7 +61,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     hintInstruction,
     markerInstruction,
     hasFragmentIds
-      ? 'Return JSON: {"translations":[{"i":"f0","t":"..."},{"i":"f1","t":"..."}]}.'
+      ? 'Return JSON: {"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}.'
       : 'Return JSON: {"translations":["...","..."]}.',
     hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. Plain text only. No prose.',
   ]
@@ -266,7 +264,7 @@ function buildUserPayload(request: TranslationBatchRequest): string {
   const fragments =
     request.fragmentIds?.length === request.fragments.length
       ? request.fragments.map((text, index) => ({
-          i: request.fragmentIds?.[index] ?? `f${index}`,
+          i: request.fragmentIds?.[index] ?? String(index),
           t: text,
         }))
       : request.fragments;

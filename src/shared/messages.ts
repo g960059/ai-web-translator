@@ -51,6 +51,12 @@ export interface GetPageAnalysisMessage {
   scope?: DefaultTranslationScope;
 }
 
+export interface GetDebugBlocksMessage {
+  type: 'GET_DEBUG_BLOCKS';
+  settings?: ExtensionSettings;
+  scope?: DefaultTranslationScope;
+}
+
 export interface GetSelectionStateMessage {
   type: 'GET_SELECTION_STATE';
 }
@@ -96,6 +102,7 @@ export type ContentCommandMessage =
   | ClearCacheMessage
   | CancelTranslationMessage
   | GetPageAnalysisMessage
+  | GetDebugBlocksMessage
   | GetSelectionStateMessage
   | GetSessionSnapshotMessage;
 
@@ -119,6 +126,10 @@ export interface ActionResponse {
 
 export interface AnalysisResponse extends ActionResponse {
   analysis?: PageAnalysis;
+}
+
+export interface DebugBlocksResponse extends ActionResponse {
+  debug?: unknown;
 }
 
 export interface SelectionStateResponse extends ActionResponse {

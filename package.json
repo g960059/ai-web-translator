@@ -10,10 +10,12 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:quality-bench": "vitest run tests/wikipedia-fixture.test.ts tests/wikipedia-finite-groups-fixture.test.ts",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:live": "npm run build && RUN_LIVE_E2E=1 playwright test tests/e2e/live-translation.spec.ts",
     "test:e2e:live:page": "npm run build && node tests/e2e/run-live-page-metrics.mjs",
+    "metrics:stability": "npm run build && node tests/e2e/run-live-page-stability.mjs",
     "metrics:compare": "node tests/e2e/compare-live-metrics.mjs",
     "metrics:model-eval": "npm run build && node tests/e2e/run-live-fixture-model-eval.mjs"
   },

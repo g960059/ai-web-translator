@@ -47,6 +47,12 @@ const BLOCK_TAGS = new Set([
   'TH',
   'UL',
 ]);
+const STRUCTURAL_CONTAINER_TAGS = new Set(['BODY', 'HEAD', 'HTML']);
+const GENERIC_CONTAINER_TAGS = new Set(['DIV', 'SECTION', 'MAIN', 'ARTICLE']);
+const STRUCTURED_DESCENDANT_SELECTOR =
+  'p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, pre, figure, table, .maruku-equation';
+const RECOVERY_BLOCK_SELECTOR =
+  'p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, pre, figcaption, td, th';
 
 const EXCLUDED_SELECTOR = [
   'script',
@@ -91,8 +97,10 @@ const EXCLUDED_SELECTOR = [
   '.noprint',
   '.metadata',
   '.sidebar',
+  '.rightHandSide',
   '.infobox',
   '.portal',
+  '.maruku_toc',
   '.sistersitebox',
   '.ambox',
   '.rellink',
@@ -111,6 +119,7 @@ const MAIN_CANDIDATE_SELECTOR = [
   'main',
   'article',
   '[role="main"]',
+  '#revision',
   '#content',
   '#main',
   '#bodyContent',
@@ -173,7 +182,7 @@ const META_LIKE_TEXT_PATTERN =
 const CITATION_LIKE_TEXT_PATTERN =
   /(\bdoi\b|\bisbn\b|\bissn\b|\bpmid\b|\bbibcode\b|\barxiv\b|\bretrieved\b|\barchived\b|\bcitation\b)/iu;
 const MAIN_POSITIVE_HINT_PATTERN =
-  /(main|content|article|entry|post|story|body|markdown|document|doc|wiki|reader)/i;
+  /(main|content|article|entry|post|story|body|markdown|document|doc|wiki|reader|revision)/i;
 const MAIN_NEGATIVE_HINT_PATTERN =
   /(comment|footer|header|nav|menu|breadcrumb|share|social|sidebar|aside|related|promo|banner|modal|drawer|cookie|pager|pagination|toolbar|tools|toc|table-of-contents|advert|ads?)/i;
 const JAPANESE_SCRIPT_PATTERN = /[\u3040-\u30ff\u3400-\u9fff々]/gu;
@@ -189,6 +198,10 @@ const SECTION_HEADING_SELECTOR = 'h1, h2, h3, h4, h5, h6';
 const NON_READER_SECTION_HEADING_PATTERN =
   /^(references|external links|see also|further reading|bibliography|sources|notes|citations)$/i;
 
+function getNormalizedTagName(element: Element): string {
+  return element.tagName.toUpperCase();
+}
+
 function isTranslatableText(text: string): boolean {
   const normalized = normalizeText(text);
   return normalized.length > 1 && /[\p{L}\p{N}]/u.test(normalized);
@@ -196,7 +209,8 @@ function isTranslatableText(text: string): boolean {
 
 function hasBlockChild(element: HTMLElement): boolean {
   for (let child = element.firstElementChild; child; child = child.nextElementSibling) {
-    if (BLOCK_TAGS.has(child.tagName)) {
+    const childTagName = getNormalizedTagName(child);
+    if (BLOCK_TAGS.has(childTagName) || STRUCTURAL_CONTAINER_TAGS.has(childTagName)) {
       return true;
     }
   }
@@ -209,6 +223,7 @@ function isBoilerplateBlock(
   options?: { selectionMode?: boolean },
 ): boolean {
   const normalized = normalizeText(text).toLowerCase();
+  const proseLike = looksLikeProseText(normalized);
   if (normalized.length <= 2) {
     return true;
   }
@@ -232,7 +247,8 @@ function isBoilerplateBlock(
   if (
     normalized.length <= 320 &&
     resolveLinkDensity(element, normalized.length) >= 0.55 &&
-    element.querySelectorAll('a').length >= 2
+    element.querySelectorAll('a').length >= 2 &&
+    !proseLike
   ) {
     return true;
   }
@@ -240,7 +256,8 @@ function isBoilerplateBlock(
   if (
     normalized.length <= 420 &&
     resolveLinkDensity(element, normalized.length) >= 0.45 &&
-    element.querySelectorAll('a').length >= 4
+    element.querySelectorAll('a').length >= 4 &&
+    !proseLike
   ) {
     return true;
   }
@@ -254,6 +271,15 @@ function isBoilerplateBlock(
   }
 
   return false;
+}
+
+function looksLikeProseText(normalizedText: string): boolean {
+  const wordCount = normalizedText.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 8) {
+    return false;
+  }
+
+  return /[.!?。]|[,;:]/.test(normalizedText);
 }
 
 function resolveContentMode(element: HTMLElement): TranslationContentMode {
@@ -278,11 +304,11 @@ function prefersTextContentMode(element: HTMLElement): boolean {
     return false;
   }
 
-  return descendants.every((node) => TEXT_FRIENDLY_INLINE_TAGS.has(node.tagName));
+  return descendants.every((node) => TEXT_FRIENDLY_INLINE_TAGS.has(getNormalizedTagName(node)));
 }
 
 function getMergeableTextChildren(element: HTMLElement): HTMLElement[] | null {
-  if (!MERGEABLE_PARENT_TAGS.has(element.tagName)) {
+  if (!MERGEABLE_PARENT_TAGS.has(getNormalizedTagName(element))) {
     return null;
   }
 
@@ -296,7 +322,7 @@ function getMergeableTextChildren(element: HTMLElement): HTMLElement[] | null {
 
   let totalChars = 0;
   for (const child of children) {
-    if (!MERGEABLE_CHILD_TAGS.has(child.tagName)) {
+    if (!MERGEABLE_CHILD_TAGS.has(getNormalizedTagName(child))) {
       return null;
     }
 
@@ -351,24 +377,47 @@ function isEligibleBlock(
   element: HTMLElement,
   options?: { selectionMode?: boolean },
 ): boolean {
+  return resolveBlockIneligibilityReason(element, options) === null;
+}
+
+function resolveBlockIneligibilityReason(
+  element: HTMLElement,
+  options?: { selectionMode?: boolean },
+): string | null {
+  const tagName = getNormalizedTagName(element);
   if (element.matches(EXCLUDED_SELECTOR)) {
-    return false;
+    return 'excluded-self';
   }
 
-  if (!BLOCK_TAGS.has(element.tagName)) {
-    return false;
+  if (!BLOCK_TAGS.has(tagName)) {
+    return 'non-block-tag';
+  }
+
+  if (STRUCTURAL_CONTAINER_TAGS.has(tagName)) {
+    return 'structural-container';
   }
 
   if (hasBlockChild(element)) {
-    return false;
+    return 'has-block-child';
+  }
+
+  if (GENERIC_CONTAINER_TAGS.has(tagName)) {
+    const structuredDescendantCount = element.querySelectorAll(STRUCTURED_DESCENDANT_SELECTOR).length;
+    if (structuredDescendantCount >= 2) {
+      return 'generic-wrapper';
+    }
   }
 
   const text = element.textContent ?? '';
   if (!isTranslatableText(text)) {
-    return false;
+    return 'not-translatable';
   }
 
-  return !isBoilerplateBlock(element, text, options);
+  if (isBoilerplateBlock(element, text, options)) {
+    return 'boilerplate';
+  }
+
+  return null;
 }
 
 function toBlockSeed(
@@ -405,6 +454,10 @@ function collectBlocks(
       return;
     }
 
+    if (!options?.selectionMode && element.matches(EXCLUDED_SELECTOR)) {
+      return;
+    }
+
     if (options?.allowMergedParents !== false && getMergeableTextChildren(element)) {
       results.push(toBlockSeed(element, 'html'));
       return;
@@ -423,11 +476,50 @@ function collectBlocks(
 
   visit(root);
 
+  if (results.length === 0) {
+    const recovered = collectRecoveryBlocks(root, options);
+    if (recovered.length > 0) {
+      return recovered;
+    }
+  }
+
   if (results.length === 0 && isTranslatableText(root.textContent ?? '')) {
     results.push(toBlockSeed(root));
   }
 
   return results;
+}
+
+function collectRecoveryBlocks(
+  root: HTMLElement,
+  options?: {
+    range?: Range;
+    allowMergedParents?: boolean;
+    selectionMode?: boolean;
+  },
+): BlockSeed[] {
+  const recovered: BlockSeed[] = [];
+  root.querySelectorAll<HTMLElement>(RECOVERY_BLOCK_SELECTOR).forEach((element) => {
+    if (options?.range && !options.range.intersectsNode(element)) {
+      return;
+    }
+
+    if (!options?.selectionMode && element.matches(EXCLUDED_SELECTOR)) {
+      return;
+    }
+
+    if (element.closest(EXCLUDED_SELECTOR)) {
+      return;
+    }
+
+    if (!isEligibleBlock(element, { selectionMode: options?.selectionMode })) {
+      return;
+    }
+
+    recovered.push(toBlockSeed(element));
+  });
+
+  return recovered;
 }
 
 export function resolveScopeRoot(
@@ -443,6 +535,55 @@ export function resolveScopeRoot(
   }
 
   return documentRef.body;
+}
+
+export function debugCollectRecoveryProbe(root: HTMLElement): {
+  recoveryCandidateCount: number;
+  eligibleRecoveryCount: number;
+  reasonCounts: Record<string, number>;
+  samples: Array<{
+    tagName: string;
+    textLength: number;
+    preview: string;
+    reason: string | null;
+  }>;
+} {
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>(RECOVERY_BLOCK_SELECTOR));
+  const samples = candidates.slice(0, 12).map((element) => {
+    const text = normalizeText(element.textContent ?? '');
+    const reason = !element.closest(EXCLUDED_SELECTOR)
+      ? resolveBlockIneligibilityReason(element)
+      : 'excluded-ancestor';
+    return {
+      tagName: element.tagName.toLowerCase(),
+      textLength: text.length,
+      preview: text.slice(0, 160),
+      reason,
+    };
+  });
+
+  const reasonCounts: Record<string, number> = {};
+  const eligibleRecoveryCount = candidates.filter((element) => {
+    let reason: string | null = null;
+    if (element.closest(EXCLUDED_SELECTOR)) {
+      reason = 'excluded-ancestor';
+    } else {
+      reason = resolveBlockIneligibilityReason(element);
+    }
+    reasonCounts[reason ?? 'eligible'] = (reasonCounts[reason ?? 'eligible'] ?? 0) + 1;
+
+    if (reason === 'excluded-ancestor') {
+      return false;
+    }
+    return reason === null;
+  }).length;
+
+  return {
+    recoveryCandidateCount: candidates.length,
+    eligibleRecoveryCount,
+    reasonCounts,
+    samples,
+  };
 }
 
 function resolveBestMainRoot(documentRef: Document): HTMLElement | null {
@@ -672,7 +813,7 @@ function findNearestHeadingText(element: HTMLElement): string {
     }
 
     current = current.parentElement;
-    if (current && HEADING_TAGS.has(current.tagName)) {
+    if (current && HEADING_TAGS.has(getNormalizedTagName(current))) {
       const currentHeading = normalizeText(current.textContent ?? '');
       if (currentHeading) {
         return currentHeading;
@@ -684,7 +825,7 @@ function findNearestHeadingText(element: HTMLElement): string {
 }
 
 function findLastHeadingTextInSubtree(root: HTMLElement): string {
-  if (HEADING_TAGS.has(root.tagName)) {
+  if (HEADING_TAGS.has(getNormalizedTagName(root))) {
     return normalizeText(root.textContent ?? '');
   }
 
@@ -708,15 +849,17 @@ function resolvePriorityScore(
   const visibleBonus = top <= viewportHeight ? 220 : top <= viewportHeight * 1.5 ? 120 : 0;
   const nearTopBonus = top >= 0 ? Math.max(0, 180 - top / 5) : 140;
   const textBonus = Math.min(200, normalizedText.length);
-  const tagBonus = HEADING_TAGS.has(element.tagName)
-    ? 320 - Number.parseInt(element.tagName.slice(1), 10) * 24
-    : element.tagName === 'P'
+  const tagName = getNormalizedTagName(element);
+  const tagBonus = HEADING_TAGS.has(tagName)
+    ? 320 - Number.parseInt(tagName.slice(1), 10) * 24
+    : tagName === 'P'
       ? 120
-      : element.tagName === 'LI'
+      : tagName === 'LI'
         ? 80
         : 40;
   const siblingHeadingBonus =
-    element.previousElementSibling && HEADING_TAGS.has(element.previousElementSibling.tagName)
+    element.previousElementSibling &&
+    HEADING_TAGS.has(getNormalizedTagName(element.previousElementSibling))
       ? 140
       : 0;
 

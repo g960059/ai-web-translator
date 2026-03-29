@@ -9,22 +9,26 @@ Summary:
   - token/cost efficiency
   - translation consistency and fluency
 
-Why this is the right next step:
-- The current optimized baseline is much better than the earlier Gemini run:
-  - first visible translation: `98.974s -> 3.8s`
-  - full completion: `270.160s -> 244.049s`
-  - total tokens: `150,662 -> 120,851`
-  - estimated cost: `$0.1308905 -> $0.1020215`
-- The remaining weak point is clear:
-  - request count is still high at `101`
+Why this is still the right next step:
+- The current durable baseline is much better than both the pre-optimization run and the earlier optimized run:
+  - first visible translation: `98.974s -> 2.273s`
+  - full completion: `270.160s -> 39.025s`
+  - total tokens: `150,662 -> 28,541`
+  - estimated cost: `$0.1308905 -> $0.02485775`
+- The remaining weak points are now narrower:
+  - first visible still varies around the `2s` line instead of sitting comfortably below it
+  - XHTML/XML pages now work, but still have a slower dedicated lane
+  - quality review should now be kept durable across both the live page and the high-difficulty fixtures
 - That means the product direction is no longer “make it work”.
 - It is now “make the default path fast, cheap, stable, and natural”.
 
 Current baseline to optimize from:
-- Narrative baseline: [2026-03-28-representation-theory-gemini-runtime-improvements.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory-gemini-runtime-improvements.md)
+- Narrative baseline: [2026-03-29-representation-theory-durable-baseline.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-durable-baseline.md)
 - Baseline JSON: [representation-theory.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/baselines/representation-theory.json)
 - Main benchmark page:
   - `https://en.wikipedia.org/wiki/Representation_theory`
+- Supporting quality scorecard:
+  - [2026-03-29-two-track-quality-scorecard.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-two-track-quality-scorecard.md)
 
 Primary goals:
 1. Reduce request count without losing the fast first paint.
@@ -49,9 +53,9 @@ Work:
 - Strengthen fragment cache reuse on follow-up lazy work.
 
 Success criteria:
-- Request count on the baseline page: `101 -> 70 or less`
-- First visible translation stays under `5s`
-- Full completion moves toward `180s` range
+- Request count on the baseline page: `15 -> 14 or less`
+- First visible translation stays under `2s`
+- Full completion moves toward `35s` range
 
 ## 2. Cost and Token Efficiency
 
@@ -66,8 +70,8 @@ Work:
 - Keep glossary/context helpful, but trim any repeated prompt overhead that does not improve consistency.
 
 Success criteria:
-- Total tokens on the baseline page: `120,851 -> 100,000` range
-- Estimated cost on the baseline page: `~$0.102 -> below $0.09`
+- Total tokens on the baseline page: `28,541 -> 27,000` range
+- Estimated cost on the baseline page: `$0.02485775 -> below $0.024`
 
 ## 3. Quality Benchmarks
 
@@ -77,7 +81,7 @@ Focus:
 - [docs/metrics](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics)
 
 Work:
-- Add a repeatable quality bench on top of the existing real-page benchmark:
+- Keep the repeatable quality bench durable on top of the existing real-page benchmark:
   - complex math
   - commutative-diagram media
   - rich HTML preservation

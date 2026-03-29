@@ -1,6 +1,6 @@
 # Live Metrics Comparison
 
-Baseline: `/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/baselines/representation-theory.json`
+Baseline: `/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/baselines/representation-theory-2026-03-28-phase1.json`
 Candidate: `/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-metrics.json`
 
 Scenario:
@@ -11,28 +11,27 @@ Scenario:
 
 | Metric | Baseline | Candidate | Delta | Delta % | Interpretation |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Request count | 17 | 17 | 0 | 0.00% | no change |
-| Prompt tokens | 18079 | 18079 | 0 | 0.00% | no change |
-| Completion tokens | 17962 | 17962 | 0 | 0.00% | no change |
-| Total tokens | 36041 | 36041 | 0 | 0.00% | no change |
-| Time to first visible translation (ms) | 2428 | 2428 | 0 | 0.00% | no change |
-| Time to full completion (ms) | 50373 | 50373 | 0 | 0.00% | no change |
-| Peak in-flight requests | 3 | 3 | 0 | 0.00% | no change |
-| Cost (USD) | $0.031463 | $0.031463 | $0.000000 | 0.00% | no change |
-| Immediate phase complete (ms) | 0 | 2370 | +2370 | n/a | regressed |
-| Lazy-visible phase complete (ms) | 0 | 13120 | +13120 | n/a | regressed |
+| Request count | 17 | 15 | -2 | -11.76% | improved |
+| Prompt tokens | 18079 | 14163 | -3916 | -21.66% | improved |
+| Completion tokens | 17962 | 14160 | -3802 | -21.17% | improved |
+| Total tokens | 36041 | 28323 | -7718 | -21.41% | improved |
+| Time to first visible translation (ms) | 2428 | 1724 | -704 | -29.00% | improved |
+| Time to full completion (ms) | 50373 | 32627 | -17746 | -35.23% | improved |
+| Peak in-flight requests | 3 | 5 | +2 | +66.67% | higher |
+| Cost (USD) | $0.031463 | $0.024781 | -$0.006682 | -21.23% | improved |
+| Immediate phase complete (ms) | 0 | 1659 | +1659 | n/a | regressed |
+| Lazy-visible phase complete (ms) | 0 | 16015 | +16015 | n/a | regressed |
 | Retry count | 0 | 0 | 0 | n/a | no change |
 | Batch splits | 0 | 0 | 0 | n/a | no change |
 | Fragment splits | 0 | 0 | 0 | n/a | no change |
 | Persistent cache hits | 0 | 0 | 0 | n/a | no change |
-| Cache misses | 0 | 259 | +259 | n/a | regressed |
+| Cache misses | 0 | 241 | +241 | n/a | regressed |
 | Immediate requests | 0 | 1 | +1 | n/a | regressed |
-| Lazy-visible requests | 0 | 4 | +4 | n/a | regressed |
-| Deferred requests | 0 | 12 | +12 | n/a | regressed |
+| Lazy-visible requests | 0 | 5 | +5 | n/a | regressed |
+| Deferred requests | 0 | 9 | +9 | n/a | regressed |
 
 Cost source:
 - Baseline: `metrics-json`
 - Candidate: `metrics-json`
 
-Generated at: 2026-03-28T14:08:37.852Z
-
+Generated at: 2026-03-29T02:54:59.369Z

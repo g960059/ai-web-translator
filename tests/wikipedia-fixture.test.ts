@@ -87,8 +87,10 @@ describe('Wikipedia-derived mathematical fixture', () => {
     expect(matrixImage?.alt).toContain('\\begin{pmatrix}');
 
     expect(
-      document.querySelector('#linear-representation a[title="General linear group"]'),
+      document.querySelector('#linear-representation a[href="/wiki/General_linear_group"]'),
     ).toBeInTheDocument();
-    expect(document.querySelector('#diagram-tail a[title="Equivariant map"]')).toBeInTheDocument();
+    expect(
+      document.querySelector('#diagram-tail a[href="/wiki/Equivariant_map"]'),
+    ).toBeInTheDocument();
   });
 });

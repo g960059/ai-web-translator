@@ -63,10 +63,11 @@ const PLACEHOLDER_RICH_TEXT_TAGS = new Set([
   'TIME',
   'U',
 ]);
-const PLACEHOLDER_MARKER_PREFIX = '[[TX';
-const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*TX(\d+)(O|C)\s*\]\]/g;
-const PROTECTED_HTML_MARKER_PREFIX = '[[HX';
-const PROTECTED_HTML_MARKER_PATTERN = /\[\[\s*HX(\d+)\s*\]\]/g;
+const PREPARED_ATTR_MARKER_NAME = 'x';
+const PLACEHOLDER_MARKER_NAME = 't';
+const PROTECTED_HTML_MARKER_NAME = 'x';
+const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*(\/?)\s*t(\d+)\s*\]\]/gi;
+const PROTECTED_HTML_MARKER_PATTERN = /\[\[\s*x(\d+)\s*\]\]/gi;
 const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
   'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"]';
 const PROTECTED_HTML_SELECTOR = '.mwe-math-element, img.mw-file-element';
@@ -103,7 +104,7 @@ export function prepareContentForTranslation(
 
       const markerId = String(nextId++);
       restoreMap[markerId] = attributes;
-      return `<${tagName} data-ai-tx-attrs="${markerId}">`;
+      return `<${tagName} ${PREPARED_ATTR_MARKER_NAME}=${markerId}>`;
     },
   );
 
@@ -127,7 +128,7 @@ export function restorePreparedContent(
   }
 
   return content.replace(
-    /<([a-z0-9-]+)\s+data-ai-tx-attrs="(\d+)"\s*>/gi,
+    /<([a-z0-9-]+)\s+x\s*=\s*"?(\d+)"?\s*>/gi,
     (match, tagName: string, markerId: string) => {
       const attributes = restoreMap[markerId];
       if (!attributes) {
@@ -147,6 +148,21 @@ export function sanitizeTranslatedHtml(content: string): string {
 
   sanitizeTranslatedNodeTree(container);
   return container.innerHTML;
+}
+
+export function setElementHtmlContent(
+  element: HTMLElement,
+  content: string,
+  options: { sanitize?: boolean } = {},
+): void {
+  const nextContent = options.sanitize ? sanitizeTranslatedHtml(content) : content;
+
+  if (!isXmlLikeDocument(element.ownerDocument)) {
+    element.innerHTML = nextContent;
+    return;
+  }
+
+  replaceXmlLikeElementChildren(element, nextContent);
 }
 
 export function supportsPlaceholderRichTextHtml(html: string): boolean {
@@ -189,7 +205,8 @@ export function restorePlaceholderRichText(
 ): string {
   const normalizedMarkers = content.replace(
     PLACEHOLDER_MARKER_PATTERN,
-    (_match, id: string, edge: string) => `${PLACEHOLDER_MARKER_PREFIX}${id}${edge}]]`,
+    (_match, closingSlash: string, id: string) =>
+      closingSlash ? `[[/${PLACEHOLDER_MARKER_NAME}${id}]]` : `[[${PLACEHOLDER_MARKER_NAME}${id}]]`,
   );
 
   return Object.entries(tagMap).reduce(
@@ -212,7 +229,7 @@ export function protectAtomicHtmlForTranslation(html: string): ProtectedHtmlCont
   ).filter((element) => !element.parentElement?.closest(PROTECTED_HTML_SELECTOR));
 
   protectedNodes.forEach((element) => {
-    const marker = `${PROTECTED_HTML_MARKER_PREFIX}${nextId++}]]`;
+    const marker = `[[${PROTECTED_HTML_MARKER_NAME}${nextId++}]]`;
     htmlMap[marker] = element.outerHTML;
     element.replaceWith(parsed.createTextNode(marker));
   });
@@ -230,7 +247,7 @@ export function protectAtomicHtmlForTranslation(html: string): ProtectedHtmlCont
 export function restoreProtectedHtml(content: string, htmlMap: Record<string, string>): string {
   const normalizedMarkers = content.replace(
     PROTECTED_HTML_MARKER_PATTERN,
-    (_match, id: string) => `${PROTECTED_HTML_MARKER_PREFIX}${id}]]`,
+    (_match, id: string) => `[[${PROTECTED_HTML_MARKER_NAME}${id}]]`,
   );
 
   return Object.entries(htmlMap).reduce(
@@ -286,8 +303,8 @@ function serializePlaceholderRichTextNode(
   }
 
   const id = String(nextId());
-  const openToken = `${PLACEHOLDER_MARKER_PREFIX}${id}O]]`;
-  const closeToken = `${PLACEHOLDER_MARKER_PREFIX}${id}C]]`;
+  const openToken = `[[${PLACEHOLDER_MARKER_NAME}${id}]]`;
+  const closeToken = `[[/${PLACEHOLDER_MARKER_NAME}${id}]]`;
   tagMap[openToken] = buildOpeningTag(node);
   tagMap[closeToken] = `</${node.tagName.toLowerCase()}>`;
 
@@ -438,6 +455,68 @@ function sanitizeTranslatedNodeTree(root: ParentNode): void {
     sanitizeTranslatedAttributes(element);
     sanitizeTranslatedNodeTree(element);
   });
+}
+
+function isXmlLikeDocument(documentRef: Document): boolean {
+  const contentType = (documentRef.contentType || '').toLowerCase();
+  return contentType.includes('xml') && contentType !== 'text/html';
+}
+
+function replaceXmlLikeElementChildren(element: HTMLElement, content: string): void {
+  const parsed = new DOMParser().parseFromString(`<div>${content}</div>`, 'text/html');
+  const container = parsed.body.firstElementChild as HTMLElement | null;
+  const fragment = element.ownerDocument.createDocumentFragment();
+
+  if (container) {
+    Array.from(container.childNodes).forEach((node) => {
+      const cloned = cloneMarkupNodeIntoDocument(node, element.ownerDocument);
+      if (cloned) {
+        fragment.appendChild(cloned);
+      }
+    });
+  }
+
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+  element.appendChild(fragment);
+}
+
+function cloneMarkupNodeIntoDocument(node: ChildNode, targetDocument: Document): Node | null {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return targetDocument.createTextNode(node.textContent ?? '');
+  }
+
+  if (node.nodeType === Node.COMMENT_NODE) {
+    return targetDocument.createComment(node.textContent ?? '');
+  }
+
+  if (!(node instanceof Element)) {
+    return null;
+  }
+
+  const namespace = node.namespaceURI || targetDocument.documentElement?.namespaceURI || null;
+  const localName = node.localName || node.tagName.toLowerCase();
+  const clone = namespace
+    ? targetDocument.createElementNS(namespace, localName)
+    : targetDocument.createElement(localName);
+
+  Array.from(node.attributes).forEach((attribute) => {
+    if (attribute.namespaceURI) {
+      clone.setAttributeNS(attribute.namespaceURI, attribute.name, attribute.value);
+      return;
+    }
+    clone.setAttribute(attribute.name, attribute.value);
+  });
+
+  Array.from(node.childNodes).forEach((child) => {
+    const clonedChild = cloneMarkupNodeIntoDocument(child, targetDocument);
+    if (clonedChild) {
+      clone.appendChild(clonedChild);
+    }
+  });
+
+  return clone;
 }
 
 function sanitizeTranslatedAttributes(element: HTMLElement): void {

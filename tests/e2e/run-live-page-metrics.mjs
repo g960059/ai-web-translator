@@ -9,6 +9,7 @@ dotenv.config();
 const apiKey = process.env.E2E_OPENROUTER_API_KEY;
 const modelId = process.env.E2E_TRANSLATION_MODEL || 'google/gemini-3.1-flash-lite-preview';
 const outputSuffix = process.env.E2E_OUTPUT_SUFFIX?.trim();
+const debugRequests = process.env.E2E_DEBUG_REQUESTS === '1';
 const targetUrl = process.argv[2];
 
 if (!apiKey) {
@@ -64,6 +65,18 @@ try {
         finishedAt: Date.now(),
         request: requestJson,
         response: payload,
+        debug: debugRequests
+          ? {
+              requestSnippet: JSON.stringify(requestJson?.messages?.at(-1)?.content ?? '').slice(
+                0,
+                1800,
+              ),
+              responseSnippet: JSON.stringify(payload?.choices?.[0]?.message?.content ?? '').slice(
+                0,
+                2200,
+              ),
+            }
+          : undefined,
       });
       await route.fulfill({
         response,
@@ -170,6 +183,8 @@ try {
     retryCounts: runtimeMetrics?.retryCounts ?? null,
     cacheStats: runtimeMetrics?.cacheStats ?? null,
     requestCountsByPhase: runtimeMetrics?.requestCountsByPhase ?? null,
+    splitStats: runtimeMetrics?.splitStats ?? null,
+    immediateBatch: runtimeMetrics?.immediateBatch ?? null,
     costUsd: estimatedCostUsd,
     pageQuality: {
       before: beforeQuality,
@@ -179,6 +194,15 @@ try {
     screenshotPath,
     startedAt: new Date(startedAt).toISOString(),
     generatedAt: new Date().toISOString(),
+    debug: debugRequests
+      ? {
+          requests: requests.map((entry, index) => ({
+            index: index + 1,
+            requestSnippet: entry.debug?.requestSnippet ?? '',
+            responseSnippet: entry.debug?.responseSnippet ?? '',
+          })),
+        }
+      : undefined,
   };
 
   await writeFile(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, 'utf8');
@@ -199,6 +223,15 @@ try {
   partialMetrics.concurrency = {
     peakInFlightRequests,
   };
+  if (debugRequests) {
+    partialMetrics.debug = {
+      requests: requests.map((entry, index) => ({
+        index: index + 1,
+        requestSnippet: entry.debug?.requestSnippet ?? '',
+        responseSnippet: entry.debug?.responseSnippet ?? '',
+      })),
+    };
+  }
   await writeFile(metricsPath, `${JSON.stringify(partialMetrics, null, 2)}\n`, 'utf8');
   throw error;
 } finally {
@@ -349,11 +382,29 @@ async function fetchModelPricing(modelId) {
 async function collectPageQuality(page) {
   return page.evaluate(() => {
     const root =
-      document.querySelector('.mw-parser-output, #mw-content-text, article, main, [role="main"]') ??
+      document.querySelector(
+        '#revision, .mw-parser-output, #mw-content-text, article, main, [role="main"]',
+      ) ??
       document.body;
+    const excludedParagraphSelector = [
+      '.rightHandSide',
+      '.maruku_toc',
+      '.toc',
+      '.navigation',
+      '.hatnote',
+      '.navbox',
+      '.reflist',
+      '.references',
+      '.metadata',
+      '.sidebar',
+      '.infobox',
+      'ol.references',
+      'table.infobox',
+    ].join(', ');
 
     const normalize = (text) => text.replace(/\s+/g, ' ').trim();
     const paragraphs = Array.from(root.querySelectorAll('p'))
+      .filter((element) => !element.closest(excludedParagraphSelector))
       .map((element) => normalize(element.textContent || ''))
       .filter((text) => text.length >= 40)
       .slice(0, 4);

@@ -1,6 +1,6 @@
 {
   "scenarioId": "wikipedia-representation-theory-full-page-ja",
-  "capturedAt": "2026-03-28T14:06:34.012Z",
+  "capturedAt": "2026-03-29T02:54:59.369Z",
   "targetUrl": "https://en.wikipedia.org/wiki/Representation_theory",
   "provider": "openrouter",
   "modelId": "google/gemini-3.1-flash-lite-preview",
@@ -8,23 +8,74 @@
   "targetLanguage": "ja",
   "style": "auto",
   "cacheEnabled": false,
-  "requestCount": 17,
+  "requestCount": 15,
   "elapsedMs": {
-    "toFirstVisibleTranslation": 2428,
-    "toFullCompletion": 50373
+    "toFirstVisibleTranslation": 1724,
+    "toFullCompletion": 32627
   },
   "usage": {
-    "promptTokens": 18079,
-    "completionTokens": 17962,
-    "totalTokens": 36041
+    "promptTokens": 14163,
+    "completionTokens": 14160,
+    "totalTokens": 28323
   },
   "concurrency": {
-    "peakInFlightRequests": 3
+    "peakInFlightRequests": 5
   },
-  "costUsd": 0.03146275,
+  "phaseTimings": {
+    "immediateCompletedMs": 1659,
+    "lazyVisibleCompletedMs": 16015,
+    "completedMs": 32463
+  },
+  "retryCounts": {
+    "total": 0,
+    "transient": 0,
+    "outputLimit": 0,
+    "fragmentCountMismatch": 0,
+    "invalidPayload": 0,
+    "batchSplits": 0,
+    "fragmentSplits": 0
+  },
+  "cacheStats": {
+    "memoryHits": 0,
+    "persistentHits": 0,
+    "misses": 241
+  },
+  "requestCountsByPhase": {
+    "immediate": 1,
+    "lazyVisible": 5,
+    "deferred": 9
+  },
+  "splitStats": {
+    "batchByContentMode": {
+      "text": 0,
+      "html": 0
+    },
+    "batchByMarkerPresence": {
+      "marked": 0,
+      "plain": 0
+    },
+    "batchBySize": {
+      "one": 0,
+      "two": 0,
+      "threeOrFour": 0,
+      "fiveOrMore": 0
+    },
+    "fragmentByContentMode": {
+      "text": 0,
+      "html": 0
+    }
+  },
+  "costUsd": 0.02478075,
   "costSource": "metrics-json",
+  "pageQuality": {
+    "after": {
+      "mathElements": 129,
+      "fallbackImages": 118,
+      "mediaImages": 5
+    }
+  },
   "artifacts": {
-    "docPath": "/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory-gemini-runtime-improvements.md",
+    "docPath": "/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-durable-baseline.md",
     "metricsPath": "/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-metrics.json",
     "screenshotPath": "/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-translated.png"
   }

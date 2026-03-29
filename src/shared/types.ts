@@ -89,11 +89,44 @@ export interface SessionRequestCountsByPhase {
   deferred: number;
 }
 
+export interface SessionSplitStats {
+  batchByContentMode: {
+    text: number;
+    html: number;
+  };
+  batchByMarkerPresence: {
+    marked: number;
+    plain: number;
+  };
+  batchBySize: {
+    one: number;
+    two: number;
+    threeOrFour: number;
+    fiveOrMore: number;
+  };
+  fragmentByContentMode: {
+    text: number;
+    html: number;
+  };
+}
+
+export interface SessionImmediateBatchMetrics {
+  groupCount: number;
+  fragmentCount: number;
+  contentMode: TranslationContentMode | 'mixed';
+  preparedChars: number;
+  estimatedPromptTokens: number;
+  hasMarkers: boolean;
+  providerLatencyMs: number | null;
+}
+
 export interface SessionRuntimeMetrics {
   phaseTimings: SessionPhaseTimings;
   retryCounts: SessionRetryCounts;
   cacheStats: SessionCacheStats;
   requestCountsByPhase: SessionRequestCountsByPhase;
+  splitStats: SessionSplitStats;
+  immediateBatch: SessionImmediateBatchMetrics | null;
 }
 
 export interface SessionSnapshot {

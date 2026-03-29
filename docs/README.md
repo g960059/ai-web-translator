@@ -12,7 +12,11 @@ This repository uses four doc surfaces:
   - repeatable operational procedures
 
 Current starting points:
-- Current metrics baseline: [2026-03-28-representation-theory-gemini-runtime-improvements.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory-gemini-runtime-improvements.md)
+- Current metrics baseline: [2026-03-29-representation-theory-durable-baseline.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-durable-baseline.md)
+- Current HTML stability sample: [2026-03-29-representation-theory-stability-sample.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-stability-sample.md)
+- Current XHTML/XML track: [2026-03-29-yoneda-lemma-xhtml-track.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-yoneda-lemma-xhtml-track.md)
+- Current quality scorecard: [2026-03-29-two-track-quality-scorecard.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-two-track-quality-scorecard.md)
+- Previous optimized baseline: [2026-03-28-representation-theory-gemini-runtime-improvements.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory-gemini-runtime-improvements.md)
 - Historical baseline: [2026-03-28-representation-theory.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory.md)
 - Model evaluation: [2026-03-28-openrouter-model-evaluation.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-openrouter-model-evaluation.md)
 - Real-page comparison: [2026-03-28-representation-theory-real-page-model-comparison.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-28-representation-theory-real-page-model-comparison.md)

@@ -2,6 +2,7 @@ import {
   buildTranslationContext,
   collectSelectionBlocks,
   collectTranslatableBlocks,
+  debugCollectRecoveryProbe,
   isLikelyAlreadyTargetLanguage,
   resolveScopeRoot,
   type BlockSeed,
@@ -23,7 +24,7 @@ import {
   restorePreparedContent,
   restoreProtectedHtml,
   restorePlaceholderRichText,
-  sanitizeTranslatedHtml,
+  setElementHtmlContent,
   splitHtmlIntoSafeSegments,
 } from '../core/html';
 import {
@@ -37,6 +38,7 @@ import type {
   ActionResponse,
   AnalysisResponse,
   ContentCommandMessage,
+  DebugBlocksResponse,
   SessionSnapshotResponse,
   SelectionStateResponse,
   TranslateApiResponse,
@@ -114,6 +116,7 @@ interface TranslationBatchItem {
   restoreMap: Record<string, string>;
   placeholderTagMap?: Record<string, string>;
   protectedHtmlMap?: Record<string, string>;
+  hasMarkers: boolean;
   estimatedTokens: number;
   rawEstimatedTokens: number;
 }
@@ -128,6 +131,12 @@ interface BatchStrategy {
   tokenLimit: number;
   itemLimit: number;
   concurrency: number;
+  minimumTokenFloor?: number;
+}
+
+interface BatchBucketLimits {
+  tokenLimit: number;
+  itemLimit: number;
   minimumTokenFloor?: number;
 }
 
@@ -151,6 +160,7 @@ interface TranslationRuntimeState {
 interface PageScanSnapshot {
   pageSignature: string;
   scope: DefaultTranslationScope;
+  root: HTMLElement;
   records: BlockRecord[];
   derivedSnapshots: Map<string, DerivedPageSnapshot>;
 }
@@ -174,8 +184,8 @@ interface LazyPageSession {
 
 const IMMEDIATE_BATCH_TOKEN_LIMIT = 1050;
 const IMMEDIATE_BATCH_ITEM_LIMIT = 6;
-const DEFERRED_BATCH_TOKEN_LIMIT = 4200;
-const DEFERRED_BATCH_ITEM_LIMIT = 24;
+const DEFERRED_BATCH_TOKEN_LIMIT = 6000;
+const DEFERRED_BATCH_ITEM_LIMIT = 36;
 const MAX_BATCH_RETRIES = 1;
 const RETRY_BACKOFF_MS = 1200;
 const API_WAIT_NOTICE_MS = 5000;
@@ -189,15 +199,18 @@ const LAZY_FORCE_FLUSH_BOTTOM_THRESHOLD_PX = 96;
 const IMMEDIATE_GROUP_TOKEN_BUDGET = 780;
 const IMMEDIATE_GROUP_LIMIT = 1;
 const IMMEDIATE_CANDIDATE_VIEWPORT_MULTIPLIER = 0.95;
-const LAZY_PREFETCH_MIN_TOKENS = 2400;
-const LAZY_PREFETCH_MAX_EXTRA_GROUPS = 6;
-const LAZY_PREFETCH_VIEWPORT_MULTIPLIER = 2.5;
+const IMMEDIATE_GROUP_HARD_TOKEN_CAP = 560;
+const IMMEDIATE_GROUP_MAX_FRAGMENT_COUNT = 3;
+const LAZY_PREFETCH_MIN_TOKENS = 5200;
+const LAZY_PREFETCH_MAX_EXTRA_GROUPS = 12;
+const LAZY_PREFETCH_VIEWPORT_MULTIPLIER = 4;
 const BATCH_SCALE_MIN = 0.75;
 const BATCH_SCALE_BACKOFF = 0.75;
+const MAX_GLOSSARY_HINTS = 4;
 const MIN_RUNTIME_CONCURRENCY = 2;
-const DEFAULT_RUNTIME_CONCURRENCY = 4;
-const MAX_RUNTIME_CONCURRENCY = 5;
-const RUNTIME_CONCURRENCY_PROMOTION_STREAK = 8;
+const DEFAULT_RUNTIME_CONCURRENCY = 5;
+const MAX_RUNTIME_CONCURRENCY = 6;
+const RUNTIME_CONCURRENCY_PROMOTION_STREAK = 4;
 class OutputLimitTranslationError extends Error {
   constructor() {
     super(OUTPUT_LIMIT_ERROR_MESSAGE);
@@ -233,6 +246,9 @@ export class TranslationController {
   private readonly cancelledSessionIds = new Set<string>();
   private sessionMetricsStartedAt = 0;
   private sessionMetrics: SessionRuntimeMetrics | null = null;
+  private prewarmTimerId: number | null = null;
+  private prewarmPromise: Promise<void> | null = null;
+  private prewarmKey: string | null = null;
   private sessionSnapshot: SessionSnapshot = {
     pageKey: window.location.href,
     status: 'idle',
@@ -268,6 +284,7 @@ export class TranslationController {
       .then((settings) => {
         this.overlay.setTargetLanguage(settings.targetLanguage);
         this.overlay.detectAndPrompt(settings.targetLanguage);
+        this.schedulePagePrewarm(settings);
       })
       .catch(() => {
         const fallbackLanguage = chrome.i18n?.getUILanguage?.() ?? 'ja';
@@ -278,7 +295,13 @@ export class TranslationController {
 
   async handleMessage(
     message: ContentCommandMessage,
-  ): Promise<ActionResponse | AnalysisResponse | SelectionStateResponse | SessionSnapshotResponse> {
+  ): Promise<
+    | ActionResponse
+    | AnalysisResponse
+    | DebugBlocksResponse
+    | SelectionStateResponse
+    | SessionSnapshotResponse
+  > {
     this.resetForNavigationIfNeeded();
 
     switch (message.type) {
@@ -298,6 +321,8 @@ export class TranslationController {
         return this.cancelTranslation();
       case 'GET_PAGE_ANALYSIS':
         return this.getPageAnalysis(message.settings, message.scope);
+      case 'GET_DEBUG_BLOCKS':
+        return this.getDebugBlocks(message.settings, message.scope);
       case 'GET_SELECTION_STATE':
         return {
           ok: true,
@@ -327,6 +352,7 @@ export class TranslationController {
       void chrome.runtime.sendMessage({ type: 'CANCEL_TRANSLATION' }).catch(() => undefined);
     }
     this.cancelLazyPageSession(false);
+    this.cancelPrewarm();
     this.pageSignature = nextSignature;
     this.pageKey = window.location.href;
     this.blocksByElement.clear();
@@ -391,6 +417,7 @@ export class TranslationController {
   ): Promise<ActionResponse> {
     this.cancelLazyPageSession();
     const settings = await this.resolveSettings(providedSettings, providedScope);
+    await this.awaitMatchingPrewarm(settings);
     const context = this.buildContext(settings.targetLanguage);
     const scan = this.collectPageScan(settings.resolvedScope);
     const derived = await this.getOrCreateDerivedPageSnapshot(scan, settings, context);
@@ -520,6 +547,7 @@ export class TranslationController {
     providedScope?: DefaultTranslationScope,
   ): Promise<AnalysisResponse> {
     const settings = await this.resolveSettings(providedSettings, providedScope);
+    await this.awaitMatchingPrewarm(settings);
     const context = this.buildContext(settings.targetLanguage);
     const scan = this.collectPageScan(settings.resolvedScope);
     const derived = await this.getOrCreateDerivedPageSnapshot(scan, settings, context);
@@ -527,6 +555,45 @@ export class TranslationController {
     return {
       ok: true,
       analysis,
+    };
+  }
+
+  private async getDebugBlocks(
+    providedSettings?: ExtensionSettings,
+    providedScope?: DefaultTranslationScope,
+  ): Promise<DebugBlocksResponse> {
+    const settings = await this.resolveSettings(providedSettings, providedScope);
+    await this.awaitMatchingPrewarm(settings);
+    const context = this.buildContext(settings.targetLanguage);
+    const scan = this.collectPageScan(settings.resolvedScope);
+    const derived = await this.getOrCreateDerivedPageSnapshot(scan, settings, context);
+
+    return {
+      ok: true,
+      debug: {
+        pageKey: this.pageKey,
+        scope: settings.resolvedScope,
+        root: this.describeElement(scan.root),
+        recoveryProbe: debugCollectRecoveryProbe(scan.root),
+        recordCount: scan.records.length,
+        records: scan.records.slice(0, 12).map((record) => ({
+          ...this.describeElement(record.element),
+          contentMode: record.contentMode,
+          textLength: record.originalText.length,
+          htmlLength: record.originalHtml.length,
+          preview: record.originalText.slice(0, 180),
+        })),
+        groupCount: derived.groups.length,
+        groups: derived.groups.slice(0, 12).map((group) => ({
+          contentMode: group.contentMode,
+          queueClass: group.queueClass,
+          recordCount: group.records.length,
+          fragmentCount: group.requestFragments.length,
+          estimatedTokens: group.estimatedTokens,
+          preview: group.records[0]?.originalText.slice(0, 180) ?? '',
+          element: group.records[0] ? this.describeElement(group.records[0].element) : null,
+        })),
+      },
     };
   }
 
@@ -724,6 +791,7 @@ export class TranslationController {
     const snapshot: PageScanSnapshot = {
       pageSignature: this.pageSignature,
       scope,
+      root,
       records,
       derivedSnapshots: new Map(),
     };
@@ -776,6 +844,18 @@ export class TranslationController {
     return records;
   }
 
+  private describeElement(element: HTMLElement): {
+    tagName: string;
+    id: string;
+    className: string;
+  } {
+    return {
+      tagName: element.tagName.toLowerCase(),
+      id: element.id || '',
+      className: element.className || '',
+    };
+  }
+
   private async getOrCreateDerivedPageSnapshot(
     scan: PageScanSnapshot,
     settings: ResolvedSettings,
@@ -798,6 +878,77 @@ export class TranslationController {
 
     scan.derivedSnapshots.set(derivedKey, derived);
     return derived;
+  }
+
+  private schedulePagePrewarm(settings: ExtensionSettings): void {
+    if (!settings.apiKey.trim() || this.sessionSnapshot.activeSessionId) {
+      return;
+    }
+
+    const resolvedScope = settings.translateFullPage ? 'page' : 'main';
+    const prewarmKey = this.buildPrewarmKey(settings, resolvedScope);
+    if (this.prewarmKey === prewarmKey || this.prewarmPromise) {
+      return;
+    }
+
+    this.cancelPrewarm();
+    this.prewarmKey = prewarmKey;
+    this.prewarmTimerId = window.setTimeout(() => {
+      this.prewarmTimerId = null;
+      this.prewarmPromise = this.runPagePrewarm(settings, resolvedScope)
+        .catch(() => undefined)
+        .finally(() => {
+          this.prewarmPromise = null;
+        });
+    }, 120);
+  }
+
+  private async runPagePrewarm(
+    settings: ExtensionSettings,
+    resolvedScope: DefaultTranslationScope,
+  ): Promise<void> {
+    if (this.sessionSnapshot.activeSessionId || this.pageSignature !== window.location.href) {
+      return;
+    }
+
+    const context = this.buildContext(settings.targetLanguage);
+    const scan = this.collectPageScan(resolvedScope);
+    await this.getOrCreateDerivedPageSnapshot(scan, {
+      ...settings,
+      resolvedScope,
+    }, context);
+  }
+
+  private async awaitMatchingPrewarm(settings: ResolvedSettings): Promise<void> {
+    const expectedKey = this.buildPrewarmKey(settings, settings.resolvedScope);
+    if (!this.prewarmPromise || this.prewarmKey !== expectedKey) {
+      return;
+    }
+
+    await this.prewarmPromise.catch(() => undefined);
+  }
+
+  private buildPrewarmKey(
+    settings: Pick<ExtensionSettings, 'provider' | 'model' | 'targetLanguage' | 'style'>,
+    scope: DefaultTranslationScope,
+  ): string {
+    return [
+      this.pageSignature,
+      scope,
+      settings.provider,
+      settings.model,
+      settings.targetLanguage,
+      settings.style,
+    ].join('|');
+  }
+
+  private cancelPrewarm(): void {
+    if (this.prewarmTimerId !== null) {
+      window.clearTimeout(this.prewarmTimerId);
+      this.prewarmTimerId = null;
+    }
+    this.prewarmKey = null;
+    this.prewarmPromise = null;
   }
 
   private buildDerivedGroups(
@@ -895,11 +1046,13 @@ export class TranslationController {
         tokenLimit: immediateStrategy.tokenLimit,
         itemLimit: immediateStrategy.itemLimit,
         minimumTokenFloor: immediateStrategy.minimumTokenFloor,
+        ...this.getBatchingOverrides('immediate'),
       }).map(toEstimateBatchShape),
       ...batchBatchItems(deferredItems, {
         tokenLimit: deferredStrategy.tokenLimit,
         itemLimit: deferredStrategy.itemLimit,
         minimumTokenFloor: deferredStrategy.minimumTokenFloor,
+        ...this.getBatchingOverrides('deferred'),
       }).map(toEstimateBatchShape),
     ];
   }
@@ -1044,7 +1197,10 @@ export class TranslationController {
     const fallbackCandidates = candidatePool.filter((group) => group.contentMode !== 'text');
 
     const trySchedule = (pool: TranslationGroup[]): void => {
-      pool.forEach((group) => {
+      const safePool = pool.filter((group) => isSafeImmediateGroup(group, calibration));
+      const effectivePool = safePool.length > 0 ? safePool : pool;
+
+      effectivePool.forEach((group) => {
         if (immediateGroups.length >= IMMEDIATE_GROUP_LIMIT) {
           return;
         }
@@ -1114,17 +1270,20 @@ export class TranslationController {
 
     const buildPlan = (
       groups: TranslationGroup[],
+      profile: 'immediate' | 'deferred',
     ): { strategy: BatchStrategy; batches: TranslationBatchItem[][] } => {
       const batchItems = createBatchItems(groups, options.runtimeState.calibration);
+      const batchOverrides = this.getBatchingOverrides(profile);
       const strategy = resolveBatchStrategy(
         batchItems,
-        options.batchProfile,
+        profile,
         options.runtimeState,
       );
       const batches = batchBatchItems(batchItems, {
         tokenLimit: strategy.tokenLimit,
         itemLimit: strategy.itemLimit,
         minimumTokenFloor: strategy.minimumTokenFloor,
+        ...batchOverrides,
       });
       return { strategy, batches };
     };
@@ -1139,8 +1298,8 @@ export class TranslationController {
         : options.groups;
     const batchPlans =
       leadGroups.length > 0
-        ? [buildPlan(leadGroups), buildPlan(remainingGroups)]
-        : [buildPlan(remainingGroups)];
+        ? [buildPlan(leadGroups, 'immediate'), buildPlan(remainingGroups, options.batchProfile)]
+        : [buildPlan(remainingGroups, options.batchProfile)];
 
     this.recordRequestBatches(
       options.metricsPhase,
@@ -1194,6 +1353,7 @@ export class TranslationController {
                 sessionId: options.sessionId,
                 overlayMessage: options.overlayMessage,
                 showOverlay: options.showOverlay,
+                metricsPhase: options.metricsPhase,
               });
             } catch (error) {
               if (shouldFallbackToOriginalBatch(batch, error)) {
@@ -1224,17 +1384,25 @@ export class TranslationController {
               );
               const normalizedProtectedFragment =
                 item.placeholderTagMap || item.protectedHtmlMap
-                ? tightenProtectedMarkerSpacing(
-                    preparedFragment,
-                    options.settings.targetLanguage,
-                  )
-                : preparedFragment;
+                  ? tightenProtectedMarkerSpacing(
+                      preparedFragment,
+                      options.settings.targetLanguage,
+                    )
+                  : preparedFragment;
+              const protectedSafeFragment =
+                item.protectedHtmlMap &&
+                !hasAllProtectedMarkers(
+                  normalizedProtectedFragment,
+                  item.protectedHtmlMap,
+                )
+                  ? item.preparedContent
+                  : normalizedProtectedFragment;
               const placeholderRestoredFragment = item.placeholderTagMap
                 ? restorePlaceholderRichText(
-                    normalizedProtectedFragment,
+                    protectedSafeFragment,
                     item.placeholderTagMap,
                   )
-                : normalizedProtectedFragment;
+                : protectedSafeFragment;
               const restoredFragment = item.protectedHtmlMap
                 ? restoreProtectedHtml(
                     placeholderRestoredFragment,
@@ -1332,7 +1500,13 @@ export class TranslationController {
   ): Promise<TranslationRequestResult> {
     this.throwIfSessionCancelled(sessionId);
     const requestFragments = items.map((item) => item.preparedContent);
-    const fragmentIds = items.map((_, index) => `f${index}`);
+    const contentMode = items[0]?.contentMode ?? 'html';
+    const hasProtectedMarkers = items.some((item) => item.hasMarkers);
+    const useFragmentIds =
+      requestFragments.length >= 4 || (contentMode === 'html' && hasProtectedMarkers);
+    const fragmentIds = useFragmentIds
+      ? requestFragments.map((_, index) => index.toString(36))
+      : undefined;
     const batchEstimate = toEstimateBatchShape(items);
     const request: TranslationBatchRequest = {
       provider: settings.provider,
@@ -1341,15 +1515,13 @@ export class TranslationController {
       sourceLanguage: context.sourceLanguage,
       targetLanguage: settings.targetLanguage,
       style: settings.style,
-      contentMode: items[0]?.contentMode ?? 'html',
+      contentMode,
       context,
       fragments: requestFragments,
       fragmentIds,
       sectionContext: resolveBatchSectionContext(items),
       glossary: buildGlossaryHints(runtimeState, items),
-      hasProtectedMarkers: items.some(
-        (item) => Boolean(item.placeholderTagMap || item.protectedHtmlMap),
-      ),
+      hasProtectedMarkers,
       maxOutputTokens: estimateCompletionTokensForBatch(
         batchEstimate,
         runtimeState.calibration,
@@ -1399,12 +1571,14 @@ export class TranslationController {
     sessionId: string;
     overlayMessage: string;
     showOverlay: boolean;
+    metricsPhase: 'immediate' | 'lazyVisible' | 'deferred';
   }): Promise<TranslationRequestResult> {
     let attempt = 0;
 
     while (true) {
       let waitingNoticeId: number | null = null;
       let showedWaitingNotice = false;
+      let requestStartedAt = 0;
 
       try {
         this.throwIfSessionCancelled(options.sessionId);
@@ -1455,6 +1629,11 @@ export class TranslationController {
           }, API_WAIT_NOTICE_MS);
         }
 
+        if (options.metricsPhase === 'immediate') {
+          this.recordImmediateBatchShape(options.items, options.runtimeState.calibration);
+        }
+
+        requestStartedAt = Date.now();
         const result = await this.requestTranslations(
           options.items,
           options.settings,
@@ -1462,6 +1641,9 @@ export class TranslationController {
           options.runtimeState,
           options.sessionId,
         );
+        if (options.metricsPhase === 'immediate' && requestStartedAt > 0) {
+          this.recordImmediateBatchLatency(Date.now() - requestStartedAt);
+        }
 
         if (result.finishReason === 'length') {
           throw new OutputLimitTranslationError();
@@ -1507,6 +1689,7 @@ export class TranslationController {
               splitSizes: singleItemSplit.map((item) => item.preparedContent.length),
             });
             this.recordRetry('fragmentSplits');
+            this.recordFragmentSplitStats(options.items[0]);
 
             const splitResult = await this.requestTranslationsWithRetry({
               ...options,
@@ -1556,6 +1739,7 @@ export class TranslationController {
             splitSizes: splitResults.map((items) => items.length),
           });
           this.recordRetry('batchSplits');
+          this.recordBatchSplitStats(options.items);
 
           const combined: TranslationRequestResult = {
             translations: [],
@@ -1711,7 +1895,7 @@ export class TranslationController {
       if (record.contentMode === 'text') {
         record.element.textContent = translatedContent;
       } else {
-        record.element.innerHTML = sanitizeTranslatedHtml(translatedContent);
+        setElementHtmlContent(record.element, translatedContent, { sanitize: true });
       }
 
       record.translatedContent = translatedContent;
@@ -1726,7 +1910,7 @@ export class TranslationController {
 
   private restoreRecords(records: BlockRecord[]): void {
     records.forEach((record) => {
-      record.element.innerHTML = record.originalHtml;
+      setElementHtmlContent(record.element, record.originalHtml);
       record.displayState = 'original';
       record.element.style.outline = 'none';
     });
@@ -2210,6 +2394,27 @@ export class TranslationController {
         lazyVisible: 0,
         deferred: 0,
       },
+      splitStats: {
+        batchByContentMode: {
+          text: 0,
+          html: 0,
+        },
+        batchByMarkerPresence: {
+          marked: 0,
+          plain: 0,
+        },
+        batchBySize: {
+          one: 0,
+          two: 0,
+          threeOrFour: 0,
+          fiveOrMore: 0,
+        },
+        fragmentByContentMode: {
+          text: 0,
+          html: 0,
+        },
+      },
+      immediateBatch: null,
     };
   }
 
@@ -2262,6 +2467,79 @@ export class TranslationController {
 
     this.sessionMetrics.retryCounts.total += 1;
     this.sessionMetrics.retryCounts[reason] += 1;
+  }
+
+  private recordBatchSplitStats(items: TranslationBatchItem[]): void {
+    if (!this.sessionMetrics || items.length === 0) {
+      return;
+    }
+
+    const contentMode = items[0]?.contentMode ?? 'html';
+    this.sessionMetrics.splitStats.batchByContentMode[contentMode] += 1;
+
+    const hasMarkers = items.some(
+      (item) => Boolean(item.placeholderTagMap) || Boolean(item.protectedHtmlMap),
+    );
+    this.sessionMetrics.splitStats.batchByMarkerPresence[hasMarkers ? 'marked' : 'plain'] += 1;
+
+    if (items.length <= 1) {
+      this.sessionMetrics.splitStats.batchBySize.one += 1;
+    } else if (items.length === 2) {
+      this.sessionMetrics.splitStats.batchBySize.two += 1;
+    } else if (items.length <= 4) {
+      this.sessionMetrics.splitStats.batchBySize.threeOrFour += 1;
+    } else {
+      this.sessionMetrics.splitStats.batchBySize.fiveOrMore += 1;
+    }
+  }
+
+  private recordFragmentSplitStats(item: TranslationBatchItem | undefined): void {
+    if (!this.sessionMetrics || !item) {
+      return;
+    }
+
+    this.sessionMetrics.splitStats.fragmentByContentMode[item.contentMode] += 1;
+  }
+
+  private recordImmediateBatchShape(
+    items: TranslationBatchItem[],
+    calibration: EstimateCalibrationSnapshot,
+  ): void {
+    if (!this.sessionMetrics || this.sessionMetrics.immediateBatch || items.length === 0) {
+      return;
+    }
+
+    const contentMode = resolveImmediateBatchContentMode(items);
+    const preparedChars = items.reduce((sum, item) => sum + item.preparedContent.length, 0);
+    const hasMarkers = items.some(
+      (item) => Boolean(item.placeholderTagMap) || Boolean(item.protectedHtmlMap),
+    );
+    const batchEstimate: EstimateBatchShape = {
+      contentMode: contentMode === 'mixed' ? items[0].contentMode : contentMode,
+      preparedChars,
+      fragmentCount: items.length,
+    };
+
+    this.sessionMetrics.immediateBatch = {
+      groupCount: new Set(items.map((item) => item.group.groupKey)).size,
+      fragmentCount: items.length,
+      contentMode,
+      preparedChars,
+      estimatedPromptTokens: estimatePromptTokensForBatch(batchEstimate, calibration),
+      hasMarkers,
+      providerLatencyMs: null,
+    };
+  }
+
+  private recordImmediateBatchLatency(latencyMs: number): void {
+    if (
+      !this.sessionMetrics?.immediateBatch ||
+      this.sessionMetrics.immediateBatch.providerLatencyMs !== null
+    ) {
+      return;
+    }
+
+    this.sessionMetrics.immediateBatch.providerLatencyMs = latencyMs;
   }
 
   private recordBatchSuccess(
@@ -2517,6 +2795,29 @@ export class TranslationController {
     });
     return session.cacheStore;
   }
+
+  private getBatchingOverrides(profile: 'immediate' | 'deferred'): {
+    plainHtmlItemLimit?: number;
+    plainHtmlMinimumTokenFloor?: number;
+    plainHtmlAverageTokenThreshold?: number;
+  } {
+    if (isXmlLikeRuntimeDocument(this.documentRef)) {
+      return {
+        plainHtmlItemLimit: 4,
+        plainHtmlMinimumTokenFloor: 1400,
+      };
+    }
+
+    if (profile === 'deferred') {
+      return {
+        plainHtmlItemLimit: 4,
+        plainHtmlMinimumTokenFloor: 1800,
+        plainHtmlAverageTokenThreshold: 260,
+      };
+    }
+
+    return {};
+  }
 }
 
 function createBatchItems(
@@ -2533,6 +2834,7 @@ function createBatchItems(
       restoreMap: fragment.restoreMap,
       placeholderTagMap: fragment.placeholderTagMap,
       protectedHtmlMap: fragment.protectedHtmlMap,
+      hasMarkers: Boolean(fragment.placeholderTagMap || fragment.protectedHtmlMap),
       estimatedTokens: estimatePromptTokensForContent(
         fragment.requestContentMode,
         fragment.preparedContent.length,
@@ -2549,21 +2851,31 @@ function batchBatchItems(
     tokenLimit: number;
     itemLimit: number;
     minimumTokenFloor?: number;
+    plainHtmlItemLimit?: number;
+    plainHtmlMinimumTokenFloor?: number;
+    plainHtmlAverageTokenThreshold?: number;
   } = {
     tokenLimit: DEFERRED_BATCH_TOKEN_LIMIT,
     itemLimit: DEFERRED_BATCH_ITEM_LIMIT,
   },
 ): TranslationBatchItem[][] {
   const batches: TranslationBatchItem[][] = [];
-  const modeBuckets = new Map<TranslationContentMode, TranslationBatchItem[]>();
+  const modeBuckets = new Map<string, TranslationBatchItem[]>();
 
   items.forEach((item) => {
-    const bucket = modeBuckets.get(item.contentMode) ?? [];
+    const bucketKey = getBatchBucketKey(item);
+    const bucket = modeBuckets.get(bucketKey) ?? [];
     bucket.push(item);
-    modeBuckets.set(item.contentMode, bucket);
+    modeBuckets.set(bucketKey, bucket);
   });
 
   modeBuckets.forEach((bucket) => {
+    const bucketLimits = resolveBucketBatchLimits(bucket, options, {
+      plainHtmlItemLimit: options.plainHtmlItemLimit,
+      plainHtmlMinimumTokenFloor: options.plainHtmlMinimumTokenFloor,
+      plainHtmlAverageTokenThreshold: options.plainHtmlAverageTokenThreshold,
+    });
+    const bucketBatches: TranslationBatchItem[][] = [];
     let currentBatch: TranslationBatchItem[] = [];
     let currentTokens = 0;
 
@@ -2571,9 +2883,9 @@ function batchBatchItems(
       const nextTokens = currentTokens + item.estimatedTokens;
       if (
         currentBatch.length > 0 &&
-        (nextTokens > options.tokenLimit || currentBatch.length >= options.itemLimit)
+        (nextTokens > bucketLimits.tokenLimit || currentBatch.length >= bucketLimits.itemLimit)
       ) {
-        batches.push(currentBatch);
+        bucketBatches.push(currentBatch);
         currentBatch = [];
         currentTokens = 0;
       }
@@ -2583,29 +2895,28 @@ function batchBatchItems(
     });
 
     if (currentBatch.length > 0) {
-      batches.push(currentBatch);
+      bucketBatches.push(currentBatch);
     }
 
-    if (
-      options.minimumTokenFloor &&
-      batches.length >= 2
-    ) {
-      const lastBatch = batches[batches.length - 1];
-      const previousBatch = batches[batches.length - 2];
+    if (bucketLimits.minimumTokenFloor && bucketBatches.length >= 2) {
+      const lastBatch = bucketBatches[bucketBatches.length - 1];
+      const previousBatch = bucketBatches[bucketBatches.length - 2];
       const lastBatchTokens = lastBatch.reduce((sum, item) => sum + item.estimatedTokens, 0);
       const mergedCount = previousBatch.length + lastBatch.length;
       const mergedTokens =
         previousBatch.reduce((sum, item) => sum + item.estimatedTokens, 0) + lastBatchTokens;
 
       if (
-        lastBatchTokens < options.minimumTokenFloor &&
-        mergedCount <= options.itemLimit &&
-        mergedTokens <= options.tokenLimit
+        lastBatchTokens < bucketLimits.minimumTokenFloor &&
+        mergedCount <= bucketLimits.itemLimit &&
+        mergedTokens <= bucketLimits.tokenLimit
       ) {
         previousBatch.push(...lastBatch);
-        batches.pop();
+        bucketBatches.pop();
       }
     }
+
+    batches.push(...bucketBatches);
   });
 
   return batches;
@@ -2674,37 +2985,99 @@ function resolveBatchStrategy(
 
   if (textOnly && !hasLargeItem && averageEstimatedTokens <= 180) {
     return {
-      tokenLimit: scaled(4200),
-      itemLimit: 24,
-      concurrency: capConcurrency(4),
-      minimumTokenFloor: 1800,
+      tokenLimit: scaled(6200),
+      itemLimit: 34,
+      concurrency: capConcurrency(5),
+      minimumTokenFloor: 2800,
     };
   }
 
   if (!hasLargeItem && !htmlHeavy && averageEstimatedTokens <= 260) {
     return {
-      tokenLimit: scaled(3600),
-      itemLimit: 18,
-      concurrency: capConcurrency(4),
-      minimumTokenFloor: 1600,
+      tokenLimit: scaled(5600),
+      itemLimit: 28,
+      concurrency: capConcurrency(5),
+      minimumTokenFloor: 2600,
     };
   }
 
   if (!hasLargeItem && averageEstimatedTokens <= 340) {
     return {
-      tokenLimit: scaled(2600),
-      itemLimit: 12,
-      concurrency: capConcurrency(3),
-      minimumTokenFloor: 1200,
+      tokenLimit: scaled(3800),
+      itemLimit: 16,
+      concurrency: capConcurrency(5),
+      minimumTokenFloor: 2200,
     };
   }
 
   return {
-    tokenLimit: scaled(2100),
-    itemLimit: 10,
-    concurrency: capConcurrency(3),
-    minimumTokenFloor: 1000,
+    tokenLimit: scaled(3000),
+    itemLimit: 14,
+    concurrency: capConcurrency(5),
+    minimumTokenFloor: 1800,
   };
+}
+
+function getBatchBucketKey(item: TranslationBatchItem): string {
+  if (item.contentMode === 'html') {
+    return item.hasMarkers ? 'html:marked' : 'html:plain';
+  }
+
+  return item.contentMode;
+}
+
+function resolveBucketBatchLimits(
+  bucket: TranslationBatchItem[],
+  defaults: BatchBucketLimits,
+  overrides: {
+    plainHtmlItemLimit?: number;
+    plainHtmlMinimumTokenFloor?: number;
+    plainHtmlAverageTokenThreshold?: number;
+  } = {},
+): BatchBucketLimits {
+  if (bucket.length === 0) {
+    return defaults;
+  }
+
+  const first = bucket[0];
+  if (first.contentMode !== 'html') {
+    return defaults;
+  }
+
+  const hasMarkers = bucket.some((item) => item.hasMarkers);
+  if (hasMarkers) {
+    return defaults;
+  }
+
+  if (!overrides.plainHtmlItemLimit) {
+    return defaults;
+  }
+
+  const averageEstimatedTokens =
+    bucket.reduce((sum, item) => sum + item.estimatedTokens, 0) / bucket.length;
+  if (
+    overrides.plainHtmlAverageTokenThreshold !== undefined &&
+    averageEstimatedTokens < overrides.plainHtmlAverageTokenThreshold
+  ) {
+    return defaults;
+  }
+
+  return {
+    tokenLimit: defaults.tokenLimit,
+    itemLimit: Math.min(defaults.itemLimit, overrides.plainHtmlItemLimit),
+    minimumTokenFloor:
+      defaults.minimumTokenFloor === undefined
+        ? undefined
+        : Math.min(
+            defaults.minimumTokenFloor,
+            overrides.plainHtmlMinimumTokenFloor ?? defaults.minimumTokenFloor,
+          ),
+  };
+}
+
+function isXmlLikeRuntimeDocument(documentRef: Document): boolean {
+  const contentType = (documentRef.contentType || '').toLowerCase();
+  return contentType.includes('xml') && contentType !== 'text/html';
 }
 
 function isRetryableTranslationError(error: unknown): boolean {
@@ -2757,6 +3130,17 @@ function getGroupPreparedChars(group: TranslationGroup): number {
   );
 }
 
+function resolveImmediateBatchContentMode(
+  items: TranslationBatchItem[],
+): TranslationContentMode | 'mixed' {
+  const firstMode = items[0]?.contentMode;
+  if (!firstMode) {
+    return 'text';
+  }
+
+  return items.every((item) => item.contentMode === firstMode) ? firstMode : 'mixed';
+}
+
 function getGroupPromptTokens(
   group: TranslationGroup,
   calibration: EstimateCalibrationSnapshot,
@@ -2769,6 +3153,32 @@ function getGroupPromptTokens(
     },
     calibration,
   );
+}
+
+function isSafeImmediateGroup(
+  group: TranslationGroup,
+  calibration: EstimateCalibrationSnapshot,
+): boolean {
+  const estimatedTokens = getGroupPromptTokens(group, calibration);
+  if (estimatedTokens > IMMEDIATE_GROUP_HARD_TOKEN_CAP) {
+    return false;
+  }
+
+  if (group.requestFragments.length > IMMEDIATE_GROUP_MAX_FRAGMENT_COUNT) {
+    return false;
+  }
+
+  const hasOversizedFragment = group.requestFragments.some(
+    (fragment) =>
+      estimatePromptTokensForContent(
+        fragment.requestContentMode,
+        fragment.preparedContent.length,
+        calibration,
+      ) >
+      IMMEDIATE_GROUP_HARD_TOKEN_CAP,
+  );
+
+  return !hasOversizedFragment;
 }
 
 function compareGroupsForScheduling(left: TranslationGroup, right: TranslationGroup): number {
@@ -2816,6 +3226,8 @@ function resolveImmediateSchedulingScore(
   viewportHeight: number,
 ): number {
   let score = group.priorityScore;
+  const preparedChars = getGroupPreparedChars(group);
+  const fragmentCount = group.requestFragments.length;
   if (group.contentMode === 'text') {
     score += 180;
   }
@@ -2827,6 +3239,18 @@ function resolveImmediateSchedulingScore(
   }
   if (group.sectionContext && group.records.some((record) => record.element.tagName === 'P')) {
     score += 90;
+  }
+  if (fragmentCount === 1) {
+    score += 140;
+  } else {
+    score -= Math.min(240, (fragmentCount - 1) * 140);
+  }
+  if (preparedChars <= 260) {
+    score += 110;
+  } else if (preparedChars <= 420) {
+    score += 45;
+  } else if (preparedChars >= 720) {
+    score -= 80;
   }
   return score;
 }
@@ -2849,7 +3273,7 @@ function buildGlossaryHints(
   runtimeState: TranslationRuntimeState,
   items: TranslationBatchItem[],
 ): Array<{ source: string; target: string }> | undefined {
-  if (runtimeState.glossary.size === 0) {
+  if (runtimeState.glossary.size === 0 || !items.every((item) => item.contentMode === 'text')) {
     return undefined;
   }
 
@@ -2860,7 +3284,7 @@ function buildGlossaryHints(
   );
   const hints = Array.from(runtimeState.glossary.entries())
     .filter(([source]) => !currentSources.has(source))
-    .slice(0, 12)
+    .slice(0, MAX_GLOSSARY_HINTS)
     .map(([source, target]) => ({ source, target }));
 
   return hints.length > 0 ? hints : undefined;
@@ -2888,8 +3312,15 @@ function tightenProtectedMarkerSpacing(content: string, targetLanguage: string):
   }
 
   return content
-    .replace(/\s*(\[\[(?:TX\d+[OC]|HX\d+)\]\])\s*/g, '$1')
+    .replace(/\s*(\[\[(?:\/?t\d+|x\d+)\]\])\s*/gi, '$1')
     .replace(/\s+([。、！？])/g, '$1');
+}
+
+function hasAllProtectedMarkers(
+  content: string,
+  htmlMap: Record<string, string>,
+): boolean {
+  return Object.keys(htmlMap).every((marker) => content.includes(marker));
 }
 
 function splitTextIntoSegments(text: string, maxChars = MAX_TEXT_FRAGMENT_CHARS): string[] {

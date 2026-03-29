@@ -3,9 +3,12 @@ import {
   normalizeHtml,
   prepareContentForTranslation,
   preparePlaceholderRichTextForTranslation,
+  protectAtomicHtmlForTranslation,
   restorePreparedContent,
+  restoreProtectedHtml,
   restorePlaceholderRichText,
   sanitizeTranslatedHtml,
+  setElementHtmlContent,
   splitHtmlIntoSafeSegments,
   supportsPlaceholderRichTextHtml,
 } from '../src/core/html';
@@ -66,6 +69,159 @@ describe('core html and block extraction', () => {
     expect(blocks.some((block) => /share search menu/i.test(block.originalText))).toBe(false);
   });
 
+  it('prunes right-hand side and generated table-of-contents chrome from wiki-like pages', () => {
+    setDocumentHtml(`<!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main id="revision">
+            <div class="rightHandSide">
+              <p>Sidebar taxonomy and related concepts.</p>
+              <p><a href="/nlab/show/category">category</a></p>
+            </div>
+            <div class="maruku_toc">
+              <p>Contents</p>
+              <p><a href="#idea">Idea</a></p>
+            </div>
+            <h2>Idea</h2>
+            <p id="idea-copy">The Yoneda lemma explains representable presheaves.</p>
+          </main>
+        </body>
+      </html>`);
+
+    const blocks = collectTranslatableBlocks(resolveScopeRoot(document, 'page'));
+
+    expect(blocks.some((block) => block.element.closest('.rightHandSide'))).toBe(false);
+    expect(blocks.some((block) => block.element.closest('.maruku_toc'))).toBe(false);
+    expect(
+      blocks.some((block) => /The Yoneda lemma explains representable presheaves/i.test(block.originalText)),
+    ).toBe(true);
+  });
+
+  it('prefers revision root for ncatlab-style XHTML pages', () => {
+    setDocumentHtml(`<!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <div class="navigation">
+            <p>Home Page Latest Revisions Random Page</p>
+          </div>
+          <div id="revision">
+            <div class="rightHandSide">
+              <p>Sidebar taxonomy and related concepts.</p>
+            </div>
+            <div class="maruku_toc">
+              <p>Contents</p>
+            </div>
+            <h2>Idea</h2>
+            <p id="idea-copy">The Yoneda lemma identifies maps out of representables.</p>
+            <p>It is one of the central organizing ideas in category theory and presheaf reasoning.</p>
+            <p>Applications appear in sheaf theory, higher category theory, and homotopy theory.</p>
+          </div>
+        </body>
+      </html>`);
+
+    const root = resolveScopeRoot(document, 'main');
+    const blocks = collectTranslatableBlocks(root);
+
+    expect(root.id).toBe('revision');
+    expect(
+      blocks.some((block) => /identifies maps out of representables/i.test(block.originalText)),
+    ).toBe(true);
+    expect(blocks.some((block) => block.element.closest('.rightHandSide'))).toBe(false);
+  });
+
+  it('does not collapse nested XHTML body wrappers into a single giant revision block', () => {
+    setDocumentHtml(`<!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <div id="revision">
+            <body>
+              <head><title>Contents</title></head>
+              <div class="rightHandSide">
+                <p>Sidebar taxonomy and related concepts.</p>
+              </div>
+              <h2>Idea</h2>
+              <p id="idea-copy">The Yoneda lemma identifies maps out of representables.</p>
+              <p>It is a central organizing principle in category theory.</p>
+            </body>
+          </div>
+        </body>
+      </html>`);
+
+    const root = resolveScopeRoot(document, 'main');
+    const blocks = collectTranslatableBlocks(root);
+
+    expect(root.id).toBe('revision');
+    expect(blocks.some((block) => block.element.id === 'revision')).toBe(false);
+    expect(
+      blocks.some((block) => /identifies maps out of representables/i.test(block.originalText)),
+    ).toBe(true);
+  });
+
+  it('does not treat a generic wrapper with multiple structured descendants as one block', () => {
+    setDocumentHtml(`<!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <div id="wrapper">
+              <div class="navigation">Home Page | Latest Revisions</div>
+              <div class="content-shell">
+                <h2>Idea</h2>
+                <p id="lead-copy">The Yoneda lemma identifies maps out of representables.</p>
+                <p>It is a central organizing principle in category theory.</p>
+              </div>
+            </div>
+          </main>
+        </body>
+      </html>`);
+
+    const blocks = collectTranslatableBlocks(resolveScopeRoot(document, 'main'));
+
+    expect(blocks.some((block) => block.element.id === 'wrapper')).toBe(false);
+    expect(blocks.some((block) => block.element.id === 'lead-copy')).toBe(true);
+  });
+
+  it('recovers structured descendant blocks instead of falling back to the whole body', () => {
+    setDocumentHtml(`<!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <div class="shell">
+            <div class="content-wrapper">
+              <div class="content-inner">
+                <h2>Idea</h2>
+                <p id="lead-copy">The Yoneda lemma identifies maps out of representables.</p>
+                <p>It is a central organizing principle in category theory.</p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>`);
+
+    const blocks = collectTranslatableBlocks(resolveScopeRoot(document, 'page'));
+
+    expect(blocks.some((block) => block.element.tagName === 'BODY')).toBe(false);
+    expect(blocks.some((block) => block.element.id === 'lead-copy')).toBe(true);
+  });
+
+  it('keeps prose paragraphs with many links instead of pruning them as boilerplate', () => {
+    setDocumentHtml(`<!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="lead-copy">
+              The <a href="/nlab/show/Yoneda+lemma">Yoneda lemma</a> is a central result in
+              <a href="/nlab/show/category+theory">category theory</a>, especially in
+              <a href="/nlab/show/sheaf+theory">sheaf theory</a> and
+              <a href="/nlab/show/topos+theory">topos theory</a>.
+            </p>
+          </main>
+        </body>
+      </html>`);
+
+    const blocks = collectTranslatableBlocks(resolveScopeRoot(document, 'main'));
+
+    expect(blocks.some((block) => block.element.id === 'lead-copy')).toBe(true);
+  });
+
   it('merges adjacent inline-link paragraphs into one bounded section block', () => {
     setDocumentHtml(`<!DOCTYPE html>
       <html lang="en">
@@ -93,7 +249,7 @@ describe('core html and block extraction', () => {
     const prepared = prepareContentForTranslation(html, 'html', 'readable');
     const restored = restorePreparedContent(prepared.content, 'html', prepared.restoreMap);
 
-    expect(prepared.content).toContain('data-ai-tx-attrs');
+    expect(prepared.content).toContain('<a x=0>');
     expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
   });
 
@@ -104,10 +260,29 @@ describe('core html and block extraction', () => {
     const prepared = preparePlaceholderRichTextForTranslation(html);
 
     expect(prepared).not.toBeNull();
-    expect(prepared?.content).toContain('[[TX');
+    expect(prepared?.content).toContain('[[t0]]');
     expect(supportsPlaceholderRichTextHtml(html)).toBe(true);
 
     const restored = restorePlaceholderRichText(prepared!.content, prepared!.tagMap);
+    expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
+  });
+
+  it('round-trips placeholder-rich text after protecting inline media html', () => {
+    const html =
+      '<a href="/wiki/representation_theory">Representation theory</a> <img class="mw-file-element" src="/diagram.svg" alt="diagram"> uses <em>characters</em>.';
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    expect(protectedHtml).not.toBeNull();
+
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    expect(placeholder).not.toBeNull();
+
+    const placeholderRestored = restorePlaceholderRichText(
+      placeholder!.content,
+      placeholder!.tagMap,
+    );
+    const restored = restoreProtectedHtml(placeholderRestored, protectedHtml!.htmlMap);
+
     expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
   });
 
@@ -152,6 +327,54 @@ describe('core html and block extraction', () => {
     expect(sanitized).not.toContain('onerror=');
     expect(sanitized).not.toContain('javascript:');
     expect(sanitized).not.toContain('<script>');
+  });
+
+  it('applies translated html into XHTML documents without using innerHTML assignment', () => {
+    const xmlDocument = document.implementation.createDocument(
+      'http://www.w3.org/1999/xhtml',
+      'html',
+      null,
+    );
+    const body = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'body');
+    xmlDocument.documentElement.appendChild(body);
+    const paragraph = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'p');
+    body.appendChild(paragraph);
+
+    expect(() =>
+      setElementHtmlContent(
+        paragraph as unknown as HTMLElement,
+        '<a href="javascript:alert(1)" onclick="alert(1)">Read more</a><img src="x" onerror="alert(1)">',
+        { sanitize: true },
+      ),
+    ).not.toThrow();
+
+    const serialized = new XMLSerializer().serializeToString(paragraph);
+    expect(serialized).toContain('<a>Read more</a>');
+    expect(serialized).toContain('<img src="x" />');
+    expect(serialized).not.toContain('onclick=');
+    expect(serialized).not.toContain('onerror=');
+    expect(serialized).not.toContain('javascript:');
+  });
+
+  it('restores original markup into XHTML documents', () => {
+    const xmlDocument = document.implementation.createDocument(
+      'http://www.w3.org/1999/xhtml',
+      'html',
+      null,
+    );
+    const body = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'body');
+    xmlDocument.documentElement.appendChild(body);
+    const paragraph = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'p');
+    body.appendChild(paragraph);
+
+    setElementHtmlContent(
+      paragraph as unknown as HTMLElement,
+      '<span class="lead">Yoneda <em>lemma</em></span><img src="/diagram.svg" alt="diagram">',
+    );
+
+    const serialized = new XMLSerializer().serializeToString(paragraph);
+    expect(serialized).toContain('<span class="lead">Yoneda <em>lemma</em></span>');
+    expect(serialized).toContain('<img src="/diagram.svg" alt="diagram" />');
   });
 
   it('escapes double quotes in serialized opening tags', () => {
