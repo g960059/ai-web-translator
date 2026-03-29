@@ -2,6 +2,7 @@ import type {
   DefaultTranslationScope,
   ExtensionSettings,
   PageAnalysis,
+  ProviderId,
   ProviderModelInfo,
   SessionSnapshot,
   TabSessionState,
@@ -93,6 +94,12 @@ export interface GetProviderModelsMessage {
   type: 'GET_PROVIDER_MODELS';
 }
 
+export interface WarmTranslationProviderMessage {
+  type: 'WARM_TRANSLATION_PROVIDER';
+  provider: ProviderId;
+  model: string;
+}
+
 export type ContentCommandMessage =
   | StartTranslationMessage
   | TogglePageMessage
@@ -112,7 +119,8 @@ export type BackgroundMessage =
   | SessionStateChangedMessage
   | ClearAllCacheMessage
   | CancelTranslationMessage
-  | GetProviderModelsMessage;
+  | GetProviderModelsMessage
+  | WarmTranslationProviderMessage;
 
 export type RuntimeMessage =
   | ContentCommandMessage

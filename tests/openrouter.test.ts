@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   OPENROUTER_REQUEST_TIMEOUT_MS,
+  OPENROUTER_WARMUP_TIMEOUT_MS,
   translateWithOpenRouter,
+  warmOpenRouterConnection,
 } from '../src/core/providers/openrouter';
 import type { TranslationBatchRequest } from '../src/shared/types';
 
@@ -341,5 +343,58 @@ describe('translateWithOpenRouter', () => {
 
     expect(systemPrompt).toContain('[[t0]]');
     expect(systemPrompt).toContain('[[x0]]');
+  });
+});
+
+describe('warmOpenRouterConnection', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', ORIGINAL_FETCH);
+  });
+
+  it('warms the OpenRouter connection against the models endpoint', async () => {
+    let url = '';
+    let method = '';
+    let cacheMode = '';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        url = String(input);
+        method = String(init?.method ?? 'GET');
+        cacheMode = String(init?.cache ?? '');
+        return {
+          ok: true,
+          text: async () => '{"data":[]}',
+        };
+      }),
+    );
+
+    await expect(warmOpenRouterConnection()).resolves.toBeUndefined();
+    expect(url).toContain('/api/v1/models');
+    expect(method).toBe('GET');
+    expect(cacheMode).toBe('no-store');
+  });
+
+  it('times out a stalled warmup request', async () => {
+    vi.useFakeTimers();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_, init?: RequestInit) => {
+        return new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            const abortError = new Error('The request was aborted.');
+            abortError.name = 'AbortError';
+            reject(abortError);
+          });
+        });
+      }),
+    );
+
+    const warmupPromise = warmOpenRouterConnection();
+    const assertion = expect(warmupPromise).rejects.toThrow('OpenRouter warmup timed out.');
+    await vi.advanceTimersByTimeAsync(OPENROUTER_WARMUP_TIMEOUT_MS + 10);
+    await assertion;
   });
 });

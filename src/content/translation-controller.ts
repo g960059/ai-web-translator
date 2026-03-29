@@ -219,6 +219,7 @@ const MIN_RUNTIME_CONCURRENCY = 2;
 const DEFAULT_RUNTIME_CONCURRENCY = 5;
 const MAX_RUNTIME_CONCURRENCY = 6;
 const RUNTIME_CONCURRENCY_PROMOTION_STREAK = 4;
+const PROVIDER_WARMUP_DELAY_MS = 2_500;
 class OutputLimitTranslationError extends Error {
   constructor() {
     super(OUTPUT_LIMIT_ERROR_MESSAGE);
@@ -257,6 +258,9 @@ export class TranslationController {
   private prewarmTimerId: number | null = null;
   private prewarmPromise: Promise<void> | null = null;
   private prewarmKey: string | null = null;
+  private providerWarmupTimerId: number | null = null;
+  private providerWarmupPromise: Promise<void> | null = null;
+  private providerWarmupKey: string | null = null;
   private sessionSnapshot: SessionSnapshot = {
     pageKey: window.location.href,
     status: 'idle',
@@ -292,6 +296,7 @@ export class TranslationController {
       .then((settings) => {
         this.overlay.setTargetLanguage(settings.targetLanguage);
         this.overlay.detectAndPrompt(settings.targetLanguage);
+        this.scheduleProviderWarmup(settings);
         this.schedulePagePrewarm(settings);
       })
       .catch(() => {
@@ -424,6 +429,7 @@ export class TranslationController {
     providedScope?: DefaultTranslationScope,
   ): Promise<ActionResponse> {
     this.cancelLazyPageSession();
+    this.cancelProviderWarmup();
     const settings = await this.resolveSettings(providedSettings, providedScope);
     await this.awaitMatchingPrewarm(settings);
     const context = this.buildContext(settings.targetLanguage);
@@ -498,6 +504,7 @@ export class TranslationController {
     providedSettings?: ExtensionSettings,
   ): Promise<ActionResponse> {
     this.cancelLazyPageSession();
+    this.cancelProviderWarmup();
     const settings = await this.resolveSettings(providedSettings);
     const records = this.collectSelectionRecords();
     if (records.length === 0) {
@@ -915,6 +922,33 @@ export class TranslationController {
     }, 120);
   }
 
+  private scheduleProviderWarmup(settings: ExtensionSettings): void {
+    if (!settings.apiKey.trim() || this.sessionSnapshot.activeSessionId) {
+      return;
+    }
+
+    const warmupKey = `${settings.provider}|${settings.model}`;
+    if (this.providerWarmupKey === warmupKey || this.providerWarmupPromise) {
+      return;
+    }
+
+    this.cancelProviderWarmup();
+    this.providerWarmupKey = warmupKey;
+    this.providerWarmupTimerId = window.setTimeout(() => {
+      this.providerWarmupTimerId = null;
+      this.providerWarmupPromise = chrome.runtime
+        .sendMessage({
+          type: 'WARM_TRANSLATION_PROVIDER',
+          provider: settings.provider,
+          model: settings.model,
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          this.providerWarmupPromise = null;
+        });
+    }, PROVIDER_WARMUP_DELAY_MS);
+  }
+
   private async runPagePrewarm(
     settings: ExtensionSettings,
     resolvedScope: DefaultTranslationScope,
@@ -961,6 +995,16 @@ export class TranslationController {
     }
     this.prewarmKey = null;
     this.prewarmPromise = null;
+    this.cancelProviderWarmup();
+  }
+
+  private cancelProviderWarmup(): void {
+    if (this.providerWarmupTimerId !== null) {
+      window.clearTimeout(this.providerWarmupTimerId);
+      this.providerWarmupTimerId = null;
+    }
+    this.providerWarmupKey = null;
+    this.providerWarmupPromise = null;
   }
 
   private buildDerivedGroups(

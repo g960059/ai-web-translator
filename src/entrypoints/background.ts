@@ -14,7 +14,9 @@ import { loadSettings } from '../shared/settings';
 
 const sessionStore = new TabSessionStore();
 const MODELS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const PROVIDER_WARMUP_TTL_MS = 45_000;
 const providerModelsCache = new Map<string, { fetchedAt: number; models: Awaited<ReturnType<ReturnType<typeof getTranslationProvider>['listModels']>> }>();
+const providerWarmupCache = new Map<string, number>();
 const activeTranslationControllers = new Map<number, Set<AbortController>>();
 
 void initializeContextMenus().then(refreshActiveTabContextMenus);
@@ -193,6 +195,32 @@ async function handleMessage(
         ok: true,
         models,
       };
+    }
+    case 'WARM_TRANSLATION_PROVIDER': {
+      const provider = getTranslationProvider(message.provider);
+      if (!provider.warmup) {
+        return { ok: true, message: 'Provider does not require warmup.' };
+      }
+
+      const cacheKey = `${message.provider}:${message.model}`;
+      const warmedAt = providerWarmupCache.get(cacheKey);
+      const now = Date.now();
+      if (typeof warmedAt === 'number' && now - warmedAt < PROVIDER_WARMUP_TTL_MS) {
+        return { ok: true, message: 'Provider warmup still fresh.' };
+      }
+
+      try {
+        await provider.warmup();
+        providerWarmupCache.set(cacheKey, now);
+        return { ok: true, message: 'Provider warmup complete.' };
+      } catch (error) {
+        logWithContext('debug', '[AI Web Translator] Provider warmup failed.', {
+          provider: message.provider,
+          model: message.model,
+          error,
+        });
+        return { ok: false, message: 'Provider warmup failed.' };
+      }
     }
     default:
       return {

@@ -17,6 +17,7 @@ interface OpenRouterModelsResponse {
 }
 
 export const OPENROUTER_REQUEST_TIMEOUT_MS = 30_000;
+export const OPENROUTER_WARMUP_TIMEOUT_MS = 8_000;
 const OPENROUTER_MAX_OUTPUT_TOKENS_MIN = 192;
 const OPENROUTER_MAX_OUTPUT_TOKENS_MAX = 7000;
 const OPENROUTER_MAX_OUTPUT_TOKENS_HEADROOM = 1.45;
@@ -426,4 +427,35 @@ export async function getOpenRouterModels(): Promise<ProviderModelInfo[]> {
           : undefined,
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function warmOpenRouterConnection(): Promise<void> {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, OPENROUTER_WARMUP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to warm OpenRouter connection.');
+    }
+
+    await response.text();
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('OpenRouter warmup timed out.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
