@@ -93,6 +93,7 @@ interface TranslationGroup {
     placeholderTagMap?: Record<string, string>;
     placeholderWrapperPrefix?: string;
     placeholderWrapperSuffix?: string;
+    skipWrapperRestore?: boolean;
     protectedHtmlMap?: Record<string, string>;
   }>;
   normalizedSource: string;
@@ -120,6 +121,7 @@ interface TranslationBatchItem {
   placeholderTagMap?: Record<string, string>;
   placeholderWrapperPrefix?: string;
   placeholderWrapperSuffix?: string;
+  skipWrapperRestore?: boolean;
   protectedHtmlMap?: Record<string, string>;
   hasMarkers: boolean;
   estimatedTokens: number;
@@ -596,6 +598,10 @@ export class TranslationController {
           recordCount: group.records.length,
           fragmentCount: group.requestFragments.length,
           estimatedTokens: group.estimatedTokens,
+          skipWrapperRestore: group.requestFragments.some((fragment) => fragment.skipWrapperRestore),
+          hasProtectedMarkers: group.requestFragments.some((fragment) =>
+            Boolean(fragment.protectedHtmlMap && Object.keys(fragment.protectedHtmlMap).length > 0),
+          ),
           preview: group.records[0]?.originalText.slice(0, 180) ?? '',
           element: group.records[0] ? this.describeElement(group.records[0].element) : null,
         })),
@@ -1425,7 +1431,9 @@ export class TranslationController {
                   )
                 : protectedSafeFragment;
               const wrappedPlaceholderFragment =
-                item.placeholderWrapperPrefix && item.placeholderWrapperSuffix
+                !item.skipWrapperRestore &&
+                item.placeholderWrapperPrefix &&
+                item.placeholderWrapperSuffix
                   ? `${item.placeholderWrapperPrefix}${placeholderRestoredFragment}${item.placeholderWrapperSuffix}`
                   : placeholderRestoredFragment;
               const restoredFragment = item.protectedHtmlMap
@@ -1864,42 +1872,34 @@ export class TranslationController {
     placeholderTagMap?: Record<string, string>;
     placeholderWrapperPrefix?: string;
     placeholderWrapperSuffix?: string;
+    skipWrapperRestore?: boolean;
     protectedHtmlMap?: Record<string, string>;
   }> {
+    if (record.contentMode === 'html') {
+      const wrappedPlaceholderFragments = this.buildHtmlPlaceholderFragments(
+        record.element.outerHTML,
+        settings,
+        true,
+      );
+      if (wrappedPlaceholderFragments) {
+        return wrappedPlaceholderFragments;
+      }
+
+      const inlinePlaceholderFragments = this.buildHtmlPlaceholderFragments(
+        record.originalHtml,
+        settings,
+        false,
+      );
+      if (inlinePlaceholderFragments) {
+        return inlinePlaceholderFragments;
+      }
+    }
+
     const sourceContent =
       record.contentMode === 'text' ? record.originalText : record.originalHtml;
     const protectedHtml =
       record.contentMode === 'html' ? protectAtomicHtmlForTranslation(sourceContent) : null;
     const translatableSourceContent = protectedHtml?.content ?? sourceContent;
-
-    if (record.contentMode === 'html') {
-      const placeholder = preparePlaceholderRichTextForTranslation(translatableSourceContent);
-      const preparedHtml = prepareContentForTranslation(
-        translatableSourceContent,
-        'html',
-        settings.style,
-      );
-      const placeholderSegments = placeholder
-        ? resolvePlaceholderRequestSegments(placeholder.content, placeholder.wrapperPrefix)
-        : null;
-      if (
-        placeholder &&
-        placeholderSegments &&
-        placeholderSegments.every((segment) => segment.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) &&
-        (Boolean(protectedHtml) || placeholder.content.length + 12 < preparedHtml.content.length)
-      ) {
-        return placeholderSegments.map((segment) => ({
-          preparedContent: segment,
-          requestContentMode: 'text',
-          restoreContentMode: 'text',
-          restoreMap: {},
-          placeholderTagMap: placeholder.tagMap,
-          placeholderWrapperPrefix: placeholder.wrapperPrefix,
-          placeholderWrapperSuffix: placeholder.wrapperSuffix,
-          protectedHtmlMap: protectedHtml?.htmlMap,
-        }));
-      }
-    }
 
     const segments =
       record.contentMode === 'text'
@@ -1913,9 +1913,66 @@ export class TranslationController {
         requestContentMode: record.contentMode,
         restoreContentMode: record.contentMode,
         restoreMap: prepared.restoreMap,
-        protectedHtmlMap: protectedHtml?.htmlMap,
+        protectedHtmlMap: pickProtectedHtmlMarkersForContent(segment, protectedHtml?.htmlMap),
       };
     });
+  }
+
+  private buildHtmlPlaceholderFragments(
+    sourceContent: string,
+    settings: ExtensionSettings,
+    skipWrapperRestore: boolean,
+  ): Array<{
+    preparedContent: string;
+    requestContentMode: TranslationContentMode;
+    restoreContentMode: TranslationContentMode;
+    restoreMap: Record<string, string>;
+    placeholderTagMap?: Record<string, string>;
+    placeholderWrapperPrefix?: string;
+    placeholderWrapperSuffix?: string;
+    skipWrapperRestore?: boolean;
+    protectedHtmlMap?: Record<string, string>;
+  }> | null {
+    const protectedHtml = protectAtomicHtmlForTranslation(sourceContent);
+    const translatableSourceContent = protectedHtml?.content ?? sourceContent;
+    const placeholder = preparePlaceholderRichTextForTranslation(translatableSourceContent);
+    if (!placeholder) {
+      return null;
+    }
+
+    if (skipWrapperRestore && (!placeholder.wrapperPrefix || !placeholder.wrapperSuffix)) {
+      return null;
+    }
+
+    const preparedHtml = prepareContentForTranslation(
+      translatableSourceContent,
+      'html',
+      settings.style,
+    );
+    const placeholderSegments = resolvePlaceholderRequestSegments(
+      placeholder.content,
+      placeholder.wrapperPrefix,
+    );
+
+    if (
+      !placeholderSegments ||
+      !placeholderSegments.every((segment) => segment.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) ||
+      (!protectedHtml && placeholder.content.length + 12 >= preparedHtml.content.length)
+    ) {
+      return null;
+    }
+
+    return placeholderSegments.map((segment) => ({
+      preparedContent: segment,
+      requestContentMode: 'text',
+      restoreContentMode: 'text',
+      restoreMap: {},
+      placeholderTagMap: placeholder.tagMap,
+      placeholderWrapperPrefix: placeholder.wrapperPrefix,
+      placeholderWrapperSuffix: placeholder.wrapperSuffix,
+      skipWrapperRestore,
+      protectedHtmlMap: pickProtectedHtmlMarkersForContent(segment, protectedHtml?.htmlMap),
+    }));
   }
 
   private findMemoryTranslation(group: TranslationGroup): string | null {
@@ -2885,6 +2942,7 @@ function createBatchItems(
       placeholderTagMap: fragment.placeholderTagMap,
       placeholderWrapperPrefix: fragment.placeholderWrapperPrefix,
       placeholderWrapperSuffix: fragment.placeholderWrapperSuffix,
+      skipWrapperRestore: fragment.skipWrapperRestore,
       protectedHtmlMap: fragment.protectedHtmlMap,
       hasMarkers: Boolean(fragment.placeholderTagMap || fragment.protectedHtmlMap),
       estimatedTokens: estimatePromptTokensForContent(
@@ -3447,6 +3505,22 @@ function hasAllProtectedMarkers(
   htmlMap: Record<string, string>,
 ): boolean {
   return Object.keys(htmlMap).every((marker) => content.includes(marker));
+}
+
+function pickProtectedHtmlMarkersForContent(
+  content: string,
+  htmlMap?: Record<string, string>,
+): Record<string, string> | undefined {
+  if (!htmlMap) {
+    return undefined;
+  }
+
+  const matchedEntries = Object.entries(htmlMap).filter(([marker]) => content.includes(marker));
+  if (matchedEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(matchedEntries);
 }
 
 function splitTextIntoSegments(text: string, maxChars = MAX_TEXT_FRAGMENT_CHARS): string[] {

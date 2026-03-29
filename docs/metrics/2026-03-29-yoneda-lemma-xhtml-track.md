@@ -139,3 +139,21 @@ Latest structured-wrapper pass:
   - the XHTML throughput problem is largely solved
   - the remaining XHTML issue is quality completeness in later theorem/definition wrappers, not request volume
   - this is why the XHTML track is still not promoted to a durable baseline despite the much better speed/cost numbers
+
+Latest generic wrapper-source fix:
+- After switching generic structured XHTML wrappers to request construction from safe wrapper `outerHTML`, while restoring only the translated inner content, and after scoping protected-marker restoration to the markers actually present in each fragment, the latest live run reached:
+  - first visible `5,228 ms`
+  - full completion `38,037 ms`
+  - `9` requests
+  - `14,392` total tokens
+  - estimated cost `$0.01260675`
+  - `batchSplits = 1`
+- Quality result:
+  - the lead Yoneda paragraph is translated
+  - the second explanatory body paragraph is translated
+  - later definition/theorem/proof sampled content is also translated into Japanese instead of silently falling back to English
+- Interpretation:
+  - the earlier XHTML completeness bug was not a page-specific extraction issue
+  - it was a generic wrapper-source mismatch plus over-broad protected-marker fallback
+  - generic XHTML theorem/definition/proof wrappers now route through the text/placeholder lane and complete with Japanese output
+  - the remaining XHTML work is back to throughput polish, especially eliminating the last occasional `plain html / 5+ items` split

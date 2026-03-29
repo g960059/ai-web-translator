@@ -91,7 +91,7 @@ Separate compatibility track:
 - Status:
   - XML-safe apply path: pass
   - real Japanese output in the lead XHTML content: pass
+  - real Japanese output in later theorem/definition/proof wrappers: pass
   - structured-wrapper XHTML routing now reduces request volume and token cost further
-  - throughput blocker: cleared in the latest run
-  - quality blocker: later theorem/definition wrappers can still remain English in sampled content
-  - latest live sample: `8 requests / 26.3s full completion / 12.5k total tokens / 0 splits`
+  - throughput blocker: mostly cleared, but one occasional `plain html / 5+ items` split still appears in some runs
+  - latest live sample: `9 requests / 38.0s full completion / 14.4k total tokens / 1 split`

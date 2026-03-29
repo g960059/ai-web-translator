@@ -34,6 +34,8 @@ type DebugGroup = {
   contentMode: 'text' | 'html';
   preview: string;
   fragmentCount: number;
+  skipWrapperRestore?: boolean;
+  hasProtectedMarkers?: boolean;
 };
 
 describe('TranslationController', () => {
@@ -2659,7 +2661,7 @@ describe('TranslationController', () => {
     expect(structuredGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps lighter XHTML html groups separate from heavier safe XHTML wrapper text groups', async () => {
+  it('keeps lighter XHTML paragraph groups separate from heavier safe XHTML wrapper groups', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
       <html lang="en">
@@ -2748,14 +2750,13 @@ describe('TranslationController', () => {
     );
     const lightGroup = debug.groups.find(
       (group: DebugGroup) =>
-        group.contentMode === 'html' &&
         group.preview.includes('XHTML paragraph 1'),
     );
     expect(heavyGroup).toBeDefined();
     expect(lightGroup).toBeDefined();
     expect(heavyGroup?.contentMode).toBe('text');
     expect(heavyGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
-    expect(lightGroup?.contentMode).toBe('html');
+    expect(lightGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
   });
 
   it('routes safe XHTML paragraphs with inline links and MathML through the text placeholder lane', async () => {
@@ -2805,6 +2806,125 @@ describe('TranslationController', () => {
     expect(yonedaGroup).toBeDefined();
     expect(yonedaGroup?.contentMode).toBe('text');
     expect(yonedaGroup?.fragmentCount).toBe(1);
+  });
+
+  it('routes nLab-style structured definition wrappers through the text placeholder lane', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main id="revision">
+            <div id="FunctorUnderlyingTheYonedaEmbedding" class="num_defn">
+              <h6>Definition 2.1. <span class="title_defn">functor underlying the Yoneda embedding</span></h6>
+              <p>For <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>C</mi></math> a locally small category we write</p>
+              <div class="maruku-equation"><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>y</mi><mo>:</mo><mi>C</mi><mo stretchy="false">→</mo><msup><mi>Set</mi><msup><mi>C</mi><mi>op</mi></msup></msup></math></div>
+              <p>for the <a href="/nlab/show/functor+category">functor category</a> out of the opposite category of <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>C</mi></math> into <a href="/nlab/show/Set">Set</a>.</p>
+            </div>
+          </main>
+        </body>
+      </html>
+    `);
+    Object.defineProperty(document, 'contentType', {
+      configurable: true,
+      value: 'application/xhtml+xml',
+    });
+
+    setRect(document.getElementById('FunctorUnderlyingTheYonedaEmbedding') as HTMLElement, 24, 280, 520);
+
+    const settings = createSettings({ cacheEnabled: false });
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'GET_DEBUG_BLOCKS',
+      settings,
+      scope: 'main',
+    }) as DebugBlocksResponse;
+
+    expect(response.ok).toBe(true);
+    if (!response.ok) {
+      throw new Error('Expected debug response.');
+    }
+
+    const debug = response.debug as { groups: DebugGroup[] };
+    const definitionGroup = debug.groups.find((group: DebugGroup) =>
+      group.preview.includes('For C a locally small category we write'),
+    );
+
+    expect(definitionGroup).toBeDefined();
+    expect(definitionGroup?.contentMode).toBe('text');
+    expect(definitionGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
+    expect(definitionGroup?.skipWrapperRestore).toBe(true);
+    expect(definitionGroup?.hasProtectedMarkers).toBe(true);
+  });
+
+  it('translates split protected XHTML wrappers without falling back to the original English fragments', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main id="revision">
+            <div id="xhtml-proof" class="proof">
+              <p><span class="theorem_label">Proof.</span> <strong>Structured wrapper</strong></p>
+              ${Array.from(
+                { length: 4 },
+                (_, index) => `
+                  <p>
+                    Structured XHTML wrapper paragraph ${index + 1}
+                    with <a href="/nlab/show/Yoneda+lemma">linked terminology</a>,
+                    <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>,
+                    and enough prose to force multiple placeholder fragments.
+                    ${'This wrapper should stay translated even when protected markers appear in only some segments. '.repeat(3)}
+                  </p>
+                `,
+              ).join('')}
+            </div>
+          </main>
+        </body>
+      </html>
+    `);
+    Object.defineProperty(document, 'contentType', {
+      configurable: true,
+      value: 'application/xhtml+xml',
+    });
+
+    const proof = document.getElementById('xhtml-proof') as HTMLElement;
+    setRect(proof, 24, 420, 520);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false });
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: { type: string; request?: { fragments: string[] } }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) =>
+                `翻訳:${fragment.replace(/Structured XHTML wrapper paragraph/g, '整形されたXHTML段落')}`,
+              ),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(proof.textContent).toContain('翻訳:');
+    expect(proof.textContent).toContain('整形されたXHTML段落 1');
+    expect(proof.querySelectorAll('math')).toHaveLength(4);
+    expect(proof.textContent).not.toContain('Structured XHTML wrapper paragraph 4');
   });
 
   it('keeps deferred plain html batches on regular html pages from growing without bound', async () => {
