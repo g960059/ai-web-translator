@@ -24,6 +24,7 @@ Execution:
 - Screenshot: [ncatlab-org-yoneda-lemma-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-translated.png)
 - Stability harness: [run-live-page-stability.mjs](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/tests/e2e/run-live-page-stability.mjs)
 - Stability summary: [ncatlab-org-yoneda-lemma-yoneda-stability-v1-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-yoneda-stability-v1-summary.json)
+- Latest stability summary: [ncatlab-org-yoneda-lemma-yoneda-stability-v2-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-yoneda-stability-v2-summary.json)
 
 Outcome:
 - The page now completes instead of failing on XHTML/XML insertion.
@@ -174,3 +175,20 @@ Latest marked-text lane pass:
   - the remaining XHTML split is no longer structural
   - generic marker-aware batching can keep the XHTML lane split-free without reintroducing the earlier English fallback
   - the remaining XHTML problem is runtime variance, especially transient provider delay/retry, not generic wrapper routing
+
+Latest stability sample with durable quality metrics:
+- A refreshed 3-run sample now shows the XHTML lane in a much healthier steady state:
+  - first visible median `2,895 ms`
+  - full completion median `29,595 ms`
+  - `5` requests
+  - `12,081` total tokens
+  - estimated cost median `$0.010494`
+  - immediate provider latency median `2,831 ms`
+- The important durable quality signals are now visible directly in the live metrics JSON:
+  - `pageQuality.after.englishResidualRatio = 0` across all 3 runs
+  - `finalState.metrics.qualitySignals.sourceFallbackFragments = 0` across all 3 runs
+  - `protectedMarkerFallbackFragments` stayed low (`0`, `0`, `1`) while later definition/theorem/proof content remained translated
+- Interpretation:
+  - the XHTML lane is no longer just “compatible”; it is now also stable on request volume and sampled language outcome
+  - the remaining variance again tracks the first provider round-trip more than request shaping
+  - the next XHTML work, if resumed later, should focus on reducing immediate provider variance rather than further routing changes

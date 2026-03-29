@@ -97,6 +97,8 @@ Separate compatibility track:
   - real Japanese output in the lead XHTML content: pass
   - real Japanese output in later theorem/definition/proof wrappers: pass
   - structured-wrapper XHTML routing now reduces request volume and token cost further
-  - split-free generic XHTML lane: pass in the latest run
-  - remaining blocker: runtime variance from transient provider latency/retry
-  - latest live sample: `6 requests / 56.3s full completion / 17.8k total tokens / 0 splits`
+  - split-free generic XHTML lane: pass in the latest stability sample
+  - sampled English residual ratio: pass (`0` across the latest 3-run sample)
+  - source-fragment fallback count: pass (`0` across the latest 3-run sample)
+  - remaining blocker: runtime variance from immediate provider latency
+  - latest XHTML stability median: `5 requests / 29.6s full completion / 12.1k total tokens / 0 splits`
