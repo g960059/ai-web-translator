@@ -2756,6 +2756,7 @@ describe('TranslationController', () => {
     expect(lightGroup).toBeDefined();
     expect(heavyGroup?.contentMode).toBe('text');
     expect(heavyGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
+    expect(lightGroup?.contentMode).toBe('text');
     expect(lightGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
   });
 
@@ -3006,5 +3007,109 @@ describe('TranslationController', () => {
     });
 
     expect(Math.max(...deferredHtmlBatchSizes)).toBeLessThanOrEqual(18);
+  });
+
+  it('keeps marked XHTML text batches from growing without bound', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main id="revision">
+            <p id="lead">Lead paragraph for the immediate XHTML lane.</p>
+            ${Array.from(
+              { length: 3 },
+              (_, wrapperIndex) => `
+                <div id="xml-marked-${wrapperIndex}" class="proof">
+                  <p><span class="theorem_label">Proof ${wrapperIndex + 1}.</span> <strong>Structured wrapper</strong></p>
+                  ${Array.from(
+                    { length: 4 },
+                    (_, index) => `
+                      <p>
+                        Structured XHTML wrapper paragraph ${wrapperIndex + 1}.${index + 1}
+                        with <a href="/nlab/show/Yoneda+lemma">linked terminology</a>,
+                        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>,
+                        and enough prose to force multiple placeholder fragments.
+                        ${'This wrapper should stay on the marked XHTML text lane. '.repeat(4)}
+                      </p>
+                    `,
+                  ).join('')}
+                </div>
+              `,
+            ).join('')}
+          </main>
+        </body>
+      </html>
+    `);
+    Object.defineProperty(document, 'contentType', {
+      configurable: true,
+      value: 'application/xhtml+xml',
+    });
+
+    setRect(document.getElementById('lead') as HTMLElement, 24, 44, 520);
+    Array.from({ length: 3 }, (_, index) => {
+      setRect(
+        document.getElementById(`xml-marked-${index}`) as HTMLElement,
+        2200 + index * 320,
+        280,
+        520,
+      );
+    });
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false });
+    const markedBatchSizes: number[] = [];
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: {
+        type: string;
+        request?: {
+          contentMode: 'text' | 'html';
+          fragments: string[];
+        };
+      }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          if (
+            message.request.contentMode === 'text' &&
+            message.request.fragments.some((fragment) =>
+              fragment.includes('Structured XHTML wrapper paragraph'),
+            )
+          ) {
+            markedBatchSizes.push(message.request.fragments.length);
+          }
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments,
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const translatePromise = controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'page',
+    });
+
+    Array.from({ length: 3 }, (_, index) => {
+      emitIntersection(document.getElementById(`xml-marked-${index}`) as HTMLElement, true);
+    });
+
+    const response = await translatePromise;
+    expect(response.ok).toBe(true);
+
+    await waitFor(() => {
+      expect(markedBatchSizes.length).toBeGreaterThan(0);
+    });
+
+    expect(Math.max(...markedBatchSizes)).toBeLessThanOrEqual(4);
   });
 });

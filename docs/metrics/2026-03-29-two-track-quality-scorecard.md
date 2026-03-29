@@ -93,5 +93,6 @@ Separate compatibility track:
   - real Japanese output in the lead XHTML content: pass
   - real Japanese output in later theorem/definition/proof wrappers: pass
   - structured-wrapper XHTML routing now reduces request volume and token cost further
-  - throughput blocker: mostly cleared, but one occasional `plain html / 5+ items` split still appears in some runs
-  - latest live sample: `9 requests / 38.0s full completion / 14.4k total tokens / 1 split`
+  - split-free generic XHTML lane: pass in the latest run
+  - remaining blocker: runtime variance from transient provider latency/retry
+  - latest live sample: `6 requests / 56.3s full completion / 17.8k total tokens / 0 splits`

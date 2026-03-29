@@ -1944,6 +1944,7 @@ export class TranslationController {
       return null;
     }
 
+    const xmlLikeDocument = isXmlLikeRuntimeDocument(this.documentRef);
     const preparedHtml = prepareContentForTranslation(
       translatableSourceContent,
       'html',
@@ -1957,7 +1958,13 @@ export class TranslationController {
     if (
       !placeholderSegments ||
       !placeholderSegments.every((segment) => segment.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) ||
-      (!protectedHtml && placeholder.content.length + 12 >= preparedHtml.content.length)
+      !isPlaceholderPathWorthUsing({
+        protectedHtml,
+        placeholderContentLength: placeholder.content.length,
+        preparedHtmlLength: preparedHtml.content.length,
+        skipWrapperRestore,
+        xmlLikeDocument,
+      })
     ) {
       return null;
     }
@@ -2907,11 +2914,15 @@ export class TranslationController {
     plainHtmlAverageTokenThreshold?: number;
     xmlHeavyPlainHtmlItemLimit?: number;
     xmlHeavyPlainHtmlMinimumTokenFloor?: number;
+    xmlMarkedTextItemLimit?: number;
+    xmlMarkedTextMinimumTokenFloor?: number;
   } {
     if (isXmlLikeRuntimeDocument(this.documentRef)) {
       return {
         xmlHeavyPlainHtmlItemLimit: 4,
         xmlHeavyPlainHtmlMinimumTokenFloor: 1600,
+        xmlMarkedTextItemLimit: 4,
+        xmlMarkedTextMinimumTokenFloor: 1400,
       };
     }
 
@@ -2966,6 +2977,8 @@ function batchBatchItems(
     plainHtmlAverageTokenThreshold?: number;
     xmlHeavyPlainHtmlItemLimit?: number;
     xmlHeavyPlainHtmlMinimumTokenFloor?: number;
+    xmlMarkedTextItemLimit?: number;
+    xmlMarkedTextMinimumTokenFloor?: number;
     xmlLikeDocument?: boolean;
   } = {
     tokenLimit: DEFERRED_BATCH_TOKEN_LIMIT,
@@ -2989,6 +3002,8 @@ function batchBatchItems(
       plainHtmlAverageTokenThreshold: options.plainHtmlAverageTokenThreshold,
       xmlHeavyPlainHtmlItemLimit: options.xmlHeavyPlainHtmlItemLimit,
       xmlHeavyPlainHtmlMinimumTokenFloor: options.xmlHeavyPlainHtmlMinimumTokenFloor,
+      xmlMarkedTextItemLimit: options.xmlMarkedTextItemLimit,
+      xmlMarkedTextMinimumTokenFloor: options.xmlMarkedTextMinimumTokenFloor,
     });
     const bucketBatches: TranslationBatchItem[][] = [];
     let currentBatch: TranslationBatchItem[] = [];
@@ -3186,6 +3201,14 @@ function getBatchBucketKey(item: TranslationBatchItem, xmlLikeDocument = false):
     return 'html:plain';
   }
 
+  if (
+    xmlLikeDocument &&
+    item.hasMarkers &&
+    (item.group.requestFragments.length >= 2 || item.group.estimatedTokens >= 320)
+  ) {
+    return 'text:marked:xml-heavy';
+  }
+
   return item.contentMode;
 }
 
@@ -3199,6 +3222,8 @@ function resolveBucketBatchLimits(
     plainHtmlAverageTokenThreshold?: number;
     xmlHeavyPlainHtmlItemLimit?: number;
     xmlHeavyPlainHtmlMinimumTokenFloor?: number;
+    xmlMarkedTextItemLimit?: number;
+    xmlMarkedTextMinimumTokenFloor?: number;
   } = {},
 ): BatchBucketLimits {
   if (bucket.length === 0) {
@@ -3206,6 +3231,24 @@ function resolveBucketBatchLimits(
   }
 
   const first = bucket[0];
+  if (bucketKey === 'text:marked:xml-heavy') {
+    if (!overrides.xmlMarkedTextItemLimit) {
+      return defaults;
+    }
+
+    return {
+      tokenLimit: defaults.tokenLimit,
+      itemLimit: Math.min(defaults.itemLimit, overrides.xmlMarkedTextItemLimit),
+      minimumTokenFloor:
+        defaults.minimumTokenFloor === undefined
+          ? undefined
+          : Math.min(
+              defaults.minimumTokenFloor,
+              overrides.xmlMarkedTextMinimumTokenFloor ?? defaults.minimumTokenFloor,
+            ),
+    };
+  }
+
   if (first.contentMode !== 'html') {
     return defaults;
   }
@@ -3521,6 +3564,32 @@ function pickProtectedHtmlMarkersForContent(
   }
 
   return Object.fromEntries(matchedEntries);
+}
+
+function isPlaceholderPathWorthUsing(options: {
+  protectedHtml: { content: string; htmlMap: Record<string, string> } | null;
+  placeholderContentLength: number;
+  preparedHtmlLength: number;
+  skipWrapperRestore: boolean;
+  xmlLikeDocument: boolean;
+}): boolean {
+  if (options.protectedHtml) {
+    return true;
+  }
+
+  if (options.placeholderContentLength + 12 < options.preparedHtmlLength) {
+    return true;
+  }
+
+  if (
+    options.xmlLikeDocument &&
+    options.skipWrapperRestore &&
+    options.placeholderContentLength <= options.preparedHtmlLength + 24
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function splitTextIntoSegments(text: string, maxChars = MAX_TEXT_FRAGMENT_CHARS): string[] {

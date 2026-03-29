@@ -157,3 +157,20 @@ Latest generic wrapper-source fix:
   - it was a generic wrapper-source mismatch plus over-broad protected-marker fallback
   - generic XHTML theorem/definition/proof wrappers now route through the text/placeholder lane and complete with Japanese output
   - the remaining XHTML work is back to throughput polish, especially eliminating the last occasional `plain html / 5+ items` split
+
+Latest marked-text lane pass:
+- After moving safe XHTML inline-rich paragraphs onto the same generic placeholder lane and then capping only multi-fragment marked-text XHTML batches, the latest live run reached:
+  - first visible `3,132 ms`
+  - full completion `56,302 ms`
+  - `6` requests
+  - `17,757` total tokens
+  - estimated cost `$0.01637425`
+  - `batchSplits = 0`
+- Quality result:
+  - lead and explanatory paragraphs remain translated
+  - definition text remains translated
+  - later theorem/proof wrappers remain translated
+- Interpretation:
+  - the remaining XHTML split is no longer structural
+  - generic marker-aware batching can keep the XHTML lane split-free without reintroducing the earlier English fallback
+  - the remaining XHTML problem is runtime variance, especially transient provider delay/retry, not generic wrapper routing
