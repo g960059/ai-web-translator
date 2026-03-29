@@ -493,6 +493,65 @@ describe('core html and block extraction', () => {
     expect(segments.join('')).toContain('[[x1]]');
   });
 
+  it('limits protected-marker density per segment for marker-heavy placeholder text', () => {
+    const markerHeavyHtml = `
+      <p>
+        This generalizes to any field <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi></math>
+        and any vector space <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>V</mi></math>
+        over <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi></math>,
+        with <a href="/wiki/Linear_map">linear maps</a> replacing matrices and
+        <a href="/wiki/Function_composition">composition</a> replacing matrix multiplication:
+        there is a group <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>G</mi></math>,
+        an associative algebra <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>A</mi></math>,
+        a Lie algebra <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>L</mi></math>,
+        and another structure <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>H</mi></math>
+        governing the same action.
+      </p>
+    `;
+
+    const protectedHtml = protectAtomicHtmlForTranslation(markerHeavyHtml);
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    const segments = splitPlaceholderRichTextIntoSafeSegments(placeholder!.content, 860);
+
+    expect(segments.length).toBeGreaterThan(2);
+    expect(
+      segments.every(
+        (segment) => (segment.match(/\[\[\s*x\d+\s*\]\]/gi)?.length ?? 0) <= 2,
+      ),
+    ).toBe(true);
+  });
+
+  it('caps very dense protected-marker placeholder text at one marker per segment', () => {
+    const markerHeavyHtml = `
+      <p>
+        Suppose <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>V</mi></math> and
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>W</mi></math> are vector spaces over
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi></math>, equipped with
+        representations <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#x03C6;</mi></math> and
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#x03C8;</mi></math> of a group
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>G</mi></math>, then an equivariant map
+        from <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>V</mi></math> to
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>W</mi></math> is a linear map
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>&#x03B1;</mi></math> such that for all
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>g</mi></math> in
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>G</mi></math> and
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>v</mi></math> in
+        <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>V</mi></math>.
+      </p>
+    `;
+
+    const protectedHtml = protectAtomicHtmlForTranslation(markerHeavyHtml);
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    const segments = splitPlaceholderRichTextIntoSafeSegments(placeholder!.content, 860);
+
+    expect(segments.length).toBeGreaterThan(6);
+    expect(
+      segments.every(
+        (segment) => (segment.match(/\[\[\s*x\d+\s*\]\]/gi)?.length ?? 0) <= 1,
+      ),
+    ).toBe(true);
+  });
+
   it('rejects block-heavy html for placeholder-rich text mode', () => {
     const html = '<p>Alpha</p><p><a href="/beta">Beta</a></p>';
 

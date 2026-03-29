@@ -89,6 +89,12 @@ const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*(\/?)\s*t(\d+)\s*\]\]/gi;
 const PROTECTED_HTML_MARKER_PATTERN = /\[\[\s*x(\d+)\s*\]\]/gi;
 const PROTECTED_HTML_MARKER_VARIANT_BRACKETS = '[\\[\\]［］【】〔〕「」『』⟦⟧⟨⟩<>＜＞]';
 const PROTECTED_PLACEHOLDER_SEGMENT_CHARS = 240;
+const DENSE_PROTECTED_PLACEHOLDER_SEGMENT_CHARS = 180;
+const DENSE_PROTECTED_PLACEHOLDER_MARKER_COUNT = 6;
+const VERY_DENSE_PROTECTED_PLACEHOLDER_SEGMENT_CHARS = 140;
+const VERY_DENSE_PROTECTED_PLACEHOLDER_MARKER_COUNT = 12;
+const MAX_PROTECTED_MARKERS_PER_SEGMENT = 2;
+const MAX_PROTECTED_MARKERS_PER_VERY_DENSE_SEGMENT = 1;
 const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
   'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"]';
 const PROTECTED_HTML_SELECTOR = 'math, .mwe-math-element, img.mw-file-element';
@@ -237,10 +243,25 @@ export function splitPlaceholderRichTextIntoSafeSegments(
   const protectedMarkerCount = protectedMarkerPieces.filter((piece) =>
     isProtectedMarkerPiece(piece),
   ).length;
+  const veryDenseProtectedMarkers =
+    protectedMarkerCount >= VERY_DENSE_PROTECTED_PLACEHOLDER_MARKER_COUNT;
+  const denseProtectedMarkers = protectedMarkerCount >= DENSE_PROTECTED_PLACEHOLDER_MARKER_COUNT;
   const effectiveMaxChars =
     protectedMarkerCount > 0
-      ? Math.min(maxChars, PROTECTED_PLACEHOLDER_SEGMENT_CHARS)
+      ? Math.min(
+          maxChars,
+          veryDenseProtectedMarkers
+            ? VERY_DENSE_PROTECTED_PLACEHOLDER_SEGMENT_CHARS
+            : denseProtectedMarkers
+            ? DENSE_PROTECTED_PLACEHOLDER_SEGMENT_CHARS
+            : PROTECTED_PLACEHOLDER_SEGMENT_CHARS,
+        )
       : maxChars;
+  const maxProtectedMarkersPerSegment = veryDenseProtectedMarkers
+    ? MAX_PROTECTED_MARKERS_PER_VERY_DENSE_SEGMENT
+    : denseProtectedMarkers
+      ? MAX_PROTECTED_MARKERS_PER_SEGMENT
+      : undefined;
 
   if (normalized.length <= effectiveMaxChars) {
     return [normalized];
@@ -255,12 +276,31 @@ export function splitPlaceholderRichTextIntoSafeSegments(
     return [normalized];
   }
 
-  const packed = packPlaceholderTextPieces(candidateSegments, effectiveMaxChars);
-  if (packed.length <= 1 || packed.some((segment) => segment.length > effectiveMaxChars)) {
+  const packed = packPlaceholderTextPieces(
+    candidateSegments,
+    effectiveMaxChars,
+    maxProtectedMarkersPerSegment,
+  );
+  const rebalanced = maxProtectedMarkersPerSegment
+    ? rebalanceDenseProtectedMarkerSegments(
+        packed,
+        effectiveMaxChars,
+        maxProtectedMarkersPerSegment,
+      )
+    : packed;
+
+  if (
+    rebalanced.length <= 1 ||
+    rebalanced.some((segment) => segment.length > effectiveMaxChars) ||
+    (maxProtectedMarkersPerSegment &&
+      rebalanced.some(
+        (segment) => countProtectedMarkers(segment) > maxProtectedMarkersPerSegment,
+      ))
+  ) {
     return [normalized];
   }
 
-  return packed;
+  return rebalanced;
 }
 
 export function protectAtomicHtmlForTranslation(html: string): ProtectedHtmlContent | null {
@@ -645,7 +685,11 @@ function extractTopLevelPlaceholderSegments(content: string): string[] {
   return segments;
 }
 
-function packPlaceholderTextPieces(pieces: string[], maxChars: number): string[] {
+function packPlaceholderTextPieces(
+  pieces: string[],
+  maxChars: number,
+  maxProtectedMarkersPerSegment?: number,
+): string[] {
   const normalizedPieces = pieces.flatMap((piece) => {
     if (isProtectedMarkerPiece(piece) || piece.length <= maxChars) {
       return [piece];
@@ -655,15 +699,26 @@ function packPlaceholderTextPieces(pieces: string[], maxChars: number): string[]
 
   const packed: string[] = [];
   let current = '';
+  let currentProtectedMarkerCount = 0;
 
   normalizedPieces.forEach((piece) => {
-    const candidate = current
-      ? shouldConcatenatePlaceholderPiecesWithoutSpace(current, piece)
-        ? `${current}${piece}`
-        : `${current} ${piece}`
-      : piece;
+    const pieceProtectedMarkerCount = countProtectedMarkers(piece);
+    const candidate = current ? concatenatePlaceholderPieces(current, piece) : piece;
+    const candidateProtectedMarkerCount = currentProtectedMarkerCount + pieceProtectedMarkerCount;
+    if (
+      maxProtectedMarkersPerSegment &&
+      current &&
+      candidateProtectedMarkerCount > maxProtectedMarkersPerSegment
+    ) {
+      packed.push(current);
+      current = piece;
+      currentProtectedMarkerCount = pieceProtectedMarkerCount;
+      return;
+    }
+
     if (candidate.length <= maxChars) {
       current = candidate;
+      currentProtectedMarkerCount = candidateProtectedMarkerCount;
       return;
     }
 
@@ -671,6 +726,7 @@ function packPlaceholderTextPieces(pieces: string[], maxChars: number): string[]
       packed.push(current);
     }
     current = piece;
+    currentProtectedMarkerCount = pieceProtectedMarkerCount;
   });
 
   if (current) {
@@ -704,12 +760,61 @@ function extractProtectedMarkerSegments(content: string): string[] {
   return pieces;
 }
 
+function rebalanceDenseProtectedMarkerSegments(
+  segments: string[],
+  maxChars: number,
+  maxProtectedMarkersPerSegment: number,
+): string[] {
+  const rebalanced: string[] = [];
+
+  segments.forEach((segment) => {
+    if (countProtectedMarkers(segment) <= maxProtectedMarkersPerSegment) {
+      rebalanced.push(segment);
+      return;
+    }
+
+    const pieces = extractProtectedMarkerSegments(segment);
+    const packed = packPlaceholderTextPieces(
+      pieces,
+      maxChars,
+      maxProtectedMarkersPerSegment,
+    );
+    rebalanced.push(...packed);
+  });
+
+  return rebalanced;
+}
+
 function shouldConcatenatePlaceholderPiecesWithoutSpace(left: string, right: string): boolean {
-  return isProtectedMarkerPiece(left) || isProtectedMarkerPiece(right);
+  const trimmedLeft = left.trimEnd();
+  const trimmedRight = right.trimStart();
+  if (!trimmedLeft || !trimmedRight) {
+    return true;
+  }
+
+  if (isProtectedMarkerPiece(left)) {
+    return /^[,.;:!?%)\]}]/.test(trimmedRight);
+  }
+
+  if (isProtectedMarkerPiece(right)) {
+    return /[(\[{]$/.test(trimmedLeft);
+  }
+
+  return false;
+}
+
+function concatenatePlaceholderPieces(left: string, right: string): string {
+  return shouldConcatenatePlaceholderPiecesWithoutSpace(left, right)
+    ? `${left}${right}`
+    : `${left} ${right}`;
 }
 
 function isProtectedMarkerPiece(piece: string): boolean {
   return /^\[\[\s*x\d+\s*\]\]$/i.test(piece);
+}
+
+function countProtectedMarkers(content: string): number {
+  return content.match(new RegExp(PROTECTED_HTML_MARKER_PATTERN.source, 'gi'))?.length ?? 0;
 }
 
 function isDisallowedStructuredPlaceholderElement(element: HTMLElement): boolean {

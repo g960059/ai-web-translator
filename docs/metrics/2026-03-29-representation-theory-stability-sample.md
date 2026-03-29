@@ -19,60 +19,60 @@ Execution:
 - Style: `auto`
 - Cache: `false`
 - Harness: [run-live-page-stability.mjs](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/tests/e2e/run-live-page-stability.mjs)
-- Summary JSON: [en-wikipedia-org-representation-theory-stability-v9-warning-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v9-warning-summary.json)
+- Summary JSON: [en-wikipedia-org-representation-theory-stability-v10-protected-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v10-protected-summary.json)
 
 Per-run artifacts:
-- Run 1 metrics: [en-wikipedia-org-representation-theory-stability-v9-warning-run-1-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v9-warning-run-1-metrics.json)
-- Run 1 screenshot: [en-wikipedia-org-representation-theory-stability-v9-warning-run-1-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v9-warning-run-1-translated.png)
-- Run 2 metrics: [en-wikipedia-org-representation-theory-stability-v9-warning-run-2-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v9-warning-run-2-metrics.json)
-- Run 2 screenshot: [en-wikipedia-org-representation-theory-stability-v9-warning-run-2-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v9-warning-run-2-translated.png)
-- Run 3 metrics: [en-wikipedia-org-representation-theory-stability-v9-warning-run-3-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v9-warning-run-3-metrics.json)
-- Run 3 screenshot: [en-wikipedia-org-representation-theory-stability-v9-warning-run-3-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v9-warning-run-3-translated.png)
+- Run 1 metrics: [en-wikipedia-org-representation-theory-stability-v10-protected-run-1-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v10-protected-run-1-metrics.json)
+- Run 1 screenshot: [en-wikipedia-org-representation-theory-stability-v10-protected-run-1-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v10-protected-run-1-translated.png)
+- Run 2 metrics: [en-wikipedia-org-representation-theory-stability-v10-protected-run-2-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v10-protected-run-2-metrics.json)
+- Run 2 screenshot: [en-wikipedia-org-representation-theory-stability-v10-protected-run-2-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v10-protected-run-2-translated.png)
+- Run 3 metrics: [en-wikipedia-org-representation-theory-stability-v10-protected-run-3-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v10-protected-run-3-metrics.json)
+- Run 3 screenshot: [en-wikipedia-org-representation-theory-stability-v10-protected-run-3-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v10-protected-run-3-translated.png)
 - Current durable baseline note: [2026-03-29-representation-theory-durable-baseline.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-durable-baseline.md)
 - Latest gate summary: [en-wikipedia-org-representation-theory-stability-v7-gate-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/en-wikipedia-org-representation-theory-stability-v7-gate-summary.json)
 - Latest gate config: [representation-theory-stability.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/gates/representation-theory-stability.json)
 - Latest gate report: [en-wikipedia-org-representation-theory-stability-v7-gate-summary-gate.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/comparisons/en-wikipedia-org-representation-theory-stability-v7-gate-summary-gate.md)
 
 Median metrics across 3 runs:
-- First visible translation: `2,263 ms`
-- Full completion: `32,234 ms`
+- First visible translation: `2,340 ms`
+- Full completion: `33,837 ms`
 - Request count: `15`
-- Total tokens: `28,947`
-- Estimated cost: `$0.02534675`
+- Total tokens: `28,969`
+- Estimated cost: `$0.02528975`
 - Peak in-flight requests: `5`
-- Immediate provider latency: `2,184 ms`
+- Immediate provider latency: `2,265 ms`
 - Warning blocks: `1`
 - Protected-marker fallback fragments: `1`
 
 Spread:
-- First visible translation: `2,230 ms -> 2,666 ms` (spread `436 ms`)
-- Full completion: `29,801 ms -> 36,410 ms` (spread `6,609 ms`)
+- First visible translation: `1,681 ms -> 2,379 ms` (spread `698 ms`)
+- Full completion: `30,560 ms -> 34,546 ms` (spread `3,986 ms`)
 - Request count: `15 -> 15`
-- Total tokens: `28,928 -> 29,031`
-- Estimated cost: `$0.02531825 -> $0.02548025`
-- Immediate provider latency: `2,149 ms -> 2,590 ms`
-- Warning blocks: `1 -> 2`
-- Protected-marker fallback fragments: `1 -> 2`
+- Total tokens: `28,939 -> 28,999`
+- Estimated cost: `$0.02523975 -> $0.02533225`
+- Immediate provider latency: `1,604 ms -> 2,304 ms`
+- Warning blocks: `0 -> 1`
+- Protected-marker fallback fragments: `0 -> 1`
 
 Run-by-run notes:
 - Run 1:
-  - `2,666 ms / 32,234 ms / 15 requests / 29,031 tokens / $0.02548025`
+  - `2,340 ms / 33,837 ms / 15 requests / 28,999 tokens / $0.02533225`
   - no retries, no splits
   - coarse structure exact: `129 / 118 / 5`
-  - warning summary: `1 block / fallback-source 1 / error 0`
-  - immediate batch: `1 group / 1 fragment / text / 272 chars / 264 est. prompt tokens / 2,590 ms provider latency / 2,589 ms background-provider / 1 ms bridge`
+  - warning summary: `0 blocks`
+  - immediate batch: `1 group / 1 fragment / text / 272 chars / 264 est. prompt tokens / 2,265 ms provider latency / 2,263 ms background-provider / 2 ms bridge`
 - Run 2:
-  - `2,263 ms / 36,410 ms / 15 requests / 28,928 tokens / $0.02531825`
+  - `1,681 ms / 30,560 ms / 15 requests / 28,939 tokens / $0.02523975`
   - no retries, no splits
   - coarse structure exact: `129 / 118 / 5`
   - warning summary: `1 block / fallback-source 1 / error 0`
-  - immediate batch: `1 group / 1 fragment / text / 272 chars / 264 est. prompt tokens / 2,184 ms provider latency / 2,184 ms background-provider / 0 ms bridge`
+  - immediate batch: `1 group / 1 fragment / text / 272 chars / 264 est. prompt tokens / 1,604 ms provider latency / 1,603 ms background-provider / 1 ms bridge`
 - Run 3:
-  - `2,230 ms / 29,801 ms / 15 requests / 28,947 tokens / $0.02534675`
+  - `2,379 ms / 34,546 ms / 15 requests / 28,969 tokens / $0.02528975`
   - no retries, no splits
   - coarse structure exact: `129 / 118 / 5`
-  - warning summary: `2 blocks / fallback-source 2 / error 0`
-  - immediate batch: `1 group / 1 fragment / text / 272 chars / 264 est. prompt tokens / 2,149 ms provider latency / 2,148 ms background-provider / 1 ms bridge`
+  - warning summary: `1 block / fallback-source 1 / error 0`
+  - immediate batch: `1 group / 1 fragment / text / 272 chars / 264 est. prompt tokens / 2,304 ms provider latency / 2,302 ms background-provider / 2 ms bridge`
 
 Interpretation:
 - The current pipeline is materially stable on structure:
@@ -81,16 +81,17 @@ Interpretation:
   - all 3 runs stayed split-free
   - request count is now fixed at `15`
   - token and cost spread is very small
-- The remaining quality caveat is now visible instead of hidden:
-  - all 3 runs finished as `completed_with_warnings`
+- The remaining quality caveat is smaller and now visible instead of hidden:
+  - 1 run finished as full `completed`
+  - 2 runs finished as `completed_with_warnings`
   - sampled English residual is still `0`
-  - but `protectedMarkerFallbackFragments` stayed at `1 -> 2`
-  - warning blocks stayed at `1 -> 2`
+  - `protectedMarkerFallbackFragments` stayed at `0 -> 1`
+  - warning blocks stayed at `0 -> 1`
 - The remaining instability is now clearly background/provider-side on the first request, not payload-side and not content/background bridge-side:
   - all 3 runs used the same immediate batch shape
   - `1 group / 1 fragment / text / 272 chars / 264 est. prompt tokens`
-  - the visible spread tracks the first provider round-trip closely: `2.15s -> 2.59s`
-  - the content/background bridge overhead remained effectively negligible: `0ms -> 1ms`
+  - the visible spread still tracks the first provider round-trip closely: `1.60s -> 2.30s`
+  - the content/background bridge overhead remained effectively negligible: `1ms -> 2ms`
 - Full completion remains much better than the old durable baseline and now sits in the low-30s range on the median.
 
 Baseline decision:
@@ -99,11 +100,11 @@ Baseline decision:
 - Reason:
   - the current baseline still represents the best exact-count production run
   - the new sample proves that split-driven outliers are now largely gone
-  - but the remaining `protectedMarkerFallbackFragments` keep the HTML lane in `completed_with_warnings`, so a new durable baseline should wait until those warnings are reduced or explicitly accepted
+  - but the HTML lane is not yet warning-free in repeated runs, so a new durable baseline should wait until `protectedMarkerFallbackFragments` drops to `0` more consistently
 
 What this means for next work:
 - The HTML lane is structurally stable enough to optimize further without losing confidence.
-- The next HTML task should focus on reducing `protectedMarkerFallbackFragments` and warning blocks before any further speed tuning.
+- The next HTML task should focus on the single remaining protected-marker fallback paragraph before any further speed tuning.
 - Candidate directions:
   - inspect the exact protected-marker fragment shape that still falls back on Wikipedia
   - reduce fallback frequency without reintroducing split-driven outliers
@@ -111,13 +112,13 @@ What this means for next work:
   - defer further first-request tuning until warnings are lower
 
 Gate status update:
-- The new `stability-v9-warning` sample is clean on throughput:
-  - first visible median `2,263 ms`
-  - full completion median `32,234 ms`
+- The new `stability-v10-protected` sample is clean on throughput:
+  - first visible median `2,340 ms`
+  - full completion median `33,837 ms`
   - requests `15`
-  - total tokens `28,947`
+  - total tokens `28,969`
   - sampled English residual ratio `0`
   - split median `0`
 - Important nuance:
   - the tail is no longer driven by split outliers
-  - the remaining caution is warning completion, not batch instability
+  - the remaining caution is one protected-marker fallback paragraph, not batch instability

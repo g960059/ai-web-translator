@@ -40,16 +40,16 @@ Current score:
 
 | Check | Status | Evidence |
 | --- | --- | --- |
-| First visible translation under `2.5s` | pass | durable best run `1,724 ms`; v9 stability median `2,263 ms` |
-| Full completion under `40s` | pass | durable best run `32,627 ms`; v9 stability median `32,234 ms` |
+| First visible translation under `2.5s` | pass | durable best run `1,724 ms`; v10 stability median `2,340 ms` |
+| Full completion under `40s` | pass | durable best run `32,627 ms`; v10 stability median `33,837 ms` |
 | Request count at or below `15` | pass | `15` |
-| Total tokens under `30k` | pass | durable best run `28,323`; v9 stability median `28,947` |
+| Total tokens under `30k` | pass | durable best run `28,323`; v10 stability median `28,969` |
 | Coarse structure exact | pass | `129 / 118 / 5` before and after |
 | Lead Japanese fluency acceptable | pass | lead sample paragraphs in metrics JSON |
 | English residual ratio in sampled paragraphs stays low | pass | `pageQuality.after.englishResidualRatio` in metrics JSON |
-| Protected/source fallback counts remain explainable | warning | `protectedMarkerFallbackFragments` median `1`; warning blocks median `1` in v9 stability sample |
+| Protected/source fallback counts remain explainable | warning | `protectedMarkerFallbackFragments` values `0,1,1`; one run completed cleanly, two runs had `1` warning block in v10 stability sample |
 | Warning-aware completion is surfaced | pass | `warningStats` and `completed_with_warnings` now appear in live metrics |
-| Stability gate on median | pass | v9 sample stayed split-free across all 3 runs |
+| Stability gate on median | pass | v10 sample stayed split-free across all 3 runs |
 
 ## 2. High-Difficulty Fixture Bench
 

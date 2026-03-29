@@ -2092,6 +2092,8 @@ export class TranslationController {
     }
 
     const xmlLikeDocument = isXmlLikeRuntimeDocument(this.documentRef);
+    const protectedMarkerCount = protectedHtml ? Object.keys(protectedHtml.htmlMap).length : 0;
+    const placeholderTagPairCount = Object.keys(placeholder.tagMap).length / 2;
     const preparedHtml = prepareContentForTranslation(
       translatableSourceContent,
       'html',
@@ -2107,6 +2109,8 @@ export class TranslationController {
       !placeholderSegments.every((segment) => segment.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) ||
       !isPlaceholderPathWorthUsing({
         protectedHtml,
+        protectedMarkerCount,
+        placeholderTagPairCount,
         placeholderContentLength: placeholder.content.length,
         preparedHtmlLength: preparedHtml.content.length,
         skipWrapperRestore,
@@ -3944,11 +3948,20 @@ function pickProtectedHtmlMarkersForContent(
 
 function isPlaceholderPathWorthUsing(options: {
   protectedHtml: { content: string; htmlMap: Record<string, string> } | null;
+  protectedMarkerCount: number;
+  placeholderTagPairCount: number;
   placeholderContentLength: number;
   preparedHtmlLength: number;
   skipWrapperRestore: boolean;
   xmlLikeDocument: boolean;
 }): boolean {
+  if (
+    options.protectedMarkerCount >= 8 ||
+    (options.protectedMarkerCount >= 6 && options.placeholderTagPairCount >= 4)
+  ) {
+    return false;
+  }
+
   if (options.protectedHtml) {
     return true;
   }
