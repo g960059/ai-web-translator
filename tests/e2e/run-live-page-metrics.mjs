@@ -185,6 +185,7 @@ try {
     requestCountsByPhase: runtimeMetrics?.requestCountsByPhase ?? null,
     splitStats: runtimeMetrics?.splitStats ?? null,
     immediateBatch: runtimeMetrics?.immediateBatch ?? null,
+    warningStats: runtimeMetrics?.warningStats ?? finalState?.warnings ?? null,
     costUsd: estimatedCostUsd,
     pageQuality: {
       before: beforeQuality,
@@ -304,7 +305,7 @@ async function scrollUntilTranslated(page, serviceWorker, targetUrl) {
       throw new Error(snapshot.lastError || 'Full-page translation failed.');
     }
 
-    if (snapshot?.status === 'completed') {
+    if (snapshot?.status === 'completed' || snapshot?.status === 'completed_with_warnings') {
       return snapshot;
     }
 

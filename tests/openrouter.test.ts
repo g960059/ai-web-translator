@@ -114,6 +114,57 @@ describe('translateWithOpenRouter', () => {
     expect(result.translations).toEqual(['第一', '第二']);
   });
 
+  it('accepts ordered translation objects without ids', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '{"translations":[{"text":"第一"},{"translation":"第二"}]}',
+              },
+            },
+          ],
+        }),
+      })),
+    );
+
+    const result = await translateWithOpenRouter({
+      ...BASE_REQUEST,
+      fragments: ['First', 'Second'],
+    });
+
+    expect(result.translations).toEqual(['第一', '第二']);
+  });
+
+  it('accepts root arrays of translation objects with numeric indexes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '[{"index":1,"content":"第二"},{"index":0,"content":"第一"}]',
+              },
+            },
+          ],
+        }),
+      })),
+    );
+
+    const result = await translateWithOpenRouter({
+      ...BASE_REQUEST,
+      fragments: ['First', 'Second'],
+      fragmentIds: ['0', '1'],
+    });
+
+    expect(result.translations).toEqual(['第一', '第二']);
+  });
+
   it('times out stalled provider requests', async () => {
     vi.useFakeTimers();
 

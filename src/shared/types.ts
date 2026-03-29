@@ -158,6 +158,7 @@ export interface SessionRuntimeMetrics {
   splitEventSamples: SessionSplitEvent[];
   immediateBatch: SessionImmediateBatchMetrics | null;
   qualitySignals: SessionQualitySignals;
+  warningStats: SessionWarningSummary | null;
 }
 
 export interface SessionSnapshot {

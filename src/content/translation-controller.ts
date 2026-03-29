@@ -2206,6 +2206,9 @@ export class TranslationController {
     }
 
     this.sessionSnapshot.warnings = nextWarnings;
+    if (this.sessionMetrics) {
+      this.sessionMetrics.warningStats = nextWarnings;
+    }
     if (immediate) {
       this.emitSnapshot();
     }
@@ -2786,6 +2789,7 @@ export class TranslationController {
         sourceFallbackFragments: 0,
         protectedMarkerFallbackFragments: 0,
       },
+      warningStats: null,
     };
   }
 
@@ -3043,6 +3047,9 @@ export class TranslationController {
   ): void {
     const warnings =
       partial.warnings === undefined ? this.buildWarningSummary() : partial.warnings;
+    if (this.sessionMetrics) {
+      this.sessionMetrics.warningStats = warnings;
+    }
     this.sessionSnapshot = {
       ...this.sessionSnapshot,
       ...partial,

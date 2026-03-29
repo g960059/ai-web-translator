@@ -118,55 +118,95 @@ function normalizeTranslationsPayload(
     | string[],
   fragmentIds?: string[],
 ): string[] {
-  if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
-    return parsed;
+  const rootTranslations = normalizeTranslationArray(parsed, fragmentIds);
+  if (rootTranslations) {
+    return rootTranslations;
   }
 
-  if (
-    !Array.isArray(parsed) &&
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    Array.isArray(parsed.translations) &&
-    parsed.translations.every((item) => typeof item === 'string')
-  ) {
-    return parsed.translations as string[];
-  }
-
-  if (
-    !Array.isArray(parsed) &&
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    Array.isArray(parsed.translations) &&
-    parsed.translations.every(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        typeof ((item as { i?: string; id?: string }).i ?? (item as { id?: string }).id) ===
-          'string' &&
-        typeof ((item as { t?: string; text?: string }).t ?? (item as { text?: string }).text) ===
-          'string',
-    )
-  ) {
-    const translations = parsed.translations as Array<{
-      i?: string;
-      id?: string;
-      t?: string;
-      text?: string;
-    }>;
-
-    if (!fragmentIds?.length) {
-      return translations.map((item) => item.t ?? item.text ?? '');
+  if (!Array.isArray(parsed) && typeof parsed === 'object' && parsed !== null) {
+    for (const key of ['translations', 'results', 'items', 'data']) {
+      const candidate = normalizeTranslationArray(
+        (parsed as Record<string, unknown>)[key],
+        fragmentIds,
+      );
+      if (candidate) {
+        return candidate;
+      }
     }
-
-    const byId = new Map(
-      translations.map((item) => [item.i ?? item.id ?? '', item.t ?? item.text ?? '']),
-    );
-    return fragmentIds
-      .map((id) => byId.get(id))
-      .filter((value): value is string => typeof value === 'string');
   }
 
   throw new Error('Provider returned an invalid translations payload.');
+}
+
+function normalizeTranslationArray(
+  candidate: unknown,
+  fragmentIds?: string[],
+): string[] | null {
+  if (!Array.isArray(candidate)) {
+    return null;
+  }
+
+  if (candidate.length === 0) {
+    return [];
+  }
+
+  if (candidate.every((item) => typeof item === 'string')) {
+    return candidate as string[];
+  }
+
+  if (
+    !candidate.every((item) => typeof item === 'object' && item !== null && !Array.isArray(item))
+  ) {
+    return null;
+  }
+
+  const objects = candidate as Array<Record<string, unknown>>;
+  const texts = objects.map(extractTranslationText);
+  if (!texts.every((item): item is string => typeof item === 'string')) {
+    return null;
+  }
+
+  if (!fragmentIds?.length) {
+    return texts;
+  }
+
+  const ids = objects.map(extractTranslationId);
+  if (ids.every((item): item is string => typeof item === 'string')) {
+    const byId = new Map(ids.map((id, index) => [id, texts[index]]));
+    const ordered = fragmentIds
+      .map((id) => byId.get(id))
+      .filter((value): value is string => typeof value === 'string');
+    if (ordered.length === fragmentIds.length) {
+      return ordered;
+    }
+  }
+
+  if (texts.length === fragmentIds.length) {
+    return texts;
+  }
+
+  return null;
+}
+
+function extractTranslationId(item: Record<string, unknown>): string | undefined {
+  const candidate = item.i ?? item.id ?? item.index;
+  if (typeof candidate === 'string' && candidate.length > 0) {
+    return candidate;
+  }
+  if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+    return String(candidate);
+  }
+  return undefined;
+}
+
+function extractTranslationText(item: Record<string, unknown>): string | undefined {
+  for (const key of ['t', 'text', 'translation', 'content', 'html', 'value', 'output']) {
+    const candidate = item[key];
+    if (typeof candidate === 'string') {
+      return candidate;
+    }
+  }
+  return undefined;
 }
 
 function buildJsonCandidates(content: string): string[] {

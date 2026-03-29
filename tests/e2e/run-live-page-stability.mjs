@@ -58,6 +58,7 @@ for (let runIndex = 1; runIndex <= runs; runIndex += 1) {
     retryCounts: metrics.retryCounts ?? null,
     pageQuality: metrics.pageQuality?.after ?? null,
     qualitySignals: metrics.finalState?.metrics?.qualitySignals ?? null,
+    warningStats: metrics.warningStats ?? metrics.finalState?.warnings ?? null,
     splitEventSamples: metrics.finalState?.metrics?.splitEventSamples ?? null,
   });
 }
@@ -79,6 +80,15 @@ const sourceFallbackValues = numberSeries(
 );
 const protectedFallbackValues = numberSeries(
   runsSummary.map((run) => run.qualitySignals?.protectedMarkerFallbackFragments ?? null),
+);
+const warningBlockValues = numberSeries(
+  runsSummary.map((run) => run.warningStats?.totalBlocks ?? null),
+);
+const warningFallbackBlockValues = numberSeries(
+  runsSummary.map((run) => run.warningStats?.fallbackSourceBlocks ?? null),
+);
+const warningErrorBlockValues = numberSeries(
+  runsSummary.map((run) => run.warningStats?.errorBlocks ?? null),
 );
 const mathElementValues = numberSeries(
   runsSummary.map((run) => run.pageQuality?.mathElements ?? null),
@@ -111,6 +121,9 @@ const summary = {
     englishResidualRatio: buildStats(englishResidualRatioValues),
     sourceFallbackFragments: buildStats(sourceFallbackValues),
     protectedMarkerFallbackFragments: buildStats(protectedFallbackValues),
+    warningBlocks: buildStats(warningBlockValues),
+    warningFallbackBlocks: buildStats(warningFallbackBlockValues),
+    warningErrorBlocks: buildStats(warningErrorBlockValues),
     mathElements: buildStats(mathElementValues),
     fallbackImages: buildStats(fallbackImageValues),
     mediaImages: buildStats(mediaImageValues),

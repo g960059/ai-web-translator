@@ -40,15 +40,16 @@ Current score:
 
 | Check | Status | Evidence |
 | --- | --- | --- |
-| First visible translation under `2.5s` | pass | durable best run `1,724 ms`; v5 stability median `1,999 ms` |
-| Full completion under `40s` | pass | durable best run `32,627 ms`; v5 stability median `36,105 ms` |
+| First visible translation under `2.5s` | pass | durable best run `1,724 ms`; v9 stability median `2,263 ms` |
+| Full completion under `40s` | pass | durable best run `32,627 ms`; v9 stability median `32,234 ms` |
 | Request count at or below `15` | pass | `15` |
-| Total tokens under `30k` | pass | durable best run `28,323`; v5 stability median `28,428` |
+| Total tokens under `30k` | pass | durable best run `28,323`; v9 stability median `28,947` |
 | Coarse structure exact | pass | `129 / 118 / 5` before and after |
 | Lead Japanese fluency acceptable | pass | lead sample paragraphs in metrics JSON |
 | English residual ratio in sampled paragraphs stays low | pass | `pageQuality.after.englishResidualRatio` in metrics JSON |
-| Protected/source fallback counts remain explainable | pass | `finalState.metrics.qualitySignals` in metrics JSON |
-| Stability gate on median | pass | v7 gate passes all configured checks; one outlier run still split once |
+| Protected/source fallback counts remain explainable | warning | `protectedMarkerFallbackFragments` median `1`; warning blocks median `1` in v9 stability sample |
+| Warning-aware completion is surfaced | pass | `warningStats` and `completed_with_warnings` now appear in live metrics |
+| Stability gate on median | pass | v9 sample stayed split-free across all 3 runs |
 
 ## 2. High-Difficulty Fixture Bench
 
