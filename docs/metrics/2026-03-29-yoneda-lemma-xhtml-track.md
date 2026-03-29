@@ -10,6 +10,7 @@ Purpose:
 - Track the dedicated XHTML/XML lane separately from the main HTML durable baseline.
 - Record the first successful XML-safe apply path on a real page.
 - Keep the XHTML lane visible without mixing its numbers into the HTML baseline.
+- Track stability on a real XHTML page now that the XML-safe apply path is working.
 
 Execution:
 - Provider: `openrouter`
@@ -21,6 +22,8 @@ Execution:
 - Harness: [run-live-page-metrics.mjs](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/tests/e2e/run-live-page-metrics.mjs)
 - Metrics JSON: [ncatlab-org-yoneda-lemma-metrics.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-metrics.json)
 - Screenshot: [ncatlab-org-yoneda-lemma-translated.png](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-translated.png)
+- Stability harness: [run-live-page-stability.mjs](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/tests/e2e/run-live-page-stability.mjs)
+- Stability summary: [ncatlab-org-yoneda-lemma-yoneda-stability-v1-summary.json](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/test-results/ncatlab-org-yoneda-lemma-yoneda-stability-v1-summary.json)
 
 Outcome:
 - The page now completes instead of failing on XHTML/XML insertion.
@@ -53,6 +56,30 @@ Interpretation:
 - The remaining issue is throughput:
   - request count is still high
   - lazy-visible and deferred dominate total time
+  - the first visible request is not the main bottleneck
+
+Stability sample across 3 runs:
+- First visible translation median: `2,439 ms`
+- Full completion median: `49,349 ms`
+- Request count median: `42`
+- Total tokens median: `43,317`
+- Estimated cost median: `$0.03677925`
+- Immediate provider latency median: `2,382 ms`
+
+Stability spread:
+- First visible translation: `1,737 ms -> 3,392 ms`
+- Full completion: `44,462 ms -> 53,604 ms`
+- Total tokens: `41,980 -> 43,454`
+- Estimated cost: `$0.03567 -> $0.03697725`
+- Immediate provider latency: `1,683 ms -> 3,333 ms`
+
+What the stability sample shows:
+- Like the HTML benchmark, the content/background bridge overhead is negligible:
+  - `bridgeLatencyMs` stayed at `0-1 ms`
+- Unlike the HTML benchmark, XHTML is still dominated by total request volume:
+  - `42` requests vs `15` on the HTML durable benchmark
+  - `lazyVisible 20 + deferred 21` dominate the run
+- So the next XHTML optimization target is clustering and batching, not first-request shrinkage.
 
 How to use this track:
 - Use the HTML durable baseline on `Representation_theory` for the main production benchmark.
@@ -63,5 +90,6 @@ How to use this track:
 
 Next target for the XHTML lane:
 - Keep `batchSplits = 0`
-- Reduce full completion from `49.7s` toward the `35s-40s` range
+- Reduce full completion from the current `44s-54s` band toward the `35s-40s` range
+- Reduce request count from `42` toward the low `30s`
 - Avoid regressing the current HTML durable baseline while doing so

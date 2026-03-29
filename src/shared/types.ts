@@ -118,6 +118,8 @@ export interface SessionImmediateBatchMetrics {
   estimatedPromptTokens: number;
   hasMarkers: boolean;
   providerLatencyMs: number | null;
+  backgroundProviderLatencyMs: number | null;
+  bridgeLatencyMs: number | null;
 }
 
 export interface SessionRuntimeMetrics {

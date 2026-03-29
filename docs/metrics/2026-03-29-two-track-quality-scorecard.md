@@ -37,10 +37,10 @@ Current score:
 
 | Check | Status | Evidence |
 | --- | --- | --- |
-| First visible translation under `2.5s` | pass | `2,273 ms` |
-| Full completion under `40s` | pass | `39,025 ms` |
+| First visible translation under `2.5s` | pass | durable best run `1,724 ms`; v5 stability median `1,999 ms` |
+| Full completion under `40s` | pass | durable best run `32,627 ms`; v5 stability median `36,105 ms` |
 | Request count at or below `15` | pass | `15` |
-| Total tokens under `30k` | pass | `28,541` |
+| Total tokens under `30k` | pass | durable best run `28,323`; v5 stability median `28,428` |
 | Coarse structure exact | pass | `129 / 118 / 5` before and after |
 | Lead Japanese fluency acceptable | pass | lead sample paragraphs in metrics JSON |
 
@@ -92,3 +92,4 @@ Separate compatibility track:
   - XML-safe apply path: pass
   - real Japanese output in the main content: pass
   - throughput still significantly worse than the HTML benchmark: expected and tracked separately
+  - current stability sample: `42 requests / 49.3s median full completion / 43.3k median tokens`

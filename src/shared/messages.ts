@@ -142,6 +142,9 @@ export interface SessionSnapshotResponse extends ActionResponse {
 
 export interface TranslateApiResponse extends ActionResponse {
   result?: TranslationBatchResult;
+  timings?: {
+    providerDurationMs?: number;
+  };
 }
 
 export interface TabStateResponse extends ActionResponse {

@@ -125,6 +125,7 @@ interface TranslationRequestResult {
   translations: string[];
   usage?: NonNullable<NonNullable<TranslateApiResponse['result']>['usage']>;
   finishReason?: string;
+  providerDurationMs?: number;
 }
 
 interface BatchStrategy {
@@ -1548,6 +1549,7 @@ export class TranslationController {
           ],
           usage: response.result.usage,
           finishReason: response.result.finishReason,
+          providerDurationMs: response.timings?.providerDurationMs,
         };
       }
       throw new FragmentCountMismatchTranslationError(
@@ -1560,6 +1562,7 @@ export class TranslationController {
       translations: response.result.translations,
       usage: response.result.usage,
       finishReason: response.result.finishReason,
+      providerDurationMs: response.timings?.providerDurationMs,
     };
   }
 
@@ -1642,7 +1645,10 @@ export class TranslationController {
           options.sessionId,
         );
         if (options.metricsPhase === 'immediate' && requestStartedAt > 0) {
-          this.recordImmediateBatchLatency(Date.now() - requestStartedAt);
+          this.recordImmediateBatchLatency(
+            Date.now() - requestStartedAt,
+            result.providerDurationMs,
+          );
         }
 
         if (result.finishReason === 'length') {
@@ -2528,10 +2534,12 @@ export class TranslationController {
       estimatedPromptTokens: estimatePromptTokensForBatch(batchEstimate, calibration),
       hasMarkers,
       providerLatencyMs: null,
+      backgroundProviderLatencyMs: null,
+      bridgeLatencyMs: null,
     };
   }
 
-  private recordImmediateBatchLatency(latencyMs: number): void {
+  private recordImmediateBatchLatency(latencyMs: number, providerDurationMs?: number): void {
     if (
       !this.sessionMetrics?.immediateBatch ||
       this.sessionMetrics.immediateBatch.providerLatencyMs !== null
@@ -2540,6 +2548,13 @@ export class TranslationController {
     }
 
     this.sessionMetrics.immediateBatch.providerLatencyMs = latencyMs;
+    if (typeof providerDurationMs === 'number' && Number.isFinite(providerDurationMs)) {
+      this.sessionMetrics.immediateBatch.backgroundProviderLatencyMs = providerDurationMs;
+      this.sessionMetrics.immediateBatch.bridgeLatencyMs = Math.max(
+        0,
+        latencyMs - providerDurationMs,
+      );
+    }
   }
 
   private recordBatchSuccess(

@@ -94,6 +94,7 @@ async function handleMessage(
       const tabId = sender.tab?.id;
       const provider = getTranslationProvider(message.request.provider);
       const abortController = new AbortController();
+      const providerStartedAt = Date.now();
       if (tabId !== undefined) {
         const controllers = activeTranslationControllers.get(tabId) ?? new Set<AbortController>();
         controllers.add(abortController);
@@ -107,6 +108,9 @@ async function handleMessage(
         return {
           ok: true,
           result,
+          timings: {
+            providerDurationMs: Date.now() - providerStartedAt,
+          },
         };
       } catch (error) {
         if (isCancellationError(error)) {
