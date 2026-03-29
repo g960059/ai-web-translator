@@ -142,4 +142,28 @@ describe('TranslationOverlay', () => {
     mascot.click();
     expect(onStartTranslation).toHaveBeenCalledTimes(1);
   });
+
+  it('treats completed_with_warnings as a reviewable resting state, not done', () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body></body>
+      </html>
+    `);
+
+    const overlay = new TranslationOverlay(document);
+    const onFocusNextWarning = vi.fn();
+    overlay.onFocusNextWarning = onFocusNextWarning;
+    overlay.show('completed_with_warnings', '2箇所はそのまま残っています。', 100);
+
+    const host = getWidgetHost();
+    expect(host.dataset.widgetState).toBe('resting');
+    expect(host.dataset.restingAction).toBe('review-warnings');
+
+    const bubbleAction = getWidgetShadowRoot().querySelector('.bubble-action') as HTMLButtonElement;
+    expect(bubbleAction.textContent).toBe('次へ');
+    bubbleAction.click();
+
+    expect(onFocusNextWarning).toHaveBeenCalledTimes(1);
+  });
 });

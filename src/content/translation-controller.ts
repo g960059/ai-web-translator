@@ -53,15 +53,18 @@ import { logWithContext } from '../shared/debug-log';
 import { isRetryableRuntimeError, localizeRuntimeError } from '../shared/error-messages';
 import { loadSettings } from '../shared/settings';
 import type {
+  BlockWarningState,
   BlockDisplayState,
   DefaultTranslationScope,
   ExtensionSettings,
   PageAnalysis,
   SessionRuntimeMetrics,
   SessionSnapshot,
+  SessionWarningSummary,
   TranslationBatchRequest,
   TranslationContentMode,
   TranslationContext,
+  TranslationStatus,
 } from '../shared/types';
 import { TranslationOverlay } from './overlay';
 
@@ -80,6 +83,9 @@ interface BlockRecord {
   sectionContext: string;
   top: number;
   priorityScore: number;
+  warningState: BlockWarningState;
+  retryAttemptCount: number;
+  lastWarningMessage: string | null;
 }
 
 interface TranslationGroup {
@@ -261,6 +267,7 @@ export class TranslationController {
   private providerWarmupTimerId: number | null = null;
   private providerWarmupPromise: Promise<void> | null = null;
   private providerWarmupKey: string | null = null;
+  private lastFocusedWarningBlockId: string | null = null;
   private sessionSnapshot: SessionSnapshot = {
     pageKey: window.location.href,
     status: 'idle',
@@ -271,6 +278,7 @@ export class TranslationController {
     scope: null,
     activeSessionId: null,
     lastError: null,
+    warnings: null,
     metrics: null,
   };
 
@@ -287,6 +295,9 @@ export class TranslationController {
     };
     this.overlay.onCancel = () => {
       void this.cancelTranslation();
+    };
+    this.overlay.onFocusNextWarning = () => {
+      void this.focusNextWarningBlock();
     };
     this.overlay.attachSelectionListener();
   }
@@ -332,6 +343,8 @@ export class TranslationController {
         return this.clearPageCache(message.settings);
       case 'CANCEL_TRANSLATION':
         return this.cancelTranslation();
+      case 'FOCUS_NEXT_WARNING_BLOCK':
+        return this.focusNextWarningBlock();
       case 'GET_PAGE_ANALYSIS':
         return this.getPageAnalysis(message.settings, message.scope);
       case 'GET_DEBUG_BLOCKS':
@@ -385,8 +398,10 @@ export class TranslationController {
       scope: null,
       activeSessionId: null,
       lastError: null,
+      warnings: null,
       metrics: null,
     };
+    this.lastFocusedWarningBlockId = null;
     this.emitSnapshot();
   }
 
@@ -421,6 +436,41 @@ export class TranslationController {
     return {
       ok: true,
       message: 'Cancelled. Start a new run when ready.',
+    };
+  }
+
+  private async focusNextWarningBlock(): Promise<ActionResponse> {
+    const warningRecords = this.collectWarningRecords();
+    if (warningRecords.length === 0) {
+      return {
+        ok: false,
+        message: '未解決の箇所は見つかりませんでした。',
+      };
+    }
+
+    const currentIndex = this.lastFocusedWarningBlockId
+      ? warningRecords.findIndex((record) => record.blockId === this.lastFocusedWarningBlockId)
+      : -1;
+    const nextRecord = warningRecords[(currentIndex + 1) % warningRecords.length];
+
+    nextRecord.element.scrollIntoView({
+      block: 'center',
+      behavior: 'smooth',
+    });
+    this.lastFocusedWarningBlockId = nextRecord.blockId;
+
+    if (this.sessionSnapshot.status === 'completed_with_warnings') {
+      this.overlay.setWarningResting(
+        buildWarningSummaryMessage(this.sessionSnapshot.warnings ?? null),
+        {
+          warningAvailable: true,
+        },
+      );
+    }
+
+    return {
+      ok: true,
+      message: '未解決の箇所へ移動しました。',
     };
   }
 
@@ -516,6 +566,7 @@ export class TranslationController {
       records.forEach((record) => {
         record.translatedContent = null;
         record.displayState = 'original';
+        this.clearBlockWarning(record);
       });
     }
 
@@ -693,8 +744,8 @@ export class TranslationController {
     this.throwIfSessionCancelled(sessionId);
 
     if (pendingGroups.length === 0) {
-      this.overlay.complete(statusLabel);
-      this.finishSession(sessionId);
+      const completion = this.finishSession(sessionId);
+      this.presentCompletionOverlay(statusLabel, completion?.warnings ?? null);
       return { ok: true, message: statusLabel };
     }
 
@@ -793,8 +844,8 @@ export class TranslationController {
     }
 
     this.throwIfSessionCancelled(sessionId);
-    this.overlay.complete(statusLabel);
-    this.finishSession(sessionId);
+    const completion = this.finishSession(sessionId);
+    this.presentCompletionOverlay(statusLabel, completion?.warnings ?? null);
     return { ok: true, message: statusLabel };
   }
 
@@ -855,6 +906,9 @@ export class TranslationController {
         sectionContext: block.sectionContext,
         top: block.top,
         priorityScore: block.priorityScore,
+        warningState: 'none',
+        retryAttemptCount: 0,
+        lastWarningMessage: null,
       };
 
       this.blocksByElement.set(block.element, record);
@@ -1415,6 +1469,8 @@ export class TranslationController {
           const batch = plan.batches[nextBatchIndex++];
           try {
             let result: TranslationRequestResult;
+            let usedSourceFallback = false;
+            let sourceFallbackMessage: string | null = null;
             try {
               result = await this.requestTranslationsWithRetry({
                 items: batch,
@@ -1428,6 +1484,8 @@ export class TranslationController {
               });
             } catch (error) {
               if (shouldFallbackToOriginalBatch(batch, error)) {
+                usedSourceFallback = true;
+                sourceFallbackMessage = getErrorMessage(error, 'Translation request failed.');
                 logWithContext('warn', '[AI Web Translator] Falling back to source fragment after output-limit failure.', {
                   pageKey: this.pageKey,
                   sessionId: options.sessionId,
@@ -1447,6 +1505,7 @@ export class TranslationController {
               lookup: TranslationCacheLookup;
               translation: string;
             }> = [];
+            const fallbackGroupKeys = new Set<string>();
 
             batch.forEach((item, index) => {
               const preparedFragment = restorePreparedContent(
@@ -1475,6 +1534,7 @@ export class TranslationController {
                 normalizedProtectedFragment !== item.preparedContent
               ) {
                 this.recordQualitySignal('protectedMarkerFallbackFragments');
+                fallbackGroupKeys.add(item.group.groupKey);
               }
               const placeholderRestoredFragment = item.placeholderTagMap
                 ? restorePlaceholderRichText(
@@ -1505,7 +1565,17 @@ export class TranslationController {
               }
 
               const restored = joinTranslatedGroupOutput(item.group, bucket);
-              this.applyGroupTranslation(item.group, restored, false);
+              const hasFallbackWarning =
+                usedSourceFallback || fallbackGroupKeys.has(item.group.groupKey);
+              this.applyGroupTranslation(item.group, restored, false, {
+                clearWarnings: !hasFallbackWarning,
+              });
+              if (hasFallbackWarning) {
+                this.markItemsFallback(
+                  batch.filter((candidate) => candidate.group.groupKey === item.group.groupKey),
+                  sourceFallbackMessage ?? undefined,
+                );
+              }
               this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
               processedJobs += 1;
               if (options.settings.cacheEnabled) {
@@ -1671,6 +1741,10 @@ export class TranslationController {
         this.throwIfSessionCancelled(options.sessionId);
         if (attempt > 0) {
           const previousError = this.sessionSnapshot.lastError;
+          this.markItemsRetrying(
+            options.items,
+            previousError || 'もう一度試しています。',
+          );
           this.setSnapshot(
             {
               status: 'retrying',
@@ -1756,9 +1830,11 @@ export class TranslationController {
           if (!splitResults) {
             const singleItemSplit = splitSingleItemForRetry(options.items[0]);
             if (!singleItemSplit) {
+              this.markItemsFinalError(options.items, message);
               throw error;
             }
 
+            this.markItemsRetrying(options.items, message);
             this.setSnapshot(
               {
                 status: 'retrying',
@@ -1810,6 +1886,7 @@ export class TranslationController {
             };
           }
 
+          this.markItemsRetrying(options.items, message);
           this.setSnapshot(
             {
               status: 'retrying',
@@ -1858,6 +1935,7 @@ export class TranslationController {
           return combined;
         }
         if (attempt >= MAX_BATCH_RETRIES || !isRetryableTranslationError(error)) {
+          this.markItemsFinalError(options.items, message);
           throw error;
         }
         this.recordRetry('transient');
@@ -2039,10 +2117,136 @@ export class TranslationController {
     return group.records.find((record) => record.translatedContent)?.translatedContent ?? null;
   }
 
+  private ensureWarningStyles(): void {
+    if (this.documentRef.querySelector('style[data-aiwt-warning-styles="true"]')) {
+      return;
+    }
+
+    const style = this.documentRef.createElement('style');
+    style.dataset.aiwtWarningStyles = 'true';
+    style.textContent = `
+      [data-aiwt-warning="retrying"] {
+        outline: 1px solid rgba(212, 147, 17, 0.34);
+        outline-offset: 2px;
+      }
+      [data-aiwt-warning="fallback-source"] {
+        outline: 1px dashed rgba(212, 147, 17, 0.5);
+        outline-offset: 2px;
+      }
+      [data-aiwt-warning="error-final"] {
+        outline: 1px solid rgba(187, 79, 58, 0.45);
+        outline-offset: 2px;
+      }
+    `;
+
+    (this.documentRef.head ?? this.documentRef.documentElement).appendChild(style);
+  }
+
+  private applyBlockWarningState(record: BlockRecord): void {
+    this.ensureWarningStyles();
+    if (record.warningState === 'none') {
+      delete record.element.dataset.aiwtWarning;
+      return;
+    }
+
+    record.element.dataset.aiwtWarning = record.warningState;
+  }
+
+  private setBlockWarningState(
+    record: BlockRecord,
+    warningState: BlockWarningState,
+    message?: string | null,
+  ): void {
+    record.warningState = warningState;
+    if (message !== undefined) {
+      record.lastWarningMessage = message;
+    }
+    this.applyBlockWarningState(record);
+  }
+
+  private clearBlockWarning(
+    record: BlockRecord,
+    options: { resetRetries?: boolean } = {},
+  ): void {
+    record.warningState = 'none';
+    record.lastWarningMessage = null;
+    if (options.resetRetries ?? true) {
+      record.retryAttemptCount = 0;
+    }
+    this.applyBlockWarningState(record);
+  }
+
+  private collectWarningRecords(): BlockRecord[] {
+    return Array.from(this.blocksByElement.values())
+      .filter((record) => record.warningState !== 'none')
+      .sort(compareWarningRecords);
+  }
+
+  private buildWarningSummary(): SessionWarningSummary | null {
+    const warningRecords = this.collectWarningRecords();
+    if (warningRecords.length === 0) {
+      return null;
+    }
+
+    return {
+      totalBlocks: warningRecords.length,
+      retryingBlocks: warningRecords.filter((record) => record.warningState === 'retrying').length,
+      fallbackSourceBlocks: warningRecords.filter(
+        (record) => record.warningState === 'fallback-source',
+      ).length,
+      errorBlocks: warningRecords.filter((record) => record.warningState === 'error-final').length,
+    };
+  }
+
+  private syncWarningSummary(immediate = true): void {
+    const nextWarnings = this.buildWarningSummary();
+    const currentWarnings = this.sessionSnapshot.warnings ?? null;
+    if (areWarningSummariesEqual(currentWarnings, nextWarnings)) {
+      return;
+    }
+
+    this.sessionSnapshot.warnings = nextWarnings;
+    if (immediate) {
+      this.emitSnapshot();
+    }
+  }
+
+  private markItemsRetrying(items: TranslationBatchItem[], message: string): void {
+    const localizedMessage = localizeRuntimeError(message);
+    collectBatchRecords(items).forEach((record) => {
+      record.retryAttemptCount += 1;
+      if (record.retryAttemptCount >= 2 && record.warningState === 'none') {
+        this.setBlockWarningState(record, 'retrying', localizedMessage);
+      } else if (record.warningState === 'retrying') {
+        this.setBlockWarningState(record, 'retrying', localizedMessage);
+      } else {
+        record.lastWarningMessage = localizedMessage;
+      }
+    });
+    this.syncWarningSummary();
+  }
+
+  private markItemsFallback(items: TranslationBatchItem[], message?: string): void {
+    const localizedMessage = message ? localizeRuntimeError(message) : 'この部分は原文のまま残っています。';
+    collectBatchRecords(items).forEach((record) => {
+      this.setBlockWarningState(record, 'fallback-source', localizedMessage);
+    });
+    this.syncWarningSummary();
+  }
+
+  private markItemsFinalError(items: TranslationBatchItem[], message: string): void {
+    const localizedMessage = localizeRuntimeError(message);
+    collectBatchRecords(items).forEach((record) => {
+      this.setBlockWarningState(record, 'error-final', localizedMessage);
+    });
+    this.syncWarningSummary();
+  }
+
   private applyGroupTranslation(
     group: TranslationGroup,
     translatedContent: string,
     refreshDisplayState = true,
+    options: { clearWarnings?: boolean } = {},
   ): void {
     group.records.forEach((record) => {
       if (record.contentMode === 'text') {
@@ -2053,9 +2257,12 @@ export class TranslationController {
 
       record.translatedContent = translatedContent;
       record.displayState = 'translated';
-      record.element.style.outline = 'none';
+      if (options.clearWarnings ?? true) {
+        this.clearBlockWarning(record);
+      }
     });
 
+    this.syncWarningSummary(false);
     if (refreshDisplayState) {
       this.refreshDisplayState();
     }
@@ -2065,8 +2272,10 @@ export class TranslationController {
     records.forEach((record) => {
       setElementHtmlContent(record.element, record.originalHtml);
       record.displayState = 'original';
-      record.element.style.outline = 'none';
+      this.clearBlockWarning(record);
     });
+    this.lastFocusedWarningBlockId = null;
+    this.syncWarningSummary(false);
     this.refreshDisplayState();
   }
 
@@ -2085,15 +2294,19 @@ export class TranslationController {
     }
 
     const hasTranslations = translatedRecords.length > 0;
+    const warnings = this.buildWarningSummary();
+    const warningsChanged = !areWarningSummariesEqual(this.sessionSnapshot.warnings ?? null, warnings);
     if (
       this.sessionSnapshot.displayState === displayState &&
-      this.sessionSnapshot.hasTranslations === hasTranslations
+      this.sessionSnapshot.hasTranslations === hasTranslations &&
+      !warningsChanged
     ) {
       return;
     }
 
     this.sessionSnapshot.displayState = displayState;
     this.sessionSnapshot.hasTranslations = hasTranslations;
+    this.sessionSnapshot.warnings = warnings;
     this.emitSnapshot();
   }
 
@@ -2357,9 +2570,9 @@ export class TranslationController {
     session.processing = false;
     this.recordLazyVisibleCompletion(session);
     if (session.pendingGroups.size === 0) {
-      this.finishSession(session.sessionId);
+      const completion = this.finishSession(session.sessionId);
       this.cleanupLazyPageSessionResources(session);
-      this.overlay.complete('ページ全体を訳し終えました。');
+      this.presentCompletionOverlay('ページ全体を訳し終えました。', completion?.warnings ?? null);
       this.lazyPageSession = null;
       return;
     }
@@ -2828,10 +3041,13 @@ export class TranslationController {
     partial: Partial<SessionSnapshot>,
     options: { immediate?: boolean } = {},
   ): void {
+    const warnings =
+      partial.warnings === undefined ? this.buildWarningSummary() : partial.warnings;
     this.sessionSnapshot = {
       ...this.sessionSnapshot,
       ...partial,
       pageKey: this.pageKey,
+      warnings,
       metrics:
         partial.metrics === undefined
           ? this.cloneSessionMetrics()
@@ -2843,24 +3059,43 @@ export class TranslationController {
     }
   }
 
-  private finishSession(sessionId: string): void {
+  private finishSession(
+    sessionId: string,
+  ): { status: TranslationStatus; warnings: SessionWarningSummary | null } | null {
     if (this.sessionSnapshot.activeSessionId !== sessionId && this.lazyPageSession?.sessionId !== sessionId) {
-      return;
+      return null;
     }
 
     this.cancelledSessionIds.delete(sessionId);
     this.recordPhaseTiming('immediateCompletedMs');
     this.recordPhaseTiming('lazyVisibleCompletedMs');
     this.recordPhaseTiming('completedMs');
+    const warnings = this.buildWarningSummary();
+    const status: TranslationStatus = warnings ? 'completed_with_warnings' : 'completed';
     this.setSnapshot(
       {
-        status: 'completed',
+        status,
         progressPercent: 100,
         activeSessionId: null,
         lastError: null,
       },
       { immediate: true },
     );
+    return { status, warnings };
+  }
+
+  private presentCompletionOverlay(
+    successMessage: string,
+    warnings: SessionWarningSummary | null,
+  ): void {
+    if (warnings) {
+      this.overlay.setWarningResting(buildWarningSummaryMessage(warnings), {
+        warningAvailable: true,
+      });
+      return;
+    }
+
+    this.overlay.complete(successMessage);
   }
 
   private updateProgress(
@@ -2928,6 +3163,13 @@ export class TranslationController {
   private refreshOverlayForIdleState(): void {
     if (this.lazyPageSession) {
       this.overlay.setResting();
+      return;
+    }
+
+    if (this.sessionSnapshot.warnings?.totalBlocks) {
+      this.overlay.setWarningResting(buildWarningSummaryMessage(this.sessionSnapshot.warnings), {
+        warningAvailable: true,
+      });
       return;
     }
 
@@ -3900,4 +4142,59 @@ function mergeTranslationUsage(
     completionTokens: left.completionTokens + right.completionTokens,
     totalTokens: left.totalTokens + right.totalTokens,
   };
+}
+
+function collectBatchRecords(items: TranslationBatchItem[]): BlockRecord[] {
+  const records = new Map<string, BlockRecord>();
+  items.forEach((item) => {
+    item.group.records.forEach((record) => {
+      records.set(record.blockId, record);
+    });
+  });
+  return [...records.values()];
+}
+
+function compareWarningRecords(left: BlockRecord, right: BlockRecord): number {
+  if (left.element === right.element) {
+    return 0;
+  }
+
+  const relation = left.element.compareDocumentPosition(right.element);
+  if (relation & Node.DOCUMENT_POSITION_FOLLOWING) {
+    return -1;
+  }
+  if (relation & Node.DOCUMENT_POSITION_PRECEDING) {
+    return 1;
+  }
+
+  return left.top - right.top;
+}
+
+function areWarningSummariesEqual(
+  left: SessionWarningSummary | null,
+  right: SessionWarningSummary | null,
+): boolean {
+  if (!left && !right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.totalBlocks === right.totalBlocks &&
+    left.retryingBlocks === right.retryingBlocks &&
+    left.fallbackSourceBlocks === right.fallbackSourceBlocks &&
+    left.errorBlocks === right.errorBlocks
+  );
+}
+
+function buildWarningSummaryMessage(summary: SessionWarningSummary | null): string {
+  const count = summary?.totalBlocks ?? 0;
+  if (count <= 0) {
+    return '一部そのまま残っています。';
+  }
+
+  return `${count}箇所はそのまま残っています。`;
 }

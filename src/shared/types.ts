@@ -15,12 +15,14 @@ export type TranslationStatus =
   | 'retrying'
   | 'lazy'
   | 'completed'
+  | 'completed_with_warnings'
   | 'failed'
   | 'cancelled';
 
 export type WidgetState = 'off' | 'working' | 'resting' | 'retrying' | 'error' | 'done';
 
 export type BlockDisplayState = 'original' | 'translated';
+export type BlockWarningState = 'none' | 'retrying' | 'fallback-source' | 'error-final';
 
 export type PageDisplayState = 'original' | 'translated' | 'mixed';
 
@@ -140,6 +142,13 @@ export interface SessionQualitySignals {
   protectedMarkerFallbackFragments: number;
 }
 
+export interface SessionWarningSummary {
+  totalBlocks: number;
+  retryingBlocks: number;
+  fallbackSourceBlocks: number;
+  errorBlocks: number;
+}
+
 export interface SessionRuntimeMetrics {
   phaseTimings: SessionPhaseTimings;
   retryCounts: SessionRetryCounts;
@@ -161,6 +170,7 @@ export interface SessionSnapshot {
   scope: DefaultTranslationScope | null;
   activeSessionId: string | null;
   lastError: string | null;
+  warnings?: SessionWarningSummary | null;
   metrics?: SessionRuntimeMetrics | null;
 }
 

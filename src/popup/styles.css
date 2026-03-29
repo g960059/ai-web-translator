@@ -253,6 +253,10 @@ body {
   padding: 2px 0;
 }
 
+.soft-note-warning {
+  color: var(--danger-text);
+}
+
 .field {
   display: flex;
   flex-direction: column;

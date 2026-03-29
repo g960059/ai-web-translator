@@ -1484,8 +1484,13 @@ describe('TranslationController', () => {
 
     const snapshotResponse = await controller.handleMessage({
       type: 'GET_SESSION_SNAPSHOT',
-    }) as { ok: boolean; snapshot?: { metrics?: any } };
+    }) as { ok: boolean; snapshot?: { status?: string; warnings?: any; metrics?: any } };
+    expect(snapshotResponse.snapshot?.status).toBe('completed_with_warnings');
+    expect(snapshotResponse.snapshot?.warnings?.fallbackSourceBlocks).toBe(1);
     expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBe(1);
+    expect((document.getElementById('hybrid') as HTMLElement).dataset.aiwtWarning).toBe(
+      'fallback-source',
+    );
   });
 
   it('merges short adjacent text siblings into a single parent html fragment', async () => {
@@ -2030,6 +2035,118 @@ describe('TranslationController', () => {
 
     expect(response.ok).toBe(true);
     expect((document.getElementById('stuck') as HTMLElement).textContent).toBe(paragraph);
+    expect((document.getElementById('stuck') as HTMLElement).dataset.aiwtWarning).toBe(
+      'fallback-source',
+    );
+
+    const snapshotResponse = (await controller.handleMessage({
+      type: 'GET_SESSION_SNAPSHOT',
+    })) as { ok: boolean; snapshot?: { status?: string; warnings?: any } };
+    expect(snapshotResponse.snapshot?.status).toBe('completed_with_warnings');
+    expect(snapshotResponse.snapshot?.warnings).toEqual(
+      expect.objectContaining({
+        totalBlocks: 1,
+        fallbackSourceBlocks: 1,
+        errorBlocks: 0,
+      }),
+    );
+
+    const scrollIntoView = vi.fn();
+    (document.getElementById('stuck') as HTMLElement).scrollIntoView = scrollIntoView;
+    const focusResponse = await controller.handleMessage({
+      type: 'FOCUS_NEXT_WARNING_BLOCK',
+    });
+    expect(focusResponse.ok).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('shows a subtle retry border only after a second retry attempt and clears it on success', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="target">Retry visibility target.</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+    const controller = new TranslationController(document) as any;
+    const scan = controller.collectPageScan('main');
+    const context = controller.buildContext(settings.targetLanguage);
+    const groups = controller.buildDerivedGroups(scan.records, settings, context);
+    const group = groups[0];
+    const item = {
+      group,
+      fragmentIndex: 0,
+      contentMode: group.contentMode,
+      restoreContentMode: group.requestFragments[0].restoreContentMode,
+      preparedContent: group.requestFragments[0].preparedContent,
+      restoreMap: group.requestFragments[0].restoreMap,
+      placeholderTagMap: group.requestFragments[0].placeholderTagMap,
+      placeholderWrapperPrefix: group.requestFragments[0].placeholderWrapperPrefix,
+      placeholderWrapperSuffix: group.requestFragments[0].placeholderWrapperSuffix,
+      skipWrapperRestore: group.requestFragments[0].skipWrapperRestore,
+      protectedHtmlMap: group.requestFragments[0].protectedHtmlMap,
+      hasMarkers: false,
+      estimatedTokens: 1,
+      rawEstimatedTokens: 1,
+    };
+
+    controller.markItemsRetrying([item], 'OpenRouter request timed out.');
+    expect((document.getElementById('target') as HTMLElement).dataset.aiwtWarning).toBeUndefined();
+
+    controller.markItemsRetrying([item], 'OpenRouter request timed out.');
+    expect((document.getElementById('target') as HTMLElement).dataset.aiwtWarning).toBe('retrying');
+
+    controller.applyGroupTranslation(group, 'Retry visibility target. [ja]');
+    expect((document.getElementById('target') as HTMLElement).dataset.aiwtWarning).toBeUndefined();
+  });
+
+  it('marks unrecoverable block failures as final errors', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="broken">Broken paragraph.</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: {
+        type: string;
+      }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API') {
+          throw new Error('Forbidden');
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(false);
+    expect((document.getElementById('broken') as HTMLElement).dataset.aiwtWarning).toBe(
+      'error-final',
+    );
   });
 
   it('splits a batch into smaller requests when the provider returns the wrong fragment count', async () => {

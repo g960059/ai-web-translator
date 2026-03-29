@@ -1,10 +1,10 @@
 import { localizeRuntimeError } from '../shared/error-messages';
 import { formatLanguageLabel } from '../shared/languages';
-import type { TranslationStatus, WidgetState } from '../shared/types';
+import type { SessionWarningSummary, TranslationStatus, WidgetState } from '../shared/types';
 import { WIDGET_SVGS } from './widget-svgs';
 
-type BubbleActionKind = 'none' | 'start-page' | 'start-selection' | 'retry';
-type RestingActionKind = 'none' | 'resume-page';
+type BubbleActionKind = 'none' | 'start-page' | 'start-selection' | 'retry' | 'focus-warning';
+type RestingActionKind = 'none' | 'resume-page' | 'review-warnings';
 
 export class TranslationOverlay {
   private readonly host: HTMLDivElement;
@@ -28,6 +28,7 @@ export class TranslationOverlay {
   onTranslateSelection: (() => void) | null = null;
   onRetry: (() => void) | null = null;
   onCancel: (() => void) | null = null;
+  onFocusNextWarning: (() => void) | null = null;
 
   constructor(private readonly documentRef: Document) {
     this.host = documentRef.createElement('div');
@@ -302,6 +303,23 @@ export class TranslationOverlay {
     this.hideBubble();
   }
 
+  setWarningResting(
+    message = '一部そのまま残っています。',
+    options?: { warningAvailable?: boolean },
+  ): void {
+    this.clearDoneTransition();
+    this.setVisible(true);
+    this.restingAction = options?.warningAvailable ? 'review-warnings' : 'none';
+    this.setState('resting');
+    this.currentErrorMessage = '';
+    this.showBubble(
+      message,
+      this.restingAction === 'review-warnings' ? '次へ' : '',
+      0,
+      this.restingAction === 'review-warnings' ? 'focus-warning' : 'none',
+    );
+  }
+
   setDone(message = ''): void {
     this.clearDoneTransition();
     this.restingAction = 'none';
@@ -418,6 +436,11 @@ export class TranslationOverlay {
       case 'completed':
         this.setDone(message);
         return;
+      case 'completed_with_warnings':
+        this.setWarningResting(message || buildWarningSummaryMessage(null), {
+          warningAvailable: true,
+        });
+        return;
       case 'failed':
         this.setError(message);
         return;
@@ -488,6 +511,9 @@ export class TranslationOverlay {
       case 'retry':
         this.onRetry?.();
         break;
+      case 'focus-warning':
+        this.onFocusNextWarning?.();
+        break;
       case 'none':
       default:
         break;
@@ -516,6 +542,10 @@ export class TranslationOverlay {
       case 'resting':
         if (this.restingAction === 'resume-page') {
           this.onStartTranslation?.();
+          break;
+        }
+        if (this.restingAction === 'review-warnings') {
+          this.onFocusNextWarning?.();
           break;
         }
         this.showBubble('続きを読み進めると、自動で訳していきます。', '', 1600, 'none');
@@ -597,6 +627,8 @@ function getMascotAriaLabel(state: WidgetState, restingAction: RestingActionKind
     case 'resting':
       return restingAction === 'resume-page'
         ? '翻訳は停止中です。押すと続きを再開できます。'
+        : restingAction === 'review-warnings'
+          ? '一部そのまま残っています。押すと未解決の箇所へ移動します。'
         : '翻訳は待機中です。';
     case 'error':
       return '翻訳に失敗しました。押すと再試行できます。';
@@ -606,4 +638,13 @@ function getMascotAriaLabel(state: WidgetState, restingAction: RestingActionKind
     default:
       return '翻訳ウィジェットです。押すと読み始める案内を開きます。';
   }
+}
+
+function buildWarningSummaryMessage(summary: SessionWarningSummary | null): string {
+  const count = summary?.totalBlocks ?? 0;
+  if (count <= 0) {
+    return '一部そのまま残っています。';
+  }
+
+  return `${count}箇所はそのまま残っています。`;
 }

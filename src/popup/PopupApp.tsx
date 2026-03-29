@@ -42,6 +42,8 @@ const MESSAGE_MAP: Record<string, string> = {
   'Cleared cached translations for this page.': 'このページの保存済み翻訳を消しました。',
   'Cleared all cached translations.': '保存していた翻訳をすべて消しました。',
   'Cancelled. Start a new run when ready.': '翻訳を止めました。',
+  '未解決の箇所へ移動しました。': '未解決の箇所へ移動しました。',
+  '未解決の箇所は見つかりませんでした。': '未解決の箇所は見つかりませんでした。',
 };
 
 const STYLE_OPTIONS: Array<{ value: TranslationStyle; label: string; help: string }> = [
@@ -367,6 +369,21 @@ export function PopupApp() {
     }
   }
 
+  async function handleFocusWarningBlock(): Promise<void> {
+    setWorking(true);
+    try {
+      const response = await runContentAction({
+        type: 'FOCUS_NEXT_WARNING_BLOCK',
+      });
+      if (!response) {
+        return;
+      }
+      showStatus(response.message || '', response.ok === false ? 'error' : 'info');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function handleClearAllCache(): Promise<void> {
     if (!confirmClearAll) {
       setConfirmClearAll(true);
@@ -443,6 +460,8 @@ export function PopupApp() {
   const canClearPageCache = !working && activeTabId !== null && !isUnavailablePage;
   const failureReason =
     tabState?.status === 'failed' ? localizeRuntimeError(tabState.lastError) : null;
+  const warningSummary = tabState?.warnings ?? null;
+  const hasWarnings = Boolean(warningSummary?.totalBlocks);
 
   return (
     <main className="popup-shell" data-mode={popupMode}>
@@ -529,6 +548,11 @@ export function PopupApp() {
                 原因: {failureReason}
               </p>
             )}
+            {tabState?.status === 'completed_with_warnings' && warningSummary && (
+              <p className="soft-note soft-note-warning">
+                {warningSummary.totalBlocks}箇所はそのまま残っています。
+              </p>
+            )}
             {tabState?.status === 'cancelled' && hasPageTranslation && (
               <p className="soft-note">
                 止めたところから、あとで続きを再開できます。
@@ -544,6 +568,26 @@ export function PopupApp() {
                 止めたいときは、ページ右下の相棒を押してください。
               </p>
             )}
+          </div>
+        )}
+
+        {hasWarnings && (
+          <div className="focus-card focus-card-warning">
+            <p className="panel-kicker">一部そのまま残っています</p>
+            <h2>{buildWarningLead(warningSummary!)}</h2>
+            <p className="helper-copy">
+              {buildWarningSummaryText(warningSummary!)}
+            </p>
+            <div className="tertiary-actions">
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => void handleFocusWarningBlock()}
+                disabled={working || loading}
+              >
+                未解決箇所へ
+              </button>
+            </div>
           </div>
         )}
 
@@ -918,6 +962,10 @@ function renderStateLabel(
     return '翻訳に失敗しました';
   }
 
+  if (state.status === 'completed_with_warnings') {
+    return '一部そのまま残っています';
+  }
+
   if (state.status === 'cancelled') {
     return '停止しました';
   }
@@ -949,6 +997,10 @@ function getStateTone(
   }
 
   if (mode === 'unavailable') {
+    return 'warning';
+  }
+
+  if (state?.status === 'completed_with_warnings') {
     return 'warning';
   }
 
@@ -1047,6 +1099,30 @@ function localizeMessage(message: string): string {
   }
 
   return message;
+}
+
+function buildWarningLead(
+  warningSummary: NonNullable<TabSessionState['warnings']>,
+): string {
+  if (warningSummary.errorBlocks > 0) {
+    return `${warningSummary.totalBlocks}箇所は確認が必要です`;
+  }
+
+  return `${warningSummary.totalBlocks}箇所は原文のまま残っています`;
+}
+
+function buildWarningSummaryText(
+  warningSummary: NonNullable<TabSessionState['warnings']>,
+): string {
+  if (warningSummary.errorBlocks > 0 && warningSummary.fallbackSourceBlocks > 0) {
+    return `原文のまま残った箇所が ${warningSummary.fallbackSourceBlocks} 件、再確認が必要な箇所が ${warningSummary.errorBlocks} 件あります。`;
+  }
+
+  if (warningSummary.errorBlocks > 0) {
+    return `再確認が必要な箇所が ${warningSummary.errorBlocks} 件あります。`;
+  }
+
+  return `原文のまま残った箇所が ${warningSummary.fallbackSourceBlocks} 件あります。`;
 }
 
 function isTabSessionUpdatedMessage(message: unknown): message is TabSessionUpdatedMessage {

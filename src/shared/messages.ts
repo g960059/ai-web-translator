@@ -46,6 +46,10 @@ export interface CancelTranslationMessage {
   type: 'CANCEL_TRANSLATION';
 }
 
+export interface FocusNextWarningBlockMessage {
+  type: 'FOCUS_NEXT_WARNING_BLOCK';
+}
+
 export interface GetPageAnalysisMessage {
   type: 'GET_PAGE_ANALYSIS';
   settings?: ExtensionSettings;
@@ -108,6 +112,7 @@ export type ContentCommandMessage =
   | RetranslateSelectionMessage
   | ClearCacheMessage
   | CancelTranslationMessage
+  | FocusNextWarningBlockMessage
   | GetPageAnalysisMessage
   | GetDebugBlocksMessage
   | GetSelectionStateMessage

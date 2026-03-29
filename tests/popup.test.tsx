@@ -218,6 +218,110 @@ describe('PopupApp', () => {
     expect(screen.getByText('原因: AI の応答が時間切れになりました。')).toBeInTheDocument();
   });
 
+  it('shows a warning card for completed_with_warnings and jumps to unresolved blocks', async () => {
+    const chromeMock = getChromeMock();
+
+    await chrome.storage.local.set({
+      [SETTINGS_STORAGE_KEY]: {
+        provider: 'openrouter',
+        apiKey: 'stored-key',
+        model: 'google/gemini-3.1-flash-lite-preview',
+        targetLanguage: 'ja',
+        style: 'auto',
+        translateFullPage: false,
+        cacheEnabled: true,
+      },
+    });
+
+    (chromeMock.tabs.query as any).mockResolvedValue([{ id: 1, url: 'https://example.com/' }]);
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: { type: string; tabId?: number }) => {
+        if (message.type === 'GET_TAB_SESSION_STATE') {
+          return {
+            ok: true,
+            state: {
+              tabId: message.tabId ?? 1,
+              pageKey: 'https://example.com',
+              status: 'completed_with_warnings',
+              displayState: 'translated',
+              hasTranslations: true,
+              progressPercent: 100,
+              targetLanguage: 'ja',
+              scope: 'main',
+              activeSessionId: null,
+              lastError: null,
+              warnings: {
+                totalBlocks: 2,
+                retryingBlocks: 0,
+                fallbackSourceBlocks: 2,
+                errorBlocks: 0,
+              },
+            },
+          };
+        }
+
+        if (message.type === 'GET_PROVIDER_MODELS') {
+          return {
+            ok: true,
+            models: [{ id: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite' }],
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    (chromeMock.tabs.sendMessage as any).mockImplementation(
+      async (_tabId: number, message: { type: string }) => {
+        if (message.type === 'GET_SELECTION_STATE') {
+          return { ok: true, hasSelection: false };
+        }
+
+        if (message.type === 'GET_PAGE_ANALYSIS') {
+          return {
+            ok: true,
+            analysis: {
+              blockCount: 8,
+              uniqueBlockCount: 6,
+              visibleBlockCount: 3,
+              sourceChars: 1400,
+              estimatedInputTokens: 350,
+              estimatedOutputTokens: 350,
+              estimatedCacheHitRatio: 0.3,
+            },
+          };
+        }
+
+        if (message.type === 'FOCUS_NEXT_WARNING_BLOCK') {
+          return {
+            ok: true,
+            message: '未解決の箇所へ移動しました。',
+          };
+        }
+
+        throw new Error(`Unexpected message: ${message.type}`);
+      },
+    );
+
+    render(<PopupApp />);
+
+    await waitFor(() => {
+      expect(screen.getByText('一部そのまま残っています')).toBeInTheDocument();
+    });
+
+    const jumpButton = screen.getByText('未解決箇所へ');
+    fireEvent.click(jumpButton);
+
+    await waitFor(() => {
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          type: 'FOCUS_NEXT_WARNING_BLOCK',
+        }),
+      );
+    });
+  });
+
   it('shows an API key setup link and a compact cost label', async () => {
     const chromeMock = getChromeMock();
 
