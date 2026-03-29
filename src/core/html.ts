@@ -8,6 +8,8 @@ export interface PreparedContent {
 export interface PlaceholderRichTextContent {
   content: string;
   tagMap: Record<string, string>;
+  wrapperPrefix?: string;
+  wrapperSuffix?: string;
 }
 
 export interface ProtectedHtmlContent {
@@ -45,6 +47,14 @@ const SPLITTABLE_HTML_CONTAINER_TAGS = new Set([
   'FIGCAPTION',
   'SPAN',
 ]);
+const PLACEHOLDER_WRAPPABLE_BLOCK_TAGS = new Set([
+  'P',
+  'LI',
+  'DD',
+  'DT',
+  'BLOCKQUOTE',
+  'FIGCAPTION',
+]);
 const PLACEHOLDER_RICH_TEXT_TAGS = new Set([
   'A',
   'ABBR',
@@ -70,7 +80,7 @@ const PLACEHOLDER_MARKER_PATTERN = /\[\[\s*(\/?)\s*t(\d+)\s*\]\]/gi;
 const PROTECTED_HTML_MARKER_PATTERN = /\[\[\s*x(\d+)\s*\]\]/gi;
 const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
   'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"]';
-const PROTECTED_HTML_SELECTOR = '.mwe-math-element, img.mw-file-element';
+const PROTECTED_HTML_SELECTOR = 'math, .mwe-math-element, img.mw-file-element';
 
 export function normalizeHtml(html: string): string {
   return html.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
@@ -174,29 +184,21 @@ export function preparePlaceholderRichTextForTranslation(
 ): PlaceholderRichTextContent | null {
   const parsed = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
   const container = parsed.body.firstElementChild as HTMLElement | null;
-  if (!container || container.querySelector(PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR)) {
+  if (!container) {
     return null;
   }
 
-  if (container.querySelectorAll('a').length === 0) {
-    return null;
+  const directPlaceholder = buildPlaceholderRichTextContent(container);
+  if (directPlaceholder) {
+    return directPlaceholder;
   }
 
-  const tagMap: Record<string, string> = {};
-  let nextId = 0;
-  const content = Array.from(container.childNodes)
-    .map((node) => serializePlaceholderRichTextNode(node, tagMap, () => nextId++))
-    .join('');
-
-  const normalized = normalizeText(content);
-  if (!normalized || Object.keys(tagMap).length === 0) {
-    return null;
+  const wrappedPlaceholder = buildWrappedPlaceholderRichTextContent(container);
+  if (wrappedPlaceholder) {
+    return wrappedPlaceholder;
   }
 
-  return {
-    content: normalized,
-    tagMap,
-  };
+  return null;
 }
 
 export function restorePlaceholderRichText(
@@ -395,6 +397,73 @@ function serializeHtmlNode(node: ChildNode): string {
   }
 
   return '';
+}
+
+function buildPlaceholderRichTextContent(
+  container: HTMLElement,
+): PlaceholderRichTextContent | null {
+  if (container.querySelector(PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR)) {
+    return null;
+  }
+
+  if (container.querySelectorAll('a').length === 0) {
+    return null;
+  }
+
+  const tagMap: Record<string, string> = {};
+  let nextId = 0;
+  const content = Array.from(container.childNodes)
+    .map((node) => serializePlaceholderRichTextNode(node, tagMap, () => nextId++))
+    .join('');
+
+  const normalized = normalizeText(content);
+  if (!normalized || Object.keys(tagMap).length === 0) {
+    return null;
+  }
+
+  return {
+    content: normalized,
+    tagMap,
+  };
+}
+
+function buildWrappedPlaceholderRichTextContent(
+  container: HTMLElement,
+): PlaceholderRichTextContent | null {
+  if (container.childElementCount !== 1) {
+    return null;
+  }
+
+  const soleChild = container.firstElementChild as HTMLElement | null;
+  if (!soleChild || !PLACEHOLDER_WRAPPABLE_BLOCK_TAGS.has(soleChild.tagName)) {
+    return null;
+  }
+
+  const normalizedContainerText = normalizeText(container.textContent ?? '');
+  const normalizedChildText = normalizeText(soleChild.textContent ?? '');
+  if (!normalizedContainerText || normalizedContainerText !== normalizedChildText) {
+    return null;
+  }
+
+  if (soleChild.querySelector(PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR)) {
+    return null;
+  }
+
+  if (soleChild.querySelectorAll('a').length === 0) {
+    return null;
+  }
+
+  const inner = buildPlaceholderRichTextContent(soleChild);
+  if (!inner) {
+    return null;
+  }
+
+  return {
+    content: inner.content,
+    tagMap: inner.tagMap,
+    wrapperPrefix: buildOpeningTag(soleChild),
+    wrapperSuffix: `</${soleChild.tagName.toLowerCase()}>`,
+  };
 }
 
 function splitTextForHtml(text: string, maxChars: number): string[] {

@@ -327,6 +327,48 @@ describe('core html and block extraction', () => {
     expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
   });
 
+  it('supports placeholder-rich text for a wrapped paragraph with inline markup', () => {
+    const html =
+      '<p><a href="/nlab/show/Yoneda+lemma">Yoneda lemma</a> gives a <em>natural</em> bijection.</p>';
+
+    const placeholder = preparePlaceholderRichTextForTranslation(html);
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.wrapperPrefix).toBe('<p>');
+    expect(placeholder?.wrapperSuffix).toBe('</p>');
+
+    const restoredInner = restorePlaceholderRichText(placeholder!.content, placeholder!.tagMap);
+    const restored = `${placeholder!.wrapperPrefix}${restoredInner}${placeholder!.wrapperSuffix}`;
+
+    expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
+  });
+
+  it('protects raw MathML before placeholder-rich text preparation', () => {
+    const html =
+      '<p><a href="/nlab/show/Yoneda+lemma">Yoneda lemma</a> says <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi><mo>:</mo><mi>C</mi><mo>&#x2192;</mo><mi>Set</mi></math> is representable.</p>';
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    expect(protectedHtml).not.toBeNull();
+    expect(protectedHtml?.content).toContain('[[x0]]');
+
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.wrapperPrefix).toBe('<p>');
+    expect(placeholder?.wrapperSuffix).toBe('</p>');
+
+    const placeholderRestored = restorePlaceholderRichText(
+      placeholder!.content,
+      placeholder!.tagMap,
+    );
+    const restored = restoreProtectedHtml(
+      `${placeholder!.wrapperPrefix}${placeholderRestored}${placeholder!.wrapperSuffix}`,
+      protectedHtml!.htmlMap,
+    );
+
+    expect(normalizeHtml(restored)).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML">');
+    expect(normalizeHtml(restored)).toContain('<mi>F</mi><mo>:</mo><mi>C</mi>');
+    expect(normalizeHtml(restored)).toContain('<mi>Set</mi></math> is representable.</p>');
+  });
+
   it('rejects block-heavy html for placeholder-rich text mode', () => {
     const html = '<p>Alpha</p><p><a href="/beta">Beta</a></p>';
 

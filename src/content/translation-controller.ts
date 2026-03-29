@@ -84,14 +84,16 @@ interface BlockRecord {
 interface TranslationGroup {
   groupKey: string;
   contentMode: TranslationContentMode;
-    requestFragments: Array<{
-      preparedContent: string;
-      requestContentMode: TranslationContentMode;
-      restoreContentMode: TranslationContentMode;
-      restoreMap: Record<string, string>;
-      placeholderTagMap?: Record<string, string>;
-      protectedHtmlMap?: Record<string, string>;
-    }>;
+  requestFragments: Array<{
+    preparedContent: string;
+    requestContentMode: TranslationContentMode;
+    restoreContentMode: TranslationContentMode;
+    restoreMap: Record<string, string>;
+    placeholderTagMap?: Record<string, string>;
+    placeholderWrapperPrefix?: string;
+    placeholderWrapperSuffix?: string;
+    protectedHtmlMap?: Record<string, string>;
+  }>;
   normalizedSource: string;
   joiner: string;
   cacheLookup: TranslationCacheLookup;
@@ -115,6 +117,8 @@ interface TranslationBatchItem {
   preparedContent: string;
   restoreMap: Record<string, string>;
   placeholderTagMap?: Record<string, string>;
+  placeholderWrapperPrefix?: string;
+  placeholderWrapperSuffix?: string;
   protectedHtmlMap?: Record<string, string>;
   hasMarkers: boolean;
   estimatedTokens: number;
@@ -1419,12 +1423,16 @@ export class TranslationController {
                     item.placeholderTagMap,
                   )
                 : protectedSafeFragment;
+              const wrappedPlaceholderFragment =
+                item.placeholderWrapperPrefix && item.placeholderWrapperSuffix
+                  ? `${item.placeholderWrapperPrefix}${placeholderRestoredFragment}${item.placeholderWrapperSuffix}`
+                  : placeholderRestoredFragment;
               const restoredFragment = item.protectedHtmlMap
                 ? restoreProtectedHtml(
-                    placeholderRestoredFragment,
+                    wrappedPlaceholderFragment,
                     item.protectedHtmlMap,
                   )
-                : placeholderRestoredFragment;
+                : wrappedPlaceholderFragment;
               const bucket =
                 completedFragments.get(item.group.groupKey) ??
                 new Array(item.group.requestFragments.length).fill('');
@@ -1853,6 +1861,8 @@ export class TranslationController {
     restoreContentMode: TranslationContentMode;
     restoreMap: Record<string, string>;
     placeholderTagMap?: Record<string, string>;
+    placeholderWrapperPrefix?: string;
+    placeholderWrapperSuffix?: string;
     protectedHtmlMap?: Record<string, string>;
   }> {
     const sourceContent =
@@ -1880,6 +1890,8 @@ export class TranslationController {
             restoreContentMode: 'text',
             restoreMap: {},
             placeholderTagMap: placeholder.tagMap,
+            placeholderWrapperPrefix: placeholder.wrapperPrefix,
+            placeholderWrapperSuffix: placeholder.wrapperSuffix,
             protectedHtmlMap: protectedHtml?.htmlMap,
           },
         ];
@@ -2838,8 +2850,8 @@ export class TranslationController {
   } {
     if (isXmlLikeRuntimeDocument(this.documentRef)) {
       return {
-        xmlHeavyPlainHtmlItemLimit: 5,
-        xmlHeavyPlainHtmlMinimumTokenFloor: 1800,
+        xmlHeavyPlainHtmlItemLimit: 4,
+        xmlHeavyPlainHtmlMinimumTokenFloor: 1600,
       };
     }
 
@@ -2868,6 +2880,8 @@ function createBatchItems(
       preparedContent: fragment.preparedContent,
       restoreMap: fragment.restoreMap,
       placeholderTagMap: fragment.placeholderTagMap,
+      placeholderWrapperPrefix: fragment.placeholderWrapperPrefix,
+      placeholderWrapperSuffix: fragment.placeholderWrapperSuffix,
       protectedHtmlMap: fragment.protectedHtmlMap,
       hasMarkers: Boolean(fragment.placeholderTagMap || fragment.protectedHtmlMap),
       estimatedTokens: estimatePromptTokensForContent(
