@@ -1039,20 +1039,33 @@ export class TranslationController {
     const split = this.splitImmediateAndDeferredGroups(groups, calibration);
     const immediateItems = createBatchItems(split.immediateGroups, calibration);
     const deferredItems = createBatchItems(split.deferredGroups, calibration);
-    const immediateStrategy = resolveBatchStrategy(immediateItems, 'immediate');
-    const deferredStrategy = resolveBatchStrategy(deferredItems, 'deferred');
+    const xmlLikeDocument = isXmlLikeRuntimeDocument(this.documentRef);
+    const immediateStrategy = resolveBatchStrategy(
+      immediateItems,
+      'immediate',
+      undefined,
+      xmlLikeDocument,
+    );
+    const deferredStrategy = resolveBatchStrategy(
+      deferredItems,
+      'deferred',
+      undefined,
+      xmlLikeDocument,
+    );
 
     return [
       ...batchBatchItems(immediateItems, {
         tokenLimit: immediateStrategy.tokenLimit,
         itemLimit: immediateStrategy.itemLimit,
         minimumTokenFloor: immediateStrategy.minimumTokenFloor,
+        xmlLikeDocument,
         ...this.getBatchingOverrides('immediate'),
       }).map(toEstimateBatchShape),
       ...batchBatchItems(deferredItems, {
         tokenLimit: deferredStrategy.tokenLimit,
         itemLimit: deferredStrategy.itemLimit,
         minimumTokenFloor: deferredStrategy.minimumTokenFloor,
+        xmlLikeDocument,
         ...this.getBatchingOverrides('deferred'),
       }).map(toEstimateBatchShape),
     ];
@@ -1274,16 +1287,18 @@ export class TranslationController {
       profile: 'immediate' | 'deferred',
     ): { strategy: BatchStrategy; batches: TranslationBatchItem[][] } => {
       const batchItems = createBatchItems(groups, options.runtimeState.calibration);
-      const batchOverrides = this.getBatchingOverrides(profile);
+      const batchOverrides = this.getBatchingOverrides(profile, options.runtimeState);
       const strategy = resolveBatchStrategy(
         batchItems,
         profile,
         options.runtimeState,
+        isXmlLikeRuntimeDocument(this.documentRef),
       );
       const batches = batchBatchItems(batchItems, {
         tokenLimit: strategy.tokenLimit,
         itemLimit: strategy.itemLimit,
         minimumTokenFloor: strategy.minimumTokenFloor,
+        xmlLikeDocument: isXmlLikeRuntimeDocument(this.documentRef),
         ...batchOverrides,
       });
       return { strategy, batches };
@@ -2811,15 +2826,20 @@ export class TranslationController {
     return session.cacheStore;
   }
 
-  private getBatchingOverrides(profile: 'immediate' | 'deferred'): {
+  private getBatchingOverrides(
+    profile: 'immediate' | 'deferred',
+    _runtimeState?: TranslationRuntimeState,
+  ): {
     plainHtmlItemLimit?: number;
     plainHtmlMinimumTokenFloor?: number;
     plainHtmlAverageTokenThreshold?: number;
+    xmlHeavyPlainHtmlItemLimit?: number;
+    xmlHeavyPlainHtmlMinimumTokenFloor?: number;
   } {
     if (isXmlLikeRuntimeDocument(this.documentRef)) {
       return {
-        plainHtmlItemLimit: 4,
-        plainHtmlMinimumTokenFloor: 1400,
+        xmlHeavyPlainHtmlItemLimit: 5,
+        xmlHeavyPlainHtmlMinimumTokenFloor: 1800,
       };
     }
 
@@ -2869,6 +2889,9 @@ function batchBatchItems(
     plainHtmlItemLimit?: number;
     plainHtmlMinimumTokenFloor?: number;
     plainHtmlAverageTokenThreshold?: number;
+    xmlHeavyPlainHtmlItemLimit?: number;
+    xmlHeavyPlainHtmlMinimumTokenFloor?: number;
+    xmlLikeDocument?: boolean;
   } = {
     tokenLimit: DEFERRED_BATCH_TOKEN_LIMIT,
     itemLimit: DEFERRED_BATCH_ITEM_LIMIT,
@@ -2878,17 +2901,19 @@ function batchBatchItems(
   const modeBuckets = new Map<string, TranslationBatchItem[]>();
 
   items.forEach((item) => {
-    const bucketKey = getBatchBucketKey(item);
+    const bucketKey = getBatchBucketKey(item, options.xmlLikeDocument === true);
     const bucket = modeBuckets.get(bucketKey) ?? [];
     bucket.push(item);
     modeBuckets.set(bucketKey, bucket);
   });
 
-  modeBuckets.forEach((bucket) => {
-    const bucketLimits = resolveBucketBatchLimits(bucket, options, {
+  modeBuckets.forEach((bucket, bucketKey) => {
+    const bucketLimits = resolveBucketBatchLimits(bucketKey, bucket, options, {
       plainHtmlItemLimit: options.plainHtmlItemLimit,
       plainHtmlMinimumTokenFloor: options.plainHtmlMinimumTokenFloor,
       plainHtmlAverageTokenThreshold: options.plainHtmlAverageTokenThreshold,
+      xmlHeavyPlainHtmlItemLimit: options.xmlHeavyPlainHtmlItemLimit,
+      xmlHeavyPlainHtmlMinimumTokenFloor: options.xmlHeavyPlainHtmlMinimumTokenFloor,
     });
     const bucketBatches: TranslationBatchItem[][] = [];
     let currentBatch: TranslationBatchItem[] = [];
@@ -2949,6 +2974,7 @@ function resolveBatchStrategy(
   items: TranslationBatchItem[],
   profile: 'immediate' | 'deferred',
   runtimeState?: TranslationRuntimeState,
+  xmlLikeDocument = false,
 ): BatchStrategy {
   const concurrencyCap = runtimeState?.maxConcurrency ?? DEFAULT_RUNTIME_CONCURRENCY;
   const capConcurrency = (value: number): number =>
@@ -2998,6 +3024,42 @@ function resolveBatchStrategy(
     };
   }
 
+  if (xmlLikeDocument) {
+    if (textOnly && !hasLargeItem && averageEstimatedTokens <= 180) {
+      return {
+        tokenLimit: scaled(7200),
+        itemLimit: 38,
+        concurrency: capConcurrency(5),
+        minimumTokenFloor: 3200,
+      };
+    }
+
+    if (!hasLargeItem && !htmlHeavy && averageEstimatedTokens <= 280) {
+      return {
+        tokenLimit: scaled(6400),
+        itemLimit: 30,
+        concurrency: capConcurrency(5),
+        minimumTokenFloor: 3000,
+      };
+    }
+
+    if (!hasLargeItem && averageEstimatedTokens <= 380) {
+      return {
+        tokenLimit: scaled(4400),
+        itemLimit: 18,
+        concurrency: capConcurrency(5),
+        minimumTokenFloor: 2400,
+      };
+    }
+
+    return {
+      tokenLimit: scaled(3400),
+      itemLimit: 14,
+      concurrency: capConcurrency(5),
+      minimumTokenFloor: 2000,
+    };
+  }
+
   if (textOnly && !hasLargeItem && averageEstimatedTokens <= 180) {
     return {
       tokenLimit: scaled(6200),
@@ -3033,21 +3095,35 @@ function resolveBatchStrategy(
   };
 }
 
-function getBatchBucketKey(item: TranslationBatchItem): string {
+function getBatchBucketKey(item: TranslationBatchItem, xmlLikeDocument = false): string {
   if (item.contentMode === 'html') {
-    return item.hasMarkers ? 'html:marked' : 'html:plain';
+    if (item.hasMarkers) {
+      return 'html:marked';
+    }
+
+    if (
+      xmlLikeDocument &&
+      (item.group.requestFragments.length >= 4 || item.group.estimatedTokens >= 350)
+    ) {
+      return 'html:plain:xml-heavy';
+    }
+
+    return 'html:plain';
   }
 
   return item.contentMode;
 }
 
 function resolveBucketBatchLimits(
+  bucketKey: string,
   bucket: TranslationBatchItem[],
   defaults: BatchBucketLimits,
   overrides: {
     plainHtmlItemLimit?: number;
     plainHtmlMinimumTokenFloor?: number;
     plainHtmlAverageTokenThreshold?: number;
+    xmlHeavyPlainHtmlItemLimit?: number;
+    xmlHeavyPlainHtmlMinimumTokenFloor?: number;
   } = {},
 ): BatchBucketLimits {
   if (bucket.length === 0) {
@@ -3062,6 +3138,24 @@ function resolveBucketBatchLimits(
   const hasMarkers = bucket.some((item) => item.hasMarkers);
   if (hasMarkers) {
     return defaults;
+  }
+
+  if (bucketKey === 'html:plain:xml-heavy') {
+    if (!overrides.xmlHeavyPlainHtmlItemLimit) {
+      return defaults;
+    }
+
+    return {
+      tokenLimit: defaults.tokenLimit,
+      itemLimit: Math.min(defaults.itemLimit, overrides.xmlHeavyPlainHtmlItemLimit),
+      minimumTokenFloor:
+        defaults.minimumTokenFloor === undefined
+          ? undefined
+          : Math.min(
+              defaults.minimumTokenFloor,
+              overrides.xmlHeavyPlainHtmlMinimumTokenFloor ?? defaults.minimumTokenFloor,
+            ),
+    };
   }
 
   if (!overrides.plainHtmlItemLimit) {

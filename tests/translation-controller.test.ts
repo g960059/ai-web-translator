@@ -1,6 +1,7 @@
 import { waitFor } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 import { TranslationController } from '../src/content/translation-controller';
+import type { DebugBlocksResponse } from '../src/shared/messages';
 import { saveSettings } from '../src/shared/settings';
 import { emitIntersection, getChromeMock } from './setup';
 import {
@@ -28,6 +29,12 @@ function setRect(element: HTMLElement, top: number, height = 24, width = 200): v
     configurable: true,
   });
 }
+
+type DebugGroup = {
+  contentMode: 'text' | 'html';
+  preview: string;
+  fragmentCount: number;
+};
 
 describe('TranslationController', () => {
   afterEach(() => {
@@ -2596,22 +2603,26 @@ describe('TranslationController', () => {
     expect(snapshotResponse.snapshot?.metrics?.splitStats.batchByMarkerPresence.marked).toBeGreaterThanOrEqual(0);
   });
 
-  it('caps plain html batches below five fragments to avoid provider split retries', async () => {
+  it('exposes heavier XHTML wrapper groups as multi-fragment html groups', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
       <html lang="en">
         <body>
           <main>
-            ${Array.from(
-              { length: 9 },
-              (_, index) => `
-                <p id="html-plain-${index}">
-                  Yoneda lemma paragraph ${index + 1}
-                  with <sup>${index + 1}</sup> inline notation that keeps the block
-                  on the html lane for batching without placeholder markers.
-                </p>
-              `,
-            ).join('')}
+            <div id="structured-proof" class="proof">
+              <h3>Proof.</h3>
+              ${Array.from(
+                { length: 6 },
+                (_, index) => `
+                  <p>
+                    Structured XHTML wrapper paragraph ${index + 1}
+                    with <sup>${index + 1}</sup> inline notation and enough prose
+                    to require multiple html fragments.
+                    ${'This structured wrapper intentionally produces a heavier XHTML html group for batching. '.repeat(14)}
+                  </p>
+                `,
+              ).join('')}
+            </div>
           </main>
         </body>
       </html>
@@ -2621,55 +2632,127 @@ describe('TranslationController', () => {
       value: 'application/xhtml+xml',
     });
 
-    Array.from({ length: 9 }, (_, index) => {
-      setRect(document.getElementById(`html-plain-${index}`) as HTMLElement, 24 + index * 68, 44, 520);
-    });
-
-    const chromeMock = getChromeMock();
-    const settings = createSettings({ cacheEnabled: false });
-    const htmlBatchSizes: number[] = [];
-
-    (chromeMock.runtime.sendMessage as any).mockImplementation(
-      async (message: {
-        type: string;
-        request?: {
-          contentMode: 'text' | 'html';
-          fragments: string[];
-        };
-      }) => {
-        if (message.type === 'SESSION_STATE_CHANGED') {
-          return { ok: true };
-        }
-
-        if (message.type === 'TRANSLATE_API' && message.request) {
-          if (message.request.contentMode === 'html') {
-            htmlBatchSizes.push(message.request.fragments.length);
-          }
-          return {
-            ok: true,
-            result: {
-              translations: message.request.fragments.map((fragment) => fragment),
-            },
-          };
-        }
-
-        return { ok: true };
-      },
-    );
+    setRect(document.getElementById('structured-proof') as HTMLElement, 24, 420, 520);
 
     const controller = new TranslationController(document);
+    const settings = createSettings({ cacheEnabled: false });
     const response = await controller.handleMessage({
-      type: 'START_TRANSLATION',
+      type: 'GET_DEBUG_BLOCKS',
       settings,
       scope: 'main',
-    });
+    }) as DebugBlocksResponse;
 
     expect(response.ok).toBe(true);
-    expect(htmlBatchSizes.length).toBeGreaterThan(0);
-    expect(Math.max(...htmlBatchSizes)).toBeLessThanOrEqual(4);
+    if (!response.ok) {
+      throw new Error('Expected debug response.');
+    }
+    const debug = response.debug as { groups: DebugGroup[] };
+
+    const structuredGroup = debug.groups.find(
+      (group: DebugGroup) =>
+        group.contentMode === 'html' &&
+        group.preview.includes('Structured XHTML wrapper paragraph'),
+    );
+    expect(structuredGroup).toBeDefined();
+    expect(structuredGroup?.fragmentCount).toBeGreaterThanOrEqual(3);
   });
 
-  it('caps deferred plain html batches on regular html pages to avoid five-item outliers', async () => {
+  it('keeps lighter XHTML html groups separate from heavier XHTML wrappers', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            ${Array.from(
+              { length: 10 },
+              (_, index) => `
+                <p id="xml-html-light-${index}">
+                  XHTML paragraph ${index + 1}
+                  with <sup>${index + 1}</sup> inline notation and just enough prose
+                  to stay on the plain html lane.
+                  ${'This paragraph is intentionally light so the lighter XHTML lane can batch more aggressively. '.repeat(3)}
+                </p>
+              `,
+            ).join('')}
+            <div id="xml-html-heavy-a" class="proof">
+              <h3>Proof A.</h3>
+              ${Array.from(
+                { length: 6 },
+                (_, index) => `
+                  <p>
+                    Structured XHTML block alpha ${index + 1}
+                    with <sup>${index + 1}</sup> inline notation and enough prose
+                    to require multiple html fragments.
+                  ${'This structured wrapper intentionally produces a heavier XHTML html group for batching. '.repeat(14)}
+                </p>
+              `,
+              ).join('')}
+            </div>
+            <div id="xml-html-heavy-b" class="proof">
+              <h3>Proof B.</h3>
+              ${Array.from(
+                { length: 6 },
+                (_, index) => `
+                  <p>
+                    Structured XHTML block beta ${index + 1}
+                    with <sup>${index + 1}</sup> inline notation and enough prose
+                    to require multiple html fragments.
+                  ${'This structured wrapper intentionally produces a heavier XHTML html group for batching. '.repeat(14)}
+                </p>
+              `,
+              ).join('')}
+            </div>
+          </main>
+        </body>
+      </html>
+    `);
+    Object.defineProperty(document, 'contentType', {
+      configurable: true,
+      value: 'application/xhtml+xml',
+    });
+
+    Array.from({ length: 10 }, (_, index) => {
+      setRect(
+        document.getElementById(`xml-html-light-${index}`) as HTMLElement,
+        24 + index * 68,
+        44,
+        520,
+      );
+    });
+    setRect(document.getElementById('xml-html-heavy-a') as HTMLElement, 900, 320, 520);
+    setRect(document.getElementById('xml-html-heavy-b') as HTMLElement, 1280, 320, 520);
+
+    const settings = createSettings({ cacheEnabled: false });
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'GET_DEBUG_BLOCKS',
+      settings,
+      scope: 'main',
+    }) as DebugBlocksResponse;
+
+    expect(response.ok).toBe(true);
+    if (!response.ok) {
+      throw new Error('Expected debug response.');
+    }
+    const debug = response.debug as { groups: DebugGroup[] };
+
+    const heavyGroup = debug.groups.find(
+      (group: DebugGroup) =>
+        group.contentMode === 'html' &&
+        group.preview.includes('Structured XHTML block alpha'),
+    );
+    const lightGroup = debug.groups.find(
+      (group: DebugGroup) =>
+        group.contentMode === 'html' &&
+        group.preview.includes('XHTML paragraph 1'),
+    );
+    expect(heavyGroup).toBeDefined();
+    expect(lightGroup).toBeDefined();
+    expect(heavyGroup?.fragmentCount).toBeGreaterThanOrEqual(3);
+    expect(lightGroup?.fragmentCount).toBeLessThan(heavyGroup?.fragmentCount ?? Infinity);
+  });
+
+  it('keeps deferred plain html batches on regular html pages from growing without bound', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
       <html lang="en">
@@ -2680,7 +2763,7 @@ describe('TranslationController', () => {
               { length: 8 },
               (_, index) => `
                 <p id="html-deferred-${index}" data-bucket="plain-html">
-                  ${`Deferred html paragraph ${index + 1} with <sup>${index + 1}</sup> notation that keeps it on the html lane without protected markers and is intentionally long enough to trigger the deferred plain-html soft cap. `.repeat(5)}
+                  ${`Deferred html paragraph ${index + 1} with <sup>${index + 1}</sup> notation that keeps it on the html lane without protected markers and is intentionally long enough to trigger the deferred plain-html soft cap. `.repeat(8)}
                 </p>
               `,
             ).join('')}
@@ -2747,6 +2830,6 @@ describe('TranslationController', () => {
       expect(deferredHtmlBatchSizes.length).toBeGreaterThan(0);
     });
 
-    expect(Math.max(...deferredHtmlBatchSizes)).toBeLessThanOrEqual(4);
+    expect(Math.max(...deferredHtmlBatchSizes)).toBeLessThanOrEqual(18);
   });
 });

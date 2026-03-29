@@ -157,6 +157,47 @@ describe('core html and block extraction', () => {
     ).toBe(true);
   });
 
+  it('treats XHTML theorem-like wrappers as single structured blocks', () => {
+    const xmlDocument = document.implementation.createDocument(
+      'http://www.w3.org/1999/xhtml',
+      'html',
+      null,
+    );
+    const body = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'body');
+    xmlDocument.documentElement.appendChild(body);
+    const revision = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'main');
+    revision.setAttribute('id', 'revision');
+    body.appendChild(revision);
+
+    const proposition = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+    proposition.setAttribute('class', 'num_prop');
+    proposition.innerHTML = `
+      <h6>Proposition</h6>
+      <p>The Yoneda lemma identifies natural transformations out of representables.</p>
+      <div class="maruku-equation"><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>X</mi></math></div>
+      <p>This determines a presheaf by its values on representing objects.</p>
+    `;
+    revision.appendChild(proposition);
+
+    const trailing = xmlDocument.createElementNS('http://www.w3.org/1999/xhtml', 'p');
+    trailing.textContent = 'A trailing standalone paragraph remains separate.';
+    revision.appendChild(trailing);
+
+    const blocks = collectTranslatableBlocks(resolveScopeRoot(xmlDocument as unknown as Document, 'page'));
+
+    expect(blocks.some((block) => block.element.className === 'num_prop')).toBe(true);
+    expect(
+      blocks.some(
+        (block) =>
+          block.element.tagName.toLowerCase() === 'p' &&
+          /identifies natural transformations/i.test(block.originalText),
+      ),
+    ).toBe(false);
+    expect(
+      blocks.some((block) => /trailing standalone paragraph/i.test(block.originalText)),
+    ).toBe(true);
+  });
+
   it('does not treat a generic wrapper with multiple structured descendants as one block', () => {
     setDocumentHtml(`<!DOCTYPE html>
       <html lang="en">

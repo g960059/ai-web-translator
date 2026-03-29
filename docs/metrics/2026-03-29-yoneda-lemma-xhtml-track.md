@@ -93,3 +93,15 @@ Next target for the XHTML lane:
 - Reduce full completion from the current `44s-54s` band toward the `35s-40s` range
 - Reduce request count from `42` toward the low `30s`
 - Avoid regressing the current HTML durable baseline while doing so
+
+Latest experimental note:
+- A later XHTML-specific clustering and batching pass reduced the latest observed live run to:
+  - first visible `1,467 ms`
+  - full completion `42,151 ms`
+  - `25` requests
+  - `44,314` total tokens
+  - estimated cost `$0.03824475`
+- That run still produced `2` plain-html batch splits, so it is not promoted to a durable XHTML baseline yet.
+- Interpretation:
+  - XHTML throughput clearly improved versus the original `42 requests / ~49s` track
+  - the remaining work is to keep the lower request count while driving `batchSplits` back to `0`

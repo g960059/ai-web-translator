@@ -170,6 +170,11 @@ const MERGEABLE_CHILD_TAGS = new Set([
   'H6',
 ]);
 const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+const STRUCTURED_CONTAINER_TAGS = new Set(['DIV', 'SECTION', 'ARTICLE']);
+const STRUCTURED_CONTAINER_HINT_PATTERN =
+  /\b(num_(?:defn|remark|prop)|proof|remark|definition|theorem|lemma|corollary|proposition|example|exercise|claim|fact|notation)\b/i;
+const STRUCTURED_CONTAINER_HEADING_PATTERN =
+  /^(definition|remark|proposition|proof|theorem|lemma|corollary|example|exercise|claim|fact|notation)$/i;
 const MERGEABLE_CHILD_MAX_CHARS = 280;
 const MERGED_BLOCK_MIN_CHARS = 40;
 const MERGED_BLOCK_MAX_CHARS = 1100;
@@ -354,6 +359,91 @@ function getMergeableTextChildren(element: HTMLElement): HTMLElement[] | null {
   return children;
 }
 
+function resolveStructuredContainerBlock(
+  element: HTMLElement,
+  options?: { selectionMode?: boolean },
+): BlockSeed | null {
+  if (!isXmlLikeDocument(element.ownerDocument)) {
+    return null;
+  }
+
+  if (!STRUCTURED_CONTAINER_TAGS.has(getNormalizedTagName(element))) {
+    return null;
+  }
+
+  const directChildren = Array.from(element.children) as HTMLElement[];
+  if (directChildren.length < 2 || directChildren.length > 18) {
+    return null;
+  }
+
+  const normalizedText = normalizeText(element.textContent ?? '');
+  if (normalizedText.length < 120 || normalizedText.length > 3200) {
+    return null;
+  }
+
+  if (isBoilerplateBlock(element, normalizedText, options)) {
+    return null;
+  }
+
+  const hints = [
+    element.id,
+    element.className || '',
+    element.getAttribute('data-type') ?? '',
+    element.getAttribute('role') ?? '',
+  ].join(' ');
+  const firstHeadingText = normalizeText(
+    directChildren.find((child) => HEADING_TAGS.has(getNormalizedTagName(child)))?.textContent ?? '',
+  );
+  const hasSemanticHint =
+    STRUCTURED_CONTAINER_HINT_PATTERN.test(hints) ||
+    STRUCTURED_CONTAINER_HEADING_PATTERN.test(firstHeadingText);
+  if (!hasSemanticHint) {
+    return null;
+  }
+
+  let supportedChildCount = 0;
+  let equationLikeChildCount = 0;
+  for (const child of directChildren) {
+    if (child.matches(EXCLUDED_SELECTOR)) {
+      return null;
+    }
+
+    const tagName = getNormalizedTagName(child);
+    if (
+      HEADING_TAGS.has(tagName) ||
+      MERGEABLE_CHILD_TAGS.has(tagName) ||
+      tagName === 'BLOCKQUOTE' ||
+      tagName === 'PRE' ||
+      tagName === 'UL' ||
+      tagName === 'OL'
+    ) {
+      supportedChildCount += 1;
+      continue;
+    }
+
+    if (tagName === 'DIV' && child.classList.contains('maruku-equation')) {
+      supportedChildCount += 1;
+      equationLikeChildCount += 1;
+      continue;
+    }
+
+    return null;
+  }
+
+  if (supportedChildCount < 3) {
+    return null;
+  }
+
+  if (
+    equationLikeChildCount > 0 &&
+    directChildren.length - equationLikeChildCount < 2
+  ) {
+    return null;
+  }
+
+  return toBlockSeed(element, 'html');
+}
+
 function isVisibleInViewport(element: HTMLElement): boolean {
   const computedStyle = window.getComputedStyle(element);
   if (
@@ -455,6 +545,14 @@ function collectBlocks(
     }
 
     if (!options?.selectionMode && element.matches(EXCLUDED_SELECTOR)) {
+      return;
+    }
+
+    const structuredContainerBlock = resolveStructuredContainerBlock(element, {
+      selectionMode: options?.selectionMode,
+    });
+    if (structuredContainerBlock) {
+      results.push(structuredContainerBlock);
       return;
     }
 
@@ -706,6 +804,11 @@ function collectExcludedDescendantText(candidate: HTMLElement): number {
   });
 
   return total;
+}
+
+function isXmlLikeDocument(documentRef: Document): boolean {
+  const contentType = (documentRef.contentType || '').toLowerCase();
+  return contentType.includes('xml') && contentType !== 'text/html';
 }
 
 export function collectTranslatableBlocks(root: HTMLElement): BlockSeed[] {
