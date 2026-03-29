@@ -9,6 +9,7 @@ import {
   restorePlaceholderRichText,
   sanitizeTranslatedHtml,
   setElementHtmlContent,
+  splitPlaceholderRichTextIntoSafeSegments,
   splitHtmlIntoSafeSegments,
   supportsPlaceholderRichTextHtml,
 } from '../src/core/html';
@@ -389,6 +390,65 @@ describe('core html and block extraction', () => {
     expect(normalizeHtml(restored)).toContain('<math xmlns="http://www.w3.org/1998/Math/MathML">');
     expect(normalizeHtml(restored)).toContain('<mi>F</mi><mo>:</mo><mi>C</mi>');
     expect(normalizeHtml(restored)).toContain('<mi>Set</mi></math> is representable.</p>');
+  });
+
+  it('supports structured wrapper placeholder-rich text for theorem-like blocks', () => {
+    const html = `
+      <div class="proof">
+        <h6>Proof.</h6>
+        <p>The <a href="/nlab/show/Yoneda+lemma">Yoneda lemma</a> applies to
+          <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>y</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>.
+        </p>
+        <p>Hence the comparison map is a <strong>natural</strong> bijection.</p>
+      </div>
+    `;
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    expect(protectedHtml).not.toBeNull();
+
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.wrapperPrefix).toBe('<div class="proof">');
+    expect(placeholder?.wrapperSuffix).toBe('</div>');
+    expect(placeholder?.content).toContain('[[t');
+
+    const placeholderRestored = restorePlaceholderRichText(
+      placeholder!.content,
+      placeholder!.tagMap,
+    );
+    const restored = restoreProtectedHtml(
+      `${placeholder!.wrapperPrefix}${placeholderRestored}${placeholder!.wrapperSuffix}`,
+      protectedHtml!.htmlMap,
+    );
+
+    expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
+  });
+
+  it('splits structured wrapper placeholder-rich text at top-level block boundaries', () => {
+    const html = `
+      <div class="proof">
+        <h6>Proof.</h6>
+        <p>The <a href="/nlab/show/Yoneda+lemma">Yoneda lemma</a> applies to
+          <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>y</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>.
+        </p>
+        <p>Hence the comparison map is a <strong>natural</strong> bijection.</p>
+      </div>
+    `;
+
+    const protectedHtml = protectAtomicHtmlForTranslation(html);
+    const placeholder = preparePlaceholderRichTextForTranslation(protectedHtml!.content);
+    const segments = splitPlaceholderRichTextIntoSafeSegments(placeholder!.content, 120);
+
+    expect(segments.length).toBeGreaterThan(1);
+    expect(segments.every((segment) => segment.length <= 120)).toBe(true);
+
+    const restoredInner = restorePlaceholderRichText(segments.join(''), placeholder!.tagMap);
+    const restored = restoreProtectedHtml(
+      `${placeholder!.wrapperPrefix}${restoredInner}${placeholder!.wrapperSuffix}`,
+      protectedHtml!.htmlMap,
+    );
+
+    expect(normalizeHtml(restored)).toBe(normalizeHtml(html));
   });
 
   it('rejects block-heavy html for placeholder-rich text mode', () => {

@@ -2603,22 +2603,24 @@ describe('TranslationController', () => {
     expect(snapshotResponse.snapshot?.metrics?.splitStats.batchByMarkerPresence.marked).toBeGreaterThanOrEqual(0);
   });
 
-  it('exposes heavier XHTML wrapper groups as multi-fragment html groups', async () => {
+  it('routes heavier safe XHTML wrappers through multi-fragment text groups', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
       <html lang="en">
         <body>
           <main>
             <div id="structured-proof" class="proof">
-              <h3>Proof.</h3>
+              <p><span class="theorem_label">Proof</span><span>. </span><strong>(safe structured wrapper)</strong></p>
               ${Array.from(
                 { length: 6 },
                 (_, index) => `
                   <p>
                     Structured XHTML wrapper paragraph ${index + 1}
-                    with <sup>${index + 1}</sup> inline notation and enough prose
-                    to require multiple html fragments.
-                    ${'This structured wrapper intentionally produces a heavier XHTML html group for batching. '.repeat(14)}
+                    with <a href="/nlab/show/Yoneda+lemma">linked terminology</a>,
+                    <strong>inline emphasis</strong>, and
+                    <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>F</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>
+                    in enough prose to require multiple placeholder text fragments.
+                    ${'This structured wrapper intentionally produces a heavier XHTML wrapper that should still stay on the safe placeholder lane. '.repeat(4)}
                   </p>
                 `,
               ).join('')}
@@ -2650,14 +2652,14 @@ describe('TranslationController', () => {
 
     const structuredGroup = debug.groups.find(
       (group: DebugGroup) =>
-        group.contentMode === 'html' &&
         group.preview.includes('Structured XHTML wrapper paragraph'),
     );
     expect(structuredGroup).toBeDefined();
-    expect(structuredGroup?.fragmentCount).toBeGreaterThanOrEqual(3);
+    expect(structuredGroup?.contentMode).toBe('text');
+    expect(structuredGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps lighter XHTML html groups separate from heavier XHTML wrappers', async () => {
+  it('keeps lighter XHTML html groups separate from heavier safe XHTML wrapper text groups', async () => {
     setDocumentHtml(`
       <!DOCTYPE html>
       <html lang="en">
@@ -2675,29 +2677,33 @@ describe('TranslationController', () => {
               `,
             ).join('')}
             <div id="xml-html-heavy-a" class="proof">
-              <h3>Proof A.</h3>
+              <p><span class="theorem_label">Proof A</span><span>. </span><strong>(safe structured wrapper)</strong></p>
               ${Array.from(
                 { length: 6 },
                 (_, index) => `
                   <p>
                     Structured XHTML block alpha ${index + 1}
-                    with <sup>${index + 1}</sup> inline notation and enough prose
-                    to require multiple html fragments.
-                  ${'This structured wrapper intentionally produces a heavier XHTML html group for batching. '.repeat(14)}
+                    with <a href="/nlab/show/set">linked terminology</a>,
+                    <strong>inline emphasis</strong>, and
+                    <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>X</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>
+                    in enough prose to require multiple placeholder text fragments.
+                  ${'This structured wrapper intentionally produces a heavier XHTML wrapper that should still stay on the safe placeholder lane. '.repeat(4)}
                 </p>
               `,
               ).join('')}
             </div>
             <div id="xml-html-heavy-b" class="proof">
-              <h3>Proof B.</h3>
+              <p><span class="theorem_label">Proof B</span><span>. </span><strong>(safe structured wrapper)</strong></p>
               ${Array.from(
                 { length: 6 },
                 (_, index) => `
                   <p>
                     Structured XHTML block beta ${index + 1}
-                    with <sup>${index + 1}</sup> inline notation and enough prose
-                    to require multiple html fragments.
-                  ${'This structured wrapper intentionally produces a heavier XHTML html group for batching. '.repeat(14)}
+                    with <a href="/nlab/show/presheaf">linked terminology</a>,
+                    <strong>inline emphasis</strong>, and
+                    <math xmlns="http://www.w3.org/1998/Math/MathML"><mi>Y</mi><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></math>
+                    in enough prose to require multiple placeholder text fragments.
+                  ${'This structured wrapper intentionally produces a heavier XHTML wrapper that should still stay on the safe placeholder lane. '.repeat(4)}
                 </p>
               `,
               ).join('')}
@@ -2738,7 +2744,6 @@ describe('TranslationController', () => {
 
     const heavyGroup = debug.groups.find(
       (group: DebugGroup) =>
-        group.contentMode === 'html' &&
         group.preview.includes('Structured XHTML block alpha'),
     );
     const lightGroup = debug.groups.find(
@@ -2748,8 +2753,9 @@ describe('TranslationController', () => {
     );
     expect(heavyGroup).toBeDefined();
     expect(lightGroup).toBeDefined();
-    expect(heavyGroup?.fragmentCount).toBeGreaterThanOrEqual(3);
-    expect(lightGroup?.fragmentCount).toBeLessThan(heavyGroup?.fragmentCount ?? Infinity);
+    expect(heavyGroup?.contentMode).toBe('text');
+    expect(heavyGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
+    expect(lightGroup?.contentMode).toBe('html');
   });
 
   it('routes safe XHTML paragraphs with inline links and MathML through the text placeholder lane', async () => {

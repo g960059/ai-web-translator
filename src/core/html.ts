@@ -54,6 +54,15 @@ const PLACEHOLDER_WRAPPABLE_BLOCK_TAGS = new Set([
   'DT',
   'BLOCKQUOTE',
   'FIGCAPTION',
+  'DIV',
+  'SECTION',
+  'ARTICLE',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
 ]);
 const PLACEHOLDER_RICH_TEXT_TAGS = new Set([
   'A',
@@ -217,6 +226,28 @@ export function restorePlaceholderRichText(
   );
 }
 
+export function splitPlaceholderRichTextIntoSafeSegments(
+  content: string,
+  maxChars: number,
+): string[] {
+  const normalized = normalizeText(content);
+  if (normalized.length <= maxChars) {
+    return [normalized];
+  }
+
+  const topLevelSegments = extractTopLevelPlaceholderSegments(normalized);
+  if (topLevelSegments.length <= 1) {
+    return [normalized];
+  }
+
+  const packed = packPlaceholderTextPieces(topLevelSegments, maxChars);
+  if (packed.length <= 1 || packed.some((segment) => segment.length > maxChars)) {
+    return [normalized];
+  }
+
+  return packed;
+}
+
 export function protectAtomicHtmlForTranslation(html: string): ProtectedHtmlContent | null {
   const parsed = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
   const container = parsed.body.firstElementChild as HTMLElement | null;
@@ -315,6 +346,48 @@ function serializePlaceholderRichTextNode(
     .join('');
 
   return `${openToken}${inner}${closeToken}`;
+}
+
+function serializeStructuredPlaceholderNode(
+  node: ChildNode,
+  tagMap: Record<string, string>,
+  nextId: () => number,
+): string | null {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? '';
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return '';
+  }
+
+  if (isDisallowedStructuredPlaceholderElement(node)) {
+    return null;
+  }
+
+  const isInline = PLACEHOLDER_RICH_TEXT_TAGS.has(node.tagName);
+  const isBlockWrapper = PLACEHOLDER_WRAPPABLE_BLOCK_TAGS.has(node.tagName);
+  if (!isInline && !isBlockWrapper) {
+    return null;
+  }
+
+  const innerParts: string[] = [];
+  for (const child of Array.from(node.childNodes)) {
+    const serializedChild = serializeStructuredPlaceholderNode(child, tagMap, nextId);
+    if (serializedChild === null) {
+      return null;
+    }
+    innerParts.push(serializedChild);
+  }
+
+  const id = String(nextId());
+  const openToken = `[[${PLACEHOLDER_MARKER_NAME}${id}]]`;
+  const closeToken = `[[/${PLACEHOLDER_MARKER_NAME}${id}]]`;
+  tagMap[openToken] = buildOpeningTag(node);
+  tagMap[closeToken] = `</${node.tagName.toLowerCase()}>`;
+
+  const wrapped = `${openToken}${innerParts.join('')}${closeToken}`;
+  return isBlockWrapper ? ` ${wrapped} ` : wrapped;
 }
 
 function splitHtmlNode(node: ChildNode, maxChars: number): string[] {
@@ -442,26 +515,127 @@ function buildWrappedPlaceholderRichTextContent(
     return null;
   }
 
-  if (soleChild.querySelector(PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR)) {
-    return null;
+  const inner = buildPlaceholderRichTextContent(soleChild);
+  if (inner) {
+    return {
+      content: inner.content,
+      tagMap: inner.tagMap,
+      wrapperPrefix: buildOpeningTag(soleChild),
+      wrapperSuffix: `</${soleChild.tagName.toLowerCase()}>`,
+    };
   }
 
-  const inner = buildPlaceholderRichTextContent(soleChild);
-  if (!inner) {
+  const structured = buildStructuredWrappedPlaceholderRichTextContent(soleChild);
+  if (!structured) {
     return null;
   }
 
   return {
-    content: inner.content,
-    tagMap: inner.tagMap,
+    content: structured.content,
+    tagMap: structured.tagMap,
     wrapperPrefix: buildOpeningTag(soleChild),
     wrapperSuffix: `</${soleChild.tagName.toLowerCase()}>`,
+  };
+}
+
+function buildStructuredWrappedPlaceholderRichTextContent(
+  wrapperElement: HTMLElement,
+): PlaceholderRichTextContent | null {
+  const tagMap: Record<string, string> = {};
+  let nextId = 0;
+  const pieces: string[] = [];
+
+  for (const child of Array.from(wrapperElement.childNodes)) {
+    const serialized = serializeStructuredPlaceholderNode(child, tagMap, () => nextId++);
+    if (serialized === null) {
+      return null;
+    }
+    pieces.push(serialized);
+  }
+
+  const content = normalizeText(pieces.join(' '));
+  const hasProtectedMarkers = containsProtectedHtmlMarker(content);
+  if (!content || (Object.keys(tagMap).length === 0 && !hasProtectedMarkers)) {
+    return null;
+  }
+
+  return {
+    content,
+    tagMap,
   };
 }
 
 function containsProtectedHtmlMarker(content: string): boolean {
   const matches = content.matchAll(new RegExp(PROTECTED_HTML_MARKER_PATTERN.source, 'gi'));
   return !matches.next().done;
+}
+
+function extractTopLevelPlaceholderSegments(content: string): string[] {
+  const pattern = new RegExp(PLACEHOLDER_MARKER_PATTERN.source, 'gi');
+  const segments: string[] = [];
+  let current = '';
+  let depth = 0;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content))) {
+    current += content.slice(lastIndex, match.index);
+    current += match[0];
+    lastIndex = pattern.lastIndex;
+
+    depth += match[1] ? -1 : 1;
+    if (depth === 0) {
+      const trailingWhitespace = content.slice(lastIndex).match(/^\s+/)?.[0] ?? '';
+      current += trailingWhitespace;
+      lastIndex += trailingWhitespace.length;
+
+      const normalized = normalizeText(current);
+      if (normalized) {
+        segments.push(normalized);
+      }
+      current = '';
+    }
+  }
+
+  current += content.slice(lastIndex);
+  const trailing = normalizeText(current);
+  if (trailing) {
+    segments.push(trailing);
+  }
+
+  return segments;
+}
+
+function packPlaceholderTextPieces(pieces: string[], maxChars: number): string[] {
+  const packed: string[] = [];
+  let current = '';
+
+  pieces.forEach((piece) => {
+    const candidate = current ? `${current} ${piece}` : piece;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      return;
+    }
+
+    if (current) {
+      packed.push(current);
+    }
+    current = piece;
+  });
+
+  if (current) {
+    packed.push(current);
+  }
+
+  return packed;
+}
+
+function isDisallowedStructuredPlaceholderElement(element: HTMLElement): boolean {
+  return (
+    element.matches('.reference, .references, .reflist') ||
+    element.matches('.mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display') ||
+    element.matches('a[href^="#cite_note"], a[href^="#cite_ref"]')
+  );
 }
 
 function splitTextForHtml(text: string, maxChars: number): string[] {

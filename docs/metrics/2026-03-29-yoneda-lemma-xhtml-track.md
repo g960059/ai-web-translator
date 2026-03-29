@@ -125,3 +125,17 @@ Latest wrapped-placeholder experiment:
   - wrapped placeholder routing is now the correct generic direction for XHTML inline-rich paragraphs
   - the remaining XHTML problem has narrowed to a smaller plain-html wrapper lane
   - next XHTML work should target structured theorem/definition wrappers before promoting a new XHTML baseline
+
+Latest structured-wrapper pass:
+- After generalizing wrapped placeholder routing to safe XHTML theorem/definition/proof wrappers and splitting structured placeholder content at top-level block boundaries, the latest live run reached:
+  - first visible `1,955 ms`
+  - full completion `26,263 ms`
+  - `8` requests
+  - `12,483` total tokens
+  - estimated cost `$0.011067`
+  - `batchSplits = 0`
+- Interpretation:
+  - generic structured-wrapper routing is now materially faster and cheaper than the previous XHTML lane
+  - the XHTML throughput problem is largely solved
+  - the remaining XHTML issue is quality completeness in later theorem/definition wrappers, not request volume
+  - this is why the XHTML track is still not promoted to a durable baseline despite the much better speed/cost numbers

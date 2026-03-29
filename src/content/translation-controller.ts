@@ -25,6 +25,7 @@ import {
   restoreProtectedHtml,
   restorePlaceholderRichText,
   setElementHtmlContent,
+  splitPlaceholderRichTextIntoSafeSegments,
   splitHtmlIntoSafeSegments,
 } from '../core/html';
 import {
@@ -1878,23 +1879,25 @@ export class TranslationController {
         'html',
         settings.style,
       );
+      const placeholderSegments = placeholder
+        ? resolvePlaceholderRequestSegments(placeholder.content, placeholder.wrapperPrefix)
+        : null;
       if (
         placeholder &&
-        placeholder.content.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS &&
+        placeholderSegments &&
+        placeholderSegments.every((segment) => segment.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) &&
         (Boolean(protectedHtml) || placeholder.content.length + 12 < preparedHtml.content.length)
       ) {
-        return [
-          {
-            preparedContent: placeholder.content,
-            requestContentMode: 'text',
-            restoreContentMode: 'text',
-            restoreMap: {},
-            placeholderTagMap: placeholder.tagMap,
-            placeholderWrapperPrefix: placeholder.wrapperPrefix,
-            placeholderWrapperSuffix: placeholder.wrapperSuffix,
-            protectedHtmlMap: protectedHtml?.htmlMap,
-          },
-        ];
+        return placeholderSegments.map((segment) => ({
+          preparedContent: segment,
+          requestContentMode: 'text',
+          restoreContentMode: 'text',
+          restoreMap: {},
+          placeholderTagMap: placeholder.tagMap,
+          placeholderWrapperPrefix: placeholder.wrapperPrefix,
+          placeholderWrapperSuffix: placeholder.wrapperSuffix,
+          protectedHtmlMap: protectedHtml?.htmlMap,
+        }));
       }
     }
 
@@ -3559,6 +3562,22 @@ function preferredTextJoiner(targetLanguage: string): string {
   }
 
   return ' ';
+}
+
+function resolvePlaceholderRequestSegments(
+  content: string,
+  wrapperPrefix?: string,
+): string[] {
+  if (!wrapperPrefix) {
+    return [content];
+  }
+
+  const wrapperTag = wrapperPrefix.match(/^<([a-z0-9-]+)/i)?.[1]?.toLowerCase() ?? '';
+  if (!['div', 'section', 'article', 'blockquote', 'figcaption'].includes(wrapperTag)) {
+    return [content];
+  }
+
+  return splitPlaceholderRichTextIntoSafeSegments(content, MAX_PLACEHOLDER_RICH_TEXT_CHARS);
 }
 
 function splitBatchItemsForRetry(
