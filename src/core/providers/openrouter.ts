@@ -86,21 +86,30 @@ function buildStyleInstruction(style: TranslationBatchRequest['style']): string 
 
 function parseTranslations(content: string, request: TranslationBatchRequest): string[] {
   const candidates = buildJsonCandidates(content);
+  let parsedSummary: string | undefined;
 
   for (const candidate of candidates) {
     try {
-      return normalizeTranslationsPayload(
-        JSON.parse(candidate) as
-          | { translations?: string[] | Array<{ i?: string; id?: string; t?: string; text?: string }> }
-          | string[],
-        request.fragmentIds,
-      );
+      const parsed = JSON.parse(candidate) as
+        | { translations?: string[] | Array<{ i?: string; id?: string; t?: string; text?: string }> }
+        | string[];
+      try {
+        return normalizeTranslationsPayload(parsed, request.fragmentIds);
+      } catch {
+        parsedSummary ??= summarizeParsedPayload(parsed);
+      }
     } catch {
       continue;
     }
   }
 
-  throw new Error('Provider returned an invalid translations payload.');
+  throw new Error(
+    `Provider returned an invalid translations payload. details=${JSON.stringify({
+      candidateCount: candidates.length,
+      parsedSummary,
+      excerpt: summarizePayloadExcerpt(content),
+    })}`,
+  );
 }
 
 function normalizeTranslationsPayload(
@@ -180,6 +189,37 @@ function buildJsonCandidates(content: string): string[] {
   }
 
   return Array.from(candidates);
+}
+
+function summarizeParsedPayload(
+  parsed:
+    | { translations?: string[] | Array<{ i?: string; id?: string; t?: string; text?: string }> }
+    | string[],
+): string {
+  if (Array.isArray(parsed)) {
+    return `array(len=${parsed.length},itemType=${typeof parsed[0]})`;
+  }
+
+  const keys = Object.keys(parsed).slice(0, 4).join(',');
+  const translations = parsed.translations;
+  if (Array.isArray(translations)) {
+    const first = translations[0];
+    if (typeof first === 'string') {
+      return `object(keys=${keys},translations=len:${translations.length},itemType=string)`;
+    }
+
+    if (first && typeof first === 'object') {
+      return `object(keys=${keys},translations=len:${translations.length},itemKeys=${Object.keys(first).slice(0, 4).join(',')})`;
+    }
+
+    return `object(keys=${keys},translations=len:${translations.length},itemType=${typeof first})`;
+  }
+
+  return `object(keys=${keys})`;
+}
+
+function summarizePayloadExcerpt(content: string): string {
+  return content.replace(/\s+/g, ' ').trim().slice(0, 180);
 }
 
 function unwrapMarkdownFence(content: string): string {

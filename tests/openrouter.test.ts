@@ -310,6 +310,28 @@ describe('translateWithOpenRouter', () => {
     );
   });
 
+  it('includes compact diagnostics when the provider returns an invalid payload shape', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '{"translations":[{"oops":"missing text"}]}',
+              },
+            },
+          ],
+        }),
+      })),
+    );
+
+    await expect(translateWithOpenRouter(BASE_REQUEST)).rejects.toThrow(
+      /invalid translations payload.*candidateCount.*parsedSummary.*excerpt/i,
+    );
+  });
+
   it('tells the provider to preserve protected placeholder markers', async () => {
     let requestBody: Record<string, unknown> | undefined;
 
