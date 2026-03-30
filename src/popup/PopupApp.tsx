@@ -15,9 +15,10 @@ import {
   formatLanguageLabel,
 } from '../shared/languages';
 import { localizeRuntimeError } from '../shared/error-messages';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../shared/settings';
+import { DEFAULT_SETTINGS, MODEL_PRESETS, loadSettings, saveSettings } from '../shared/settings';
 import type {
   ExtensionSettings,
+  ModelPreset,
   PageAnalysis,
   ProviderModelInfo,
   TabSessionState,
@@ -40,6 +41,7 @@ const MESSAGE_MAP: Record<string, string> = {
     '先に OpenRouter の API key を設定してください。',
   'Unsupported content command.': 'この操作はまだ利用できません。',
   'Cleared cached translations for this page.': 'このページの保存済み翻訳を消しました。',
+  'Showing bilingual view.': '対訳モードで表示しています。',
   'Cleared all cached translations.': '保存していた翻訳をすべて消しました。',
   'Cancelled. Start a new run when ready.': '翻訳を止めました。',
   '未解決の箇所へ移動しました。': '未解決の箇所へ移動しました。',
@@ -90,6 +92,8 @@ export function PopupApp() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [apiKeyValidation, setApiKeyValidation] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [apiKeyError, setApiKeyError] = useState('');
   const activeTabIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -156,6 +160,7 @@ export function PopupApp() {
         : hasPageTranslation
           ? 'translated'
           : 'ready';
+
   const primaryLabel = getPrimaryLabel({
     missingApiKey,
     hasPageTranslation,
@@ -237,6 +242,32 @@ export function PopupApp() {
     setStatusMessage('');
   }
 
+  async function handleValidateApiKey(): Promise<void> {
+    if (!settings.apiKey.trim()) {
+      return;
+    }
+    setApiKeyValidation('checking');
+    setApiKeyError('');
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'VALIDATE_API_KEY',
+        provider: settings.provider,
+        apiKey: settings.apiKey,
+      }) as { ok: boolean; valid?: boolean; message?: string };
+      if (response.valid) {
+        setApiKeyValidation('valid');
+        showStatus('API Key の接続を確認しました。', 'success');
+      } else {
+        setApiKeyValidation('invalid');
+        setApiKeyError(response.message || 'API Key が無効です。');
+        showStatus(response.message || 'API Key が無効です。', 'error');
+      }
+    } catch {
+      setApiKeyValidation('invalid');
+      setApiKeyError('検証に失敗しました。');
+    }
+  }
+
   async function runContentAction(
     message: ContentCommandMessage,
   ): Promise<ActionResponse | AnalysisResponse | SelectionStateResponse | null> {
@@ -262,7 +293,7 @@ export function PopupApp() {
 
   async function handlePrimaryAction(): Promise<void> {
     if (missingApiKey) {
-      showStatus('OpenRouter の API key を入れると翻訳を始められます。', 'error');
+      showStatus('OpenRouter の API Key を設定すると翻訳を実行できます。', 'error');
       return;
     }
 
@@ -498,9 +529,9 @@ export function PopupApp() {
           <div className="setup-card">
             <div className="panel-heading">
               <p className="panel-kicker">最初の設定</p>
-              <h2>まずは API key をひとつ入れるだけです</h2>
+              <h2>翻訳サービスを利用するには OpenRouter の API Key が必要です</h2>
               <p className="helper-copy">
-                OpenRouter で API key を作ると、次からはこのページのまま読み始められます。
+                OpenRouter で API Key を作成すると、このページで翻訳を実行できます。
               </p>
             </div>
 
@@ -513,6 +544,21 @@ export function PopupApp() {
                 placeholder="sk-or-v1-..."
               />
             </label>
+
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={() => void handleValidateApiKey()}
+              disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}
+            >
+              {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
+            </button>
+            {apiKeyValidation === 'invalid' && apiKeyError && (
+              <p className="soft-note soft-note-error">{apiKeyError}</p>
+            )}
+            {apiKeyValidation === 'valid' && (
+              <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>
+            )}
 
             <a
               className="button button-secondary button-link-card"
@@ -539,7 +585,7 @@ export function PopupApp() {
         ) : (
           <div className="focus-card">
             <p className="panel-kicker">このタブでできること</p>
-            <h2>{selectedLanguageLabel}で読みやすくする</h2>
+            <h2>{selectedLanguageLabel}に翻訳する</h2>
             <p className="helper-copy">
               {buildMainSummary(analysis, settings.translateFullPage, popupMode)}
             </p>
@@ -558,6 +604,12 @@ export function PopupApp() {
                 止めたところから、あとで続きを再開できます。
               </p>
             )}
+            {popupMode === 'ready' && estimatedCost !== null && analysis && (
+              <p className="soft-note">
+                {analysis.blockCount}ブロック・約{Math.round(analysis.sourceChars / 1000)}k文字
+                — 翻訳すると {formatEstimatedCost(estimatedCost)} ほどかかる見込みです。
+              </p>
+            )}
             {popupMode === 'translated' && estimatedCost !== null && (
               <p className="soft-note">
                 このページの料金の目安は {formatEstimatedCost(estimatedCost)} です。
@@ -565,7 +617,7 @@ export function PopupApp() {
             )}
             {popupMode === 'active' && (
               <p className="soft-note">
-                止めたいときは、ページ右下の相棒を押してください。
+                止めたいときは、ページ右下のウィジェットから操作してください。
               </p>
             )}
           </div>
@@ -622,7 +674,73 @@ export function PopupApp() {
             本文が足りないときは、ページ全体も試す
           </button>
         )}
+
       </section>
+
+      {showLanguageControls && (
+        <section className="panel panel-quick-settings">
+          <div className="field">
+            <span className="section-title">読む言語</span>
+            <div className="language-pills" role="group" aria-label="Target language">
+              {primaryLanguageOptions.map((language) => (
+                <button
+                  key={language.code}
+                  type="button"
+                  className="pill-button"
+                  data-selected={settings.targetLanguage === language.code}
+                  onClick={() => updateSettings({ targetLanguage: language.code })}
+                >
+                  <span>{language.label}</span>
+                  <small>{language.nativeLabel}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="field">
+            <span className="section-title">モデル</span>
+            <div className="language-pills" role="group" aria-label="Model preset">
+              {(Object.keys(MODEL_PRESETS) as Array<Exclude<ModelPreset, 'custom'>>).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="pill-button"
+                  data-selected={settings.modelPreset === key}
+                  title={MODEL_PRESETS[key].description}
+                  onClick={() => updateSettings({ modelPreset: key, model: MODEL_PRESETS[key].model })}
+                >
+                  <span>{MODEL_PRESETS[key].label}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className="pill-button"
+                data-selected={settings.modelPreset === 'custom'}
+                onClick={() => updateSettings({ modelPreset: 'custom' })}
+              >
+                <span>カスタム</span>
+              </button>
+            </div>
+            {settings.modelPreset === 'custom' && (
+              <label className="field field-inline">
+                <input
+                  list="model-suggestions"
+                  value={settings.model}
+                  onChange={(event) => updateSettings({ model: event.target.value })}
+                  placeholder="モデル ID を入力"
+                />
+                <datalist id="model-suggestions">
+                  {models.map((model) => (
+                    <option value={model.id} key={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </datalist>
+              </label>
+            )}
+          </div>
+        </section>
+      )}
 
       <details
         className="panel details-panel"
@@ -646,6 +764,20 @@ export function PopupApp() {
                 placeholder="sk-or-v1-..."
               />
             </label>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={() => void handleValidateApiKey()}
+              disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}
+            >
+              {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
+            </button>
+            {apiKeyValidation === 'invalid' && apiKeyError && (
+              <p className="soft-note soft-note-error">{apiKeyError}</p>
+            )}
+            {apiKeyValidation === 'valid' && (
+              <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>
+            )}
           </section>
         )}
 
@@ -837,7 +969,7 @@ function getPrimaryLabel(options: {
   }
 
   if (options.missingApiKey) {
-    return '設定して読み始める';
+    return 'API Key を設定する';
   }
 
   if (options.canResumeCancelledTranslation) {
@@ -845,7 +977,10 @@ function getPrimaryLabel(options: {
   }
 
   if (options.hasPageTranslation) {
-    return options.tabState?.displayState === 'translated' ? '原文に戻す' : '翻訳を表示する';
+    const ds = options.tabState?.displayState;
+    if (ds === 'translated') return '対訳を表示';
+    if (ds === 'bilingual') return '原文に戻す';
+    return '翻訳のみ';
   }
 
   return 'このページを翻訳する';
@@ -854,16 +989,16 @@ function getPrimaryLabel(options: {
 function buildCompactTitle(mode: PopupMode, languageLabel: string): string {
   switch (mode) {
     case 'setup':
-      return 'このページを、すぐ読めるようにします。';
+      return 'このページの翻訳を実行します。';
     case 'unavailable':
       return 'このページでは使えません。';
     case 'active':
-      return `${languageLabel}で読みやすくしています。`;
+      return `${languageLabel}に翻訳しています。`;
     case 'translated':
-      return `${languageLabel}で読めるようにしました。`;
+      return `${languageLabel}に翻訳しました。`;
     case 'ready':
     default:
-      return `${languageLabel}で、すぐ読めるようにします。`;
+      return `${languageLabel}に翻訳します。`;
   }
 }
 
@@ -873,7 +1008,7 @@ function buildCompactLead(options: {
   translateFullPage: boolean;
 }): string {
   if (options.mode === 'setup') {
-    return '最初に一度だけ設定すれば、次からはこのタブのまま読み始められます。';
+    return '最初に一度だけ設定すれば、このタブから翻訳を実行できます。';
   }
 
   if (options.mode === 'unavailable') {
@@ -885,20 +1020,20 @@ function buildCompactLead(options: {
   }
 
   if (options.mode === 'translated') {
-    return '本文を優先して整えました。';
+    return '本文を優先して翻訳しました。';
   }
 
   if (!options.analysis) {
     return options.translateFullPage
-      ? 'ページ全体を少しずつ整えます。'
-      : 'まず本文から、見えているところを整えます。';
+      ? 'ページ全体を順に翻訳します。'
+      : '本文を優先して、見えているところから翻訳します。';
   }
 
   if (options.translateFullPage) {
     return 'ページ全体を対象にしつつ、見えているところから始めます。';
   }
 
-  return 'まず本文から、見えているところを整えます。';
+  return '本文を優先して、見えているところから翻訳します。';
 }
 
 function buildMainSummary(
@@ -907,11 +1042,11 @@ function buildMainSummary(
   mode: PopupMode,
 ): string {
   if (mode === 'setup') {
-    return '設定が済めば、次からは細かいことを考えずに読み始められます。';
+    return '設定後はこのタブから翻訳を実行できます。';
   }
 
   if (mode === 'unavailable') {
-    return '記事やドキュメントのページでは、そのまま本文から読みやすくできます。';
+    return '記事やドキュメントのページでは、そのまま本文から翻訳できます。';
   }
 
   if (mode === 'translated') {
@@ -925,16 +1060,16 @@ function buildMainSummary(
   }
 
   if (analysis.blockCount <= 6) {
-    return '軽めのページなので、すぐ読み始められます。';
+    return '軽めのページなので、すぐ翻訳を実行できます。';
   }
 
   if (analysis.blockCount <= 16) {
-    return '少し長めですが、見えているところから順に整えます。';
+    return '少し長めですが、見えているところから順に翻訳します。';
   }
 
   return translateFullPage
-    ? '長いページなので、ページ全体を少しずつ整えます。'
-    : '長いページなので、まず本文を優先して読みやすくします。';
+    ? '長いページなので、ページ全体を順に翻訳します。'
+    : '長いページなので、まず本文を優先して翻訳します。';
 }
 
 function renderStateLabel(
@@ -981,6 +1116,8 @@ function renderStateLabel(
   switch (state.displayState) {
     case 'translated':
       return '翻訳を表示中';
+    case 'bilingual':
+      return '対訳を表示中';
     case 'mixed':
       return '一部だけ翻訳中';
     default:
@@ -1004,7 +1141,9 @@ function getStateTone(
     return 'warning';
   }
 
-  return state?.displayState || 'original';
+  const ds = state?.displayState;
+  if (ds === 'bilingual') return 'translated';
+  return ds || 'original';
 }
 
 function translateStatus(status: string): string {

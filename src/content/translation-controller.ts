@@ -26,6 +26,7 @@ import {
   restoreProtectedHtml,
   restorePlaceholderRichText,
   setElementHtmlContent,
+  splitDenseProtectedPlaceholderRichText,
   splitPlaceholderRichTextIntoSafeSegments,
   splitHtmlIntoSafeSegments,
 } from '../core/html';
@@ -44,6 +45,7 @@ import type {
   SessionSnapshotResponse,
   SelectionStateResponse,
   TranslateApiResponse,
+  TranslateSnippetResponse,
 } from '../shared/messages';
 import {
   getEstimateCalibrationSnapshot,
@@ -59,13 +61,17 @@ import type {
   DefaultTranslationScope,
   ExtensionSettings,
   PageAnalysis,
+  PageDisplayState,
   SessionRuntimeMetrics,
   SessionSnapshot,
   SessionWarningSummary,
   TranslationBatchRequest,
   TranslationContentMode,
   TranslationContext,
+  TranslationFragmentRole,
+  TranslationRegister,
   TranslationStatus,
+  TranslationStyle,
 } from '../shared/types';
 import { TranslationOverlay } from './overlay';
 
@@ -94,8 +100,11 @@ interface TranslationGroup {
   contentMode: TranslationContentMode;
   requestFragments: Array<{
     preparedContent: string;
+    sourceHintText: string;
     requestContentMode: TranslationContentMode;
     restoreContentMode: TranslationContentMode;
+    fragmentRole: TranslationFragmentRole;
+    precedingContext?: string;
     restoreMap: Record<string, string>;
     placeholderTagMap?: Record<string, string>;
     placeholderWrapperPrefix?: string;
@@ -124,6 +133,9 @@ interface TranslationBatchItem {
   contentMode: TranslationContentMode;
   restoreContentMode: TranslationContentMode;
   preparedContent: string;
+  sourceHintText: string;
+  fragmentRole: TranslationFragmentRole;
+  precedingContext?: string;
   restoreMap: Record<string, string>;
   placeholderTagMap?: Record<string, string>;
   placeholderWrapperPrefix?: string;
@@ -166,6 +178,7 @@ interface TranslationRuntimeState {
   calibration: EstimateCalibrationSnapshot;
   glossary: Map<string, string>;
   glossaryCandidates: Map<string, { source: string; count: number }>;
+  pageRegister: TranslationRegister;
   batchScale: Record<TranslationContentMode, number>;
   successStreak: Record<TranslationContentMode, number>;
   maxConcurrency: number;
@@ -216,6 +229,22 @@ const IMMEDIATE_GROUP_LIMIT = 1;
 const IMMEDIATE_CANDIDATE_VIEWPORT_MULTIPLIER = 0.95;
 const IMMEDIATE_GROUP_HARD_TOKEN_CAP = 560;
 const IMMEDIATE_GROUP_MAX_FRAGMENT_COUNT = 3;
+const CONTINUATION_CONTEXT_CHARS = 180;
+const STRUCTURAL_LABEL_TRANSLATIONS: Record<string, string> = {
+  remark: '注',
+  remarks: '注',
+  proof: '証明',
+  definition: '定義',
+  lemma: '補題',
+  theorem: '定理',
+  corollary: '系',
+  proposition: '命題',
+  example: '例',
+  examples: '例',
+  notation: '記法',
+  claim: '主張',
+  warning: '注意',
+};
 const LAZY_PREFETCH_MIN_TOKENS = 5200;
 const LAZY_PREFETCH_MAX_EXTRA_GROUPS = 12;
 const LAZY_PREFETCH_VIEWPORT_MULTIPLIER = 4;
@@ -269,6 +298,10 @@ export class TranslationController {
   private providerWarmupPromise: Promise<void> | null = null;
   private providerWarmupKey: string | null = null;
   private lastFocusedWarningBlockId: string | null = null;
+  private pendingSnippetTranslation: {
+    text: string;
+    range: Range;
+  } | null = null;
   private sessionSnapshot: SessionSnapshot = {
     pageKey: window.location.href,
     status: 'idle',
@@ -290,6 +323,12 @@ export class TranslationController {
     };
     this.overlay.onTranslateSelection = () => {
       void this.translateSelection(false);
+    };
+    this.overlay.onQuickTranslateSelection = () => {
+      void this.quickTranslateSelection();
+    };
+    this.overlay.onApplySelectionInline = () => {
+      void this.applySelectionTranslationInline();
     };
     this.overlay.onRetry = () => {
       void this.translatePage();
@@ -334,6 +373,8 @@ export class TranslationController {
         return this.translatePage(message.settings, message.scope);
       case 'TOGGLE_PAGE':
         return this.togglePage(message.settings, message.scope);
+      case 'SET_DISPLAY_MODE':
+        return this.setDisplayMode(message.mode);
       case 'START_SELECTION_TRANSLATION':
         return this.translateSelection(false, message.settings);
       case 'TOGGLE_SELECTION':
@@ -403,6 +444,7 @@ export class TranslationController {
       metrics: null,
     };
     this.lastFocusedWarningBlockId = null;
+    this.pendingSnippetTranslation = null;
     this.emitSnapshot();
   }
 
@@ -500,6 +542,15 @@ export class TranslationController {
     }
 
     if (records.every((record) => record.displayState === 'translated')) {
+      // translated -> bilingual
+      this.applyBilingualDisplay(records);
+      this.refreshDisplayState();
+      return { ok: true, message: 'Showing bilingual view.' };
+    }
+
+    if (this.sessionSnapshot.displayState === 'bilingual') {
+      // bilingual -> original
+      this.removeBilingualElements();
       this.cancelLazyPageSession();
       this.restoreRecords(records);
       this.setSnapshot({
@@ -584,6 +635,100 @@ export class TranslationController {
         : `Translated ${records.length} selected blocks.`,
       allowLazy: false,
     });
+  }
+
+  private async quickTranslateSelection(): Promise<void> {
+    const selection = this.documentRef.getSelection();
+    const text = selection?.toString().trim() ?? '';
+    if (!text) {
+      return;
+    }
+
+    const rect = this.overlay.getSelectionRect();
+    if (!rect) {
+      return;
+    }
+
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0).cloneRange();
+    this.pendingSnippetTranslation = null;
+
+    this.overlay.showTranslationPopoverLoading(rect);
+
+    try {
+      const settings = await loadSettings();
+      const sourceLanguage =
+        this.documentRef.documentElement.lang || 'auto';
+
+      const response = (await chrome.runtime.sendMessage({
+        type: 'TRANSLATE_SNIPPET',
+        text,
+        provider: settings.provider,
+        apiKey: settings.apiKey,
+        model: settings.model,
+        sourceLanguage,
+        targetLanguage: settings.targetLanguage,
+        style: settings.style,
+        pageRegister: resolvePageRegister(settings.style),
+      })) as TranslateSnippetResponse;
+
+      if (!response.ok || !response.translatedText) {
+        this.overlay.hideTranslationPopover();
+        this.overlay.showNotice(
+          localizeRuntimeError(response.message ?? '翻訳に失敗しました。'),
+          3000,
+        );
+        return;
+      }
+
+      this.pendingSnippetTranslation = {
+        text: response.translatedText,
+        range,
+      };
+
+      // Re-read rect in case selection shifted during translation
+      const updatedRect = this.overlay.getSelectionRect() ?? rect;
+      this.overlay.showTranslationPopover(response.translatedText, updatedRect);
+    } catch (error) {
+      this.pendingSnippetTranslation = null;
+      this.overlay.hideTranslationPopover();
+      const message =
+        error instanceof Error ? error.message : '翻訳に失敗しました。';
+      this.overlay.showNotice(localizeRuntimeError(message), 3000);
+    }
+  }
+
+  private async applySelectionTranslationInline(): Promise<void> {
+    const pending = this.pendingSnippetTranslation;
+    if (!pending) {
+      return;
+    }
+    this.pendingSnippetTranslation = null;
+
+    if (!this.applySnippetTranslationToRange(pending.range, pending.text)) {
+      this.overlay.showNotice('選択箇所に反映できませんでした。もう一度選択してください。', 2600);
+      return;
+    }
+
+    this.overlay.showNotice('選択箇所に反映しました。', 1800);
+  }
+
+  private applySnippetTranslationToRange(range: Range, translatedText: string): boolean {
+    if (!range.startContainer.isConnected || !range.endContainer.isConnected) {
+      return false;
+    }
+
+    try {
+      range.deleteContents();
+      range.insertNode(this.documentRef.createTextNode(translatedText));
+      this.documentRef.getSelection()?.removeAllRanges();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async clearPageCache(providedSettings?: ExtensionSettings): Promise<ActionResponse> {
@@ -751,7 +896,7 @@ export class TranslationController {
     }
 
     const calibration = await getEstimateCalibrationSnapshot(settings.provider, settings.model);
-    const runtimeState = this.createRuntimeState(pendingGroups, calibration);
+    const runtimeState = this.createRuntimeState(pendingGroups, calibration, settings.style);
 
     let immediateGroups = pendingGroups;
     let deferredGroups: TranslationGroup[] = [];
@@ -1513,8 +1658,14 @@ export class TranslationController {
             const fallbackGroupKeys = new Set<string>();
 
             batch.forEach((item, index) => {
-              const preparedFragment = restorePreparedContent(
+              const translatedFragment = normalizeTranslatedFragmentForQuality(
                 result.translations[index],
+                item,
+                options.runtimeState,
+                this.recordQualitySignal.bind(this),
+              );
+              const preparedFragment = restorePreparedContent(
+                translatedFragment,
                 item.restoreContentMode,
                 item.restoreMap,
               );
@@ -1679,6 +1830,15 @@ export class TranslationController {
       ? requestFragments.map((_, index) => index.toString(36))
       : undefined;
     const batchEstimate = toEstimateBatchShape(items);
+    const fragmentRoles = items.map((item) => item.fragmentRole);
+    const precedingContexts = items.map((item) => item.precedingContext ?? null);
+    const hasPrecedingContexts = precedingContexts.some((context) => typeof context === 'string' && context.length > 0);
+    if (hasPrecedingContexts) {
+      this.recordQualitySignal(
+        'continuationContextFragments',
+        precedingContexts.filter((context): context is string => typeof context === 'string' && context.length > 0).length,
+      );
+    }
     const request: TranslationBatchRequest = {
       provider: settings.provider,
       apiKey: settings.apiKey,
@@ -1686,10 +1846,13 @@ export class TranslationController {
       sourceLanguage: context.sourceLanguage,
       targetLanguage: settings.targetLanguage,
       style: settings.style,
+      pageRegister: runtimeState.pageRegister,
       contentMode,
       context,
       fragments: requestFragments,
       fragmentIds,
+      fragmentRoles,
+      precedingContexts,
       sectionContext: resolveBatchSectionContext(items),
       glossary: buildGlossaryHints(runtimeState, items),
       hasProtectedMarkers,
@@ -2013,8 +2176,11 @@ export class TranslationController {
     settings: ExtensionSettings,
   ): Array<{
     preparedContent: string;
+    sourceHintText: string;
     requestContentMode: TranslationContentMode;
     restoreContentMode: TranslationContentMode;
+    fragmentRole: TranslationFragmentRole;
+    precedingContext?: string;
     restoreMap: Record<string, string>;
     placeholderTagMap?: Record<string, string>;
     placeholderWrapperPrefix?: string;
@@ -2052,13 +2218,18 @@ export class TranslationController {
       record.contentMode === 'text'
         ? splitTextIntoSegments(sourceContent)
         : splitHtmlIntoSafeSegments(translatableSourceContent, MAX_HTML_FRAGMENT_CHARS);
+    const descriptors = buildFragmentDescriptors(record, segments, record.contentMode);
 
-    return segments.map((segment) => {
+    return descriptors.map((descriptor) => {
+      const segment = descriptor.segment;
       const prepared = prepareContentForTranslation(segment, record.contentMode, settings.style);
       return {
         preparedContent: prepared.content,
+        sourceHintText: descriptor.sourceHintText,
         requestContentMode: record.contentMode,
         restoreContentMode: record.contentMode,
+        fragmentRole: descriptor.fragmentRole,
+        precedingContext: descriptor.precedingContext,
         restoreMap: prepared.restoreMap,
         protectedHtmlMap: pickProtectedHtmlMarkersForContent(segment, protectedHtml?.htmlMap),
       };
@@ -2071,8 +2242,11 @@ export class TranslationController {
     skipWrapperRestore: boolean,
   ): Array<{
     preparedContent: string;
+    sourceHintText: string;
     requestContentMode: TranslationContentMode;
     restoreContentMode: TranslationContentMode;
+    fragmentRole: TranslationFragmentRole;
+    precedingContext?: string;
     restoreMap: Record<string, string>;
     placeholderTagMap?: Record<string, string>;
     placeholderWrapperPrefix?: string;
@@ -2099,14 +2273,31 @@ export class TranslationController {
       'html',
       settings.style,
     );
-    const placeholderSegments = resolvePlaceholderRequestSegments(
+    let placeholderSegments = resolvePlaceholderRequestSegments(
       placeholder.content,
       placeholder.wrapperPrefix,
     );
+    if (
+      shouldUseConservativeProtectedPlaceholderSplitting({
+        protectedMarkerCount,
+        placeholderTagPairCount,
+      })
+    ) {
+      placeholderSegments = splitDenseProtectedPlaceholderRichText(
+        placeholder.content,
+        MAX_PLACEHOLDER_RICH_TEXT_CHARS,
+        1,
+      );
+    }
 
     if (
       !placeholderSegments ||
       !placeholderSegments.every((segment) => segment.length <= MAX_PLACEHOLDER_RICH_TEXT_CHARS) ||
+      shouldPreferHtmlLaneForDenseProtectedPlaceholder({
+        protectedMarkerCount,
+        placeholderTagPairCount,
+        placeholderSegments,
+      }) ||
       !isPlaceholderPathWorthUsing({
         protectedHtml,
         protectedMarkerCount,
@@ -2120,16 +2311,28 @@ export class TranslationController {
       return null;
     }
 
-    return placeholderSegments.map((segment) => ({
-      preparedContent: segment,
+    const sourceHintContent = placeholder.wrapperPrefix
+      ? `${placeholder.wrapperPrefix}${placeholder.content}${placeholder.wrapperSuffix ?? ''}`
+      : placeholder.content;
+    const descriptors = buildFragmentDescriptorsForSourceText(
+      sourceHintContent,
+      placeholderSegments,
+      'html',
+    );
+
+    return descriptors.map((descriptor) => ({
+      preparedContent: descriptor.segment,
+      sourceHintText: descriptor.sourceHintText,
       requestContentMode: 'text',
       restoreContentMode: 'text',
+      fragmentRole: descriptor.fragmentRole,
+      precedingContext: descriptor.precedingContext,
       restoreMap: {},
       placeholderTagMap: placeholder.tagMap,
       placeholderWrapperPrefix: placeholder.wrapperPrefix,
       placeholderWrapperSuffix: placeholder.wrapperSuffix,
       skipWrapperRestore,
-      protectedHtmlMap: pickProtectedHtmlMarkersForContent(segment, protectedHtml?.htmlMap),
+      protectedHtmlMap: pickProtectedHtmlMarkersForContent(descriptor.segment, protectedHtml?.htmlMap),
     }));
   }
 
@@ -2292,6 +2495,7 @@ export class TranslationController {
   }
 
   private restoreRecords(records: BlockRecord[]): void {
+    this.removeBilingualElements();
     records.forEach((record) => {
       setElementHtmlContent(record.element, record.originalHtml);
       record.displayState = 'original';
@@ -2302,6 +2506,72 @@ export class TranslationController {
     this.refreshDisplayState();
   }
 
+  private applyBilingualDisplay(records: BlockRecord[]): void {
+    this.removeBilingualElements();
+    records.forEach((record) => {
+      if (!record.translatedContent) {
+        return;
+      }
+      // Restore original content in the element
+      setElementHtmlContent(record.element, record.originalHtml);
+      record.displayState = 'translated';
+
+      // Create a translation element below the original
+      const translationDiv = document.createElement('div');
+      translationDiv.setAttribute('data-aiwt-bilingual', 'true');
+      translationDiv.style.borderLeft = '3px solid rgba(127, 88, 12, 0.25)';
+      translationDiv.style.paddingLeft = '0.75em';
+      translationDiv.style.marginTop = '0.35em';
+      translationDiv.style.fontSize = '0.92em';
+      translationDiv.style.opacity = '0.88';
+
+      if (record.contentMode === 'text') {
+        translationDiv.textContent = record.translatedContent;
+      } else {
+        setElementHtmlContent(translationDiv, record.translatedContent, { sanitize: true });
+      }
+
+      record.element.insertAdjacentElement('afterend', translationDiv);
+    });
+  }
+
+  private removeBilingualElements(): void {
+    document.querySelectorAll('[data-aiwt-bilingual]').forEach((el) => el.remove());
+  }
+
+  private setDisplayMode(mode: PageDisplayState): ActionResponse {
+    const records = Array.from(this.blocksByElement.values()).filter(
+      (record) => record.translatedContent,
+    );
+    if (records.length === 0) {
+      return { ok: false, message: 'No translations available.' };
+    }
+
+    this.removeBilingualElements();
+
+    if (mode === 'translated') {
+      records.forEach((record) => {
+        if (record.contentMode === 'text') {
+          record.element.textContent = record.translatedContent!;
+        } else {
+          setElementHtmlContent(record.element, record.translatedContent!, { sanitize: true });
+        }
+        record.displayState = 'translated';
+      });
+    } else if (mode === 'bilingual') {
+      this.applyBilingualDisplay(records);
+    } else {
+      // 'original'
+      records.forEach((record) => {
+        setElementHtmlContent(record.element, record.originalHtml);
+        record.displayState = 'original';
+      });
+    }
+
+    this.refreshDisplayState();
+    return { ok: true };
+  }
+
   private refreshDisplayState(): void {
     const records = Array.from(this.blocksByElement.values());
     const translatedRecords = records.filter((record) => record.translatedContent);
@@ -2309,8 +2579,12 @@ export class TranslationController {
       (record) => record.displayState === 'translated',
     );
 
+    const hasBilingualElements = document.querySelector('[data-aiwt-bilingual]') !== null;
+
     let displayState: SessionSnapshot['displayState'] = 'original';
-    if (translatedRecords.length > 0 && displayedTranslations.length === translatedRecords.length) {
+    if (hasBilingualElements && displayedTranslations.length > 0) {
+      displayState = 'bilingual';
+    } else if (translatedRecords.length > 0 && displayedTranslations.length === translatedRecords.length) {
       displayState = 'translated';
     } else if (displayedTranslations.length > 0) {
       displayState = 'mixed';
@@ -2808,6 +3082,9 @@ export class TranslationController {
       qualitySignals: {
         sourceFallbackFragments: 0,
         protectedMarkerFallbackFragments: 0,
+        mixedRegisterSignals: 0,
+        labelPunctuationCorrections: 0,
+        continuationContextFragments: 0,
       },
       warningStats: null,
     };
@@ -3155,7 +3432,7 @@ export class TranslationController {
       { immediate: shouldEmit },
     );
     if (showOverlay && this.sessionSnapshot.activeSessionId === sessionId) {
-      this.overlay.setWorking();
+      this.overlay.setWorking({ completed: processedJobs, total: totalJobs });
     }
 
     if (shouldEmit) {
@@ -3211,6 +3488,7 @@ export class TranslationController {
   private createRuntimeState(
     groups: TranslationGroup[],
     calibration: EstimateCalibrationSnapshot,
+    style: TranslationStyle,
   ): TranslationRuntimeState {
     const glossaryCandidates = new Map<string, { source: string; count: number }>();
 
@@ -3229,6 +3507,7 @@ export class TranslationController {
       calibration,
       glossary: new Map(),
       glossaryCandidates,
+      pageRegister: resolvePageRegister(style),
       batchScale: {
         text: 1,
         html: 1,
@@ -3329,6 +3608,9 @@ function createBatchItems(
       contentMode: fragment.requestContentMode,
       restoreContentMode: fragment.restoreContentMode,
       preparedContent: fragment.preparedContent,
+      sourceHintText: fragment.sourceHintText,
+      fragmentRole: fragment.fragmentRole,
+      precedingContext: fragment.precedingContext,
       restoreMap: fragment.restoreMap,
       placeholderTagMap: fragment.placeholderTagMap,
       placeholderWrapperPrefix: fragment.placeholderWrapperPrefix,
@@ -3981,6 +4263,38 @@ function isPlaceholderPathWorthUsing(options: {
   return false;
 }
 
+function shouldPreferHtmlLaneForDenseProtectedPlaceholder(options: {
+  protectedMarkerCount: number;
+  placeholderTagPairCount: number;
+  placeholderSegments: string[];
+}): boolean {
+  if (
+    options.protectedMarkerCount < 2 ||
+    options.placeholderSegments.length <= 1 ||
+    options.placeholderTagPairCount > 2
+  ) {
+    return false;
+  }
+
+  const markerCounts = options.placeholderSegments.map((segment) =>
+    countProtectedMarkersInPlaceholderSegment(segment),
+  );
+  const maxMarkersInSegment = Math.max(0, ...markerCounts);
+
+  return maxMarkersInSegment >= 2;
+}
+
+function countProtectedMarkersInPlaceholderSegment(content: string): number {
+  return content.match(/\[\[\s*x\d+\s*\]\]/gi)?.length ?? 0;
+}
+
+function shouldUseConservativeProtectedPlaceholderSplitting(options: {
+  protectedMarkerCount: number;
+  placeholderTagPairCount: number;
+}): boolean {
+  return options.protectedMarkerCount >= 2 && options.placeholderTagPairCount <= 2;
+}
+
 function splitTextIntoSegments(text: string, maxChars = MAX_TEXT_FRAGMENT_CHARS): string[] {
   if (text.length <= maxChars) {
     return [text];
@@ -4039,11 +4353,21 @@ function splitSingleItemForRetry(item: TranslationBatchItem | undefined): Transl
     return null;
   }
 
-  return segments.map((segment) => ({
+  const descriptors = buildFragmentDescriptorsForSourceText(
+    item.sourceHintText,
+    segments,
+    item.contentMode,
+    item.fragmentRole,
+  );
+
+  return descriptors.map((descriptor) => ({
     ...item,
-    preparedContent: segment,
-    estimatedTokens: estimateTokensFromChars(segment.length),
-    rawEstimatedTokens: estimateTokensFromChars(segment.length),
+    preparedContent: descriptor.segment,
+    sourceHintText: descriptor.sourceHintText,
+    fragmentRole: descriptor.fragmentRole,
+    precedingContext: descriptor.precedingContext,
+    estimatedTokens: estimateTokensFromChars(descriptor.segment.length),
+    rawEstimatedTokens: estimateTokensFromChars(descriptor.segment.length),
   }));
 }
 
@@ -4233,4 +4557,183 @@ function buildWarningSummaryMessage(summary: SessionWarningSummary | null): stri
   }
 
   return `${count}箇所はそのまま残っています。`;
+}
+
+function resolvePageRegister(style: TranslationStyle): TranslationRegister {
+  return style === 'readable' ? 'desumasu' : 'dearu';
+}
+
+function buildFragmentDescriptors(
+  record: BlockRecord,
+  segments: string[],
+  sourceMode: TranslationContentMode,
+): Array<{
+  segment: string;
+  sourceHintText: string;
+  fragmentRole: TranslationFragmentRole;
+  precedingContext?: string;
+}> {
+  const sourceContent = sourceMode === 'html' ? record.originalHtml : record.originalText;
+  const preferredRole = resolveRecordFragmentRole(record);
+  return buildFragmentDescriptorsForSourceText(sourceContent, segments, sourceMode, preferredRole);
+}
+
+function buildFragmentDescriptorsForSourceText(
+  sourceContent: string,
+  segments: string[],
+  sourceMode: TranslationContentMode,
+  preferredRole?: TranslationFragmentRole,
+): Array<{
+  segment: string;
+  sourceHintText: string;
+  fragmentRole: TranslationFragmentRole;
+  precedingContext?: string;
+}> {
+  const normalizedSource = extractRoleSourceText(sourceContent, sourceMode);
+  const baseRole = preferredRole ?? resolveFragmentRoleFromSourceText(normalizedSource);
+  let previousHintText = '';
+
+  return segments.map((segment, index) => {
+    const sourceHintText = extractRoleSourceText(segment, sourceMode);
+    const fragmentRole = resolveFragmentRoleForSegment(sourceHintText, baseRole);
+    const precedingContext =
+      index > 0 && fragmentRole !== 'label' && fragmentRole !== 'heading'
+        ? buildPrecedingContext(previousHintText)
+        : undefined;
+    previousHintText = sourceHintText;
+    return {
+      segment,
+      sourceHintText,
+      fragmentRole,
+      precedingContext,
+    };
+  });
+}
+
+function resolveRecordFragmentRole(record: BlockRecord): TranslationFragmentRole {
+  const tagName = record.element.tagName.toUpperCase();
+  if (/^H[1-6]$/.test(tagName)) {
+    return 'heading';
+  }
+  if (tagName === 'LI' || tagName === 'DT' || tagName === 'DD') {
+    return 'list-item';
+  }
+  if (tagName === 'FIGCAPTION' || tagName === 'CAPTION') {
+    return 'caption';
+  }
+
+  const sourceText = extractRoleSourceText(
+    record.contentMode === 'html' ? record.originalHtml : record.originalText,
+    record.contentMode,
+  );
+  return resolveFragmentRoleFromSourceText(sourceText);
+}
+
+function resolveFragmentRoleForSegment(
+  sourceHintText: string,
+  baseRole: TranslationFragmentRole,
+): TranslationFragmentRole {
+  if (baseRole === 'heading' || baseRole === 'list-item' || baseRole === 'caption') {
+    return baseRole;
+  }
+  if (looksLikeStructuralLabel(sourceHintText)) {
+    return 'label';
+  }
+  return baseRole;
+}
+
+function resolveFragmentRoleFromSourceText(sourceText: string): TranslationFragmentRole {
+  return looksLikeStructuralLabel(sourceText) ? 'label' : 'prose';
+}
+
+function extractRoleSourceText(
+  content: string,
+  contentMode: TranslationContentMode,
+): string {
+  const withoutMarkers = content
+    .replace(/\[\[\s*\/?\s*t\d+\s*\]\]/gi, ' ')
+    .replace(/\[\[\s*x\d+\s*\]\]/gi, ' ');
+
+  if (contentMode === 'text') {
+    return normalizeText(withoutMarkers);
+  }
+
+  const parsed = new DOMParser().parseFromString(`<div>${withoutMarkers}</div>`, 'text/html');
+  return normalizeText(parsed.body.textContent ?? '');
+}
+
+function buildPrecedingContext(previousHintText: string): string | undefined {
+  const normalized = normalizeText(previousHintText);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return normalized.slice(-CONTINUATION_CONTEXT_CHARS);
+}
+
+function looksLikeStructuralLabel(sourceText: string): boolean {
+  const normalized = normalizeStructuralLabelKey(sourceText);
+  return Boolean(normalized && STRUCTURAL_LABEL_TRANSLATIONS[normalized]);
+}
+
+function normalizeStructuralLabelKey(sourceText: string): string {
+  return normalizeText(sourceText)
+    .replace(/^[\[(【「『]+|[\])】」』]+$/g, '')
+    .replace(/[.。:：]+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeTranslatedFragmentForQuality(
+  translatedContent: string,
+  item: TranslationBatchItem,
+  runtimeState: TranslationRuntimeState,
+  recordQualitySignal: (
+    signal: keyof SessionRuntimeMetrics['qualitySignals'],
+    count?: number,
+  ) => void,
+): string {
+  let normalized = translatedContent;
+
+  if (item.fragmentRole === 'label') {
+    const structuralLabel = STRUCTURAL_LABEL_TRANSLATIONS[
+      normalizeStructuralLabelKey(item.sourceHintText)
+    ];
+    if (structuralLabel) {
+      if (normalizeText(normalized) !== structuralLabel) {
+        recordQualitySignal('labelPunctuationCorrections');
+      }
+      return structuralLabel;
+    }
+
+    const stripped = normalized.replace(/[。．]+\s*$/u, '');
+    if (stripped !== normalized) {
+      recordQualitySignal('labelPunctuationCorrections');
+      normalized = stripped;
+    }
+    return normalized;
+  }
+
+  const registerNormalized = normalizeRegisterForPage(normalized, runtimeState.pageRegister);
+  if (registerNormalized !== normalized) {
+    recordQualitySignal('mixedRegisterSignals');
+    normalized = registerNormalized;
+  }
+
+  return normalized;
+}
+
+function normalizeRegisterForPage(
+  content: string,
+  pageRegister: TranslationRegister,
+): string {
+  if (pageRegister === 'desumasu') {
+    return content
+      .replace(/である(?=[。．]|$)/gu, 'です')
+      .replace(/であった(?=[。．]|$)/gu, 'でした');
+  }
+
+  return content
+    .replace(/でした(?=[。．]|$)/gu, 'であった')
+    .replace(/です(?=[。．]|$)/gu, 'である');
 }

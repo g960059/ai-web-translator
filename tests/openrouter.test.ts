@@ -280,7 +280,7 @@ describe('translateWithOpenRouter', () => {
     expect(systemPrompt).not.toContain('Page:');
     expect(systemPrompt).not.toContain(BASE_REQUEST.context.pageTitle);
     expect(systemPrompt).toContain('Return JSON: {"translations"');
-    expect(systemPrompt.length).toBeLessThan(260);
+    expect(systemPrompt.length).toBeLessThan(520);
   });
 
   it('includes section context and glossary only when provided', async () => {
@@ -416,6 +416,50 @@ describe('translateWithOpenRouter', () => {
 
     expect(systemPrompt).toContain('[[t0]]');
     expect(systemPrompt).toContain('[[x0]]');
+    expect(systemPrompt).toContain('must appear exactly once');
+  });
+
+  it('includes page register, fragment roles, and continuation context in the request contract', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_, init?: RequestInit) => {
+        requestBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: '{"translations":["注","本文です。"]}',
+                },
+              },
+            ],
+          }),
+        };
+      }),
+    );
+
+    await translateWithOpenRouter({
+      ...BASE_REQUEST,
+      fragments: ['Remark.', 'The statement continues here.'],
+      fragmentRoles: ['label', 'prose'],
+      precedingContexts: [null, 'Remark.'],
+      pageRegister: 'dearu',
+    });
+
+    const messages = (requestBody?.messages ?? []) as Array<{ content?: string }>;
+    const systemPrompt = messages[0]?.content ?? '';
+    const userPayload = JSON.parse(String(messages[1]?.content ?? '[]')) as Array<Record<string, string>>;
+
+    expect(systemPrompt).toContain('Japanese register: dearu');
+    expect(systemPrompt).toContain('r=label');
+    expect(systemPrompt).toContain('Do not add Japanese sentence punctuation to labels');
+    expect(userPayload).toEqual([
+      { t: 'Remark.', r: 'label' },
+      { t: 'The statement continues here.', r: 'prose', p: 'Remark.' },
+    ]);
   });
 });
 

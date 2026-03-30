@@ -28,23 +28,42 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       ? request.sourceLanguage
       : 'the detected source language';
   const hasHints = Boolean(request.sectionContext || request.glossary?.length);
+  const hasFragmentRoles = Boolean(
+    request.fragmentRoles?.length && request.fragmentRoles.length === request.fragments.length,
+  );
+  const hasPrecedingContexts = Boolean(
+    request.precedingContexts?.some((context) => typeof context === 'string' && context.length > 0),
+  );
   const hasFragmentIds = Boolean(
     request.fragmentIds?.length && request.fragmentIds.length === request.fragments.length,
   );
-  const hintShape = hasHints ? 'Input is JSON object {"s","g","f"}.' : 'Input is JSON array.';
+  const usesFragmentObjects = hasFragmentIds || hasFragmentRoles || hasPrecedingContexts;
+  const hintShape = hasHints
+    ? 'Input is JSON object {"s","g","f"}.'
+    : usesFragmentObjects
+      ? 'Input is JSON array of fragment objects.'
+      : 'Input is JSON array.';
   const hintInstruction = hasHints ? 'Use s/g only as soft context.' : null;
+  const fragmentObjectInstruction = usesFragmentObjects
+    ? 'Each fragment object uses t=source text, optional i=id, optional r=role, optional p=preceding context.'
+    : null;
   const markerInstruction = request.hasProtectedMarkers
-    ? 'Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged.'
+    ? 'Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged. Every marker from the source fragment must appear exactly once in the translation, in the same order.'
+    : null;
+  const roleInstruction = hasFragmentRoles
+    ? 'If r=label, translate it as a structural label, not as a full sentence. Do not add Japanese sentence punctuation to labels.'
     : null;
   if (request.contentMode === 'html') {
     return [
       `Translate ${sourceLanguage} -> ${request.targetLanguage}.`,
       hintShape,
+      fragmentObjectInstruction,
       'Each fragment is HTML.',
       'Keep tags, URLs, emphasis, and inline math intact.',
-      buildStyleInstruction(request.style),
+      buildStyleInstruction(request),
       hintInstruction,
       markerInstruction,
+      roleInstruction,
       hasFragmentIds
         ? 'Return JSON: {"translations":[{"i":"0","t":"<html>"},{"i":"1","t":"<html>"}]}.'
         : 'Return JSON: {"translations":["<html>","<html>"]}.',
@@ -57,10 +76,12 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
   return [
     `Translate ${sourceLanguage} -> ${request.targetLanguage}.`,
     hintShape,
+    fragmentObjectInstruction,
     'Each fragment is plain text.',
-    buildStyleInstruction(request.style),
+    buildStyleInstruction(request),
     hintInstruction,
     markerInstruction,
+    roleInstruction,
     hasFragmentIds
       ? 'Return JSON: {"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}.'
       : 'Return JSON: {"translations":["...","..."]}.',
@@ -70,8 +91,13 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     .join('\n');
 }
 
-function buildStyleInstruction(style: TranslationBatchRequest['style']): string {
-  switch (style) {
+function buildStyleInstruction(request: TranslationBatchRequest): string {
+  const registerInstruction = request.pageRegister
+    ? `Japanese register: ${request.pageRegister}. Do not mix dearu and desu-masu styles.`
+    : null;
+
+  const styleInstruction = (() => {
+    switch (request.style) {
     case 'readable':
       return 'Style: natural and easy to read.';
     case 'precise':
@@ -80,8 +106,11 @@ function buildStyleInstruction(style: TranslationBatchRequest['style']): string 
       return 'Style: stay close to the source wording and structure.';
     case 'auto':
     default:
-      return 'Style: choose one fluent page-consistent reading style.';
-  }
+      return 'Style: fluent expository prose that reads naturally on the page.';
+    }
+  })();
+
+  return [styleInstruction, registerInstruction].filter(Boolean).join(' ');
 }
 
 function parseTranslations(content: string, request: TranslationBatchRequest): string[] {
@@ -342,13 +371,28 @@ function extractBalancedJsonFrom(content: string, startIndex: number): string | 
 }
 
 function buildUserPayload(request: TranslationBatchRequest): string {
-  const fragments =
-    request.fragmentIds?.length === request.fragments.length
-      ? request.fragments.map((text, index) => ({
-          i: request.fragmentIds?.[index] ?? String(index),
-          t: text,
-        }))
-      : request.fragments;
+  const hasFragmentIds = request.fragmentIds?.length === request.fragments.length;
+  const hasFragmentRoles = request.fragmentRoles?.length === request.fragments.length;
+  const hasPrecedingContexts = request.precedingContexts?.length === request.fragments.length;
+  const usesFragmentObjects = Boolean(hasFragmentIds || hasFragmentRoles || hasPrecedingContexts);
+  const fragments = usesFragmentObjects
+    ? request.fragments.map((text, index) => {
+        const fragment: Record<string, string> = { t: text };
+        const fragmentId = hasFragmentIds ? request.fragmentIds?.[index] : undefined;
+        const fragmentRole = hasFragmentRoles ? request.fragmentRoles?.[index] : undefined;
+        const precedingContext = hasPrecedingContexts ? request.precedingContexts?.[index] : undefined;
+        if (fragmentId) {
+          fragment.i = fragmentId;
+        }
+        if (fragmentRole) {
+          fragment.r = fragmentRole;
+        }
+        if (precedingContext) {
+          fragment.p = precedingContext;
+        }
+        return fragment;
+      })
+    : request.fragments;
 
   if (!request.sectionContext && !request.glossary?.length) {
     return JSON.stringify(fragments);
@@ -507,6 +551,37 @@ export async function getOpenRouterModels(): Promise<ProviderModelInfo[]> {
           : undefined,
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function validateOpenRouterApiKey(apiKey: string): Promise<{
+  valid: boolean;
+  error?: string;
+}> {
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (response.ok) {
+      return { valid: true };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return { valid: false, error: 'API Key が無効です。OpenRouter で確認してください。' };
+    }
+
+    return { valid: false, error: `OpenRouter が ${response.status} を返しました。しばらくしてからお試しください。` };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      return { valid: false, error: '接続がタイムアウトしました。' };
+    }
+    return { valid: false, error: 'ネットワークエラーが発生しました。' };
+  }
 }
 
 export async function warmOpenRouterConnection(): Promise<void> {

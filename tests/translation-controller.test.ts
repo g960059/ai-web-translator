@@ -110,6 +110,253 @@ describe('TranslationController', () => {
     expect(lead.innerHTML).toContain('data-translated="ja"');
   });
 
+  it('applies the previewed snippet translation without issuing a second translation request', async () => {
+    vi.useFakeTimers();
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="lead">This is a selectable sentence for snippet preview.</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings();
+    await saveSettings(settings);
+    const sendMessage = chromeMock.runtime.sendMessage as any;
+    let snippetCalls = 0;
+    let batchCalls = 0;
+
+    sendMessage.mockImplementation(
+      async (message: { type: string; request?: { fragments: string[] } }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_SNIPPET') {
+          snippetCalls += 1;
+          return {
+            ok: true,
+            translatedText: 'これはスニペット翻訳です。',
+          };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          batchCalls += 1;
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) => `${fragment} [ja]`),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    void new TranslationController(document);
+    const lead = document.getElementById('lead') as HTMLElement;
+    selectElementContents(lead);
+    const selection = window.getSelection();
+    const range = selection?.getRangeAt(0);
+    Object.defineProperty(range as Range, 'getBoundingClientRect', {
+      value: () => ({
+        x: 0,
+        y: 24,
+        top: 24,
+        bottom: 48,
+        left: 0,
+        right: 320,
+        width: 320,
+        height: 24,
+        toJSON: () => ({}),
+      }),
+      configurable: true,
+    });
+    document.dispatchEvent(new Event('selectionchange'));
+    await vi.advanceTimersByTimeAsync(300);
+    vi.useRealTimers();
+
+    const widgetShadow = getWidgetShadowRoot();
+    (widgetShadow.querySelector('.bubble-action') as HTMLButtonElement).click();
+
+    const popoverHost = document.querySelector('[data-ai-web-translator-popover="true"]') as HTMLDivElement;
+    const popoverShadow = popoverHost.shadowRoot as ShadowRoot;
+    await waitFor(() => {
+      expect(popoverShadow.querySelector('.popover-body')?.textContent).toContain('これはスニペット翻訳です。');
+    });
+
+    (popoverShadow.querySelector('.popover-btn-apply') as HTMLButtonElement).click();
+
+    expect(snippetCalls).toBe(1);
+    expect(batchCalls).toBe(0);
+    expect(lead.textContent).toContain('これはスニペット翻訳です。');
+  });
+
+  it('locks auto style to dearu register and treats short structural labels as labels', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="remark">Remark.</p>
+            <p id="body">This direct sum has a different degree.</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, style: 'auto' });
+    const requests: Array<{
+      pageRegister?: string;
+      fragments: string[];
+      fragmentRoles?: string[];
+    }> = [];
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: { type: string; request?: { pageRegister?: string; fragments: string[]; fragmentRoles?: string[] } }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          requests.push(message.request);
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) =>
+                fragment.includes('Remark') ? 'Remark。' : 'これは重要です。',
+              ),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(requests.some((request) => request.pageRegister === 'dearu')).toBe(true);
+
+    const requestWithRemark = requests.find((request) =>
+      request.fragments.some((fragment) => fragment.includes('Remark')),
+    );
+    const remarkIndex = requestWithRemark?.fragments.findIndex((fragment) => fragment.includes('Remark')) ?? -1;
+
+    expect(remarkIndex).toBeGreaterThanOrEqual(0);
+    expect(requestWithRemark?.fragmentRoles?.[remarkIndex]).toBe('label');
+    expect(document.getElementById('remark')?.textContent).toBe('注');
+    expect(document.getElementById('body')?.textContent).toContain('これは重要である。');
+  });
+
+  it('normalizes readable mode output to desumasu register', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="body">This direct sum has a different degree.</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, style: 'readable' });
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: { type: string; request?: { fragments: string[] } }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          return {
+            ok: true,
+            result: {
+              translations: ['これは重要である。'],
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(document.getElementById('body')?.textContent).toContain('これは重要です。');
+  });
+
+  it('sends continuation context when a long fragment is split across multiple requests', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="long">${'Representation theory connects algebra and geometry through characters and modules '.repeat(18)}in a single discussion.</p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, style: 'auto' });
+    const requests: Array<{ fragments: string[]; precedingContexts?: Array<string | null> }> = [];
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: { type: string; request?: { fragments: string[]; precedingContexts?: Array<string | null> } }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          requests.push(message.request);
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) => `${fragment} [ja]`),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
+    );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(
+      requests.some((request) =>
+        request.precedingContexts?.some((context) => typeof context === 'string' && context.includes('characters and modules')),
+      ),
+    ).toBe(true);
+  });
+
   it('reuses cached analysis data when translating the page', async () => {
     setDocumentHtml(loadFixture('article.html'));
 
@@ -1411,7 +1658,7 @@ describe('TranslationController', () => {
     expect((document.getElementById('hybrid') as HTMLElement).textContent).toContain(
       '表現論',
     );
-    expect((document.getElementById('diagram') as HTMLElement).textContent).toContain('可換です。');
+    expect((document.getElementById('diagram') as HTMLElement).textContent).toContain('可換である。');
     expect((document.querySelector('#diagram img.mw-file-element') as HTMLImageElement).src).toContain(
       '/diagram/commutes.svg',
     );
@@ -1703,8 +1950,8 @@ describe('TranslationController', () => {
 
     expect(response.ok).toBe(true);
     await waitFor(() => {
-      expect(document.querySelector('#cluster p')?.textContent).toBe('アルファです。');
-      expect(document.querySelectorAll('#cluster p')[2]?.textContent).toBe('ガンマです。');
+      expect(document.querySelector('#cluster p')?.textContent).toBe('アルファである。');
+      expect(document.querySelectorAll('#cluster p')[2]?.textContent).toBe('ガンマである。');
     });
   });
 
@@ -3080,6 +3327,56 @@ describe('TranslationController', () => {
     expect(yonedaGroup).toBeDefined();
     expect(yonedaGroup?.contentMode).toBe('text');
     expect(yonedaGroup?.fragmentCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it('splits dense protected prose without rich inline tags into conservative text fragments', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="dense-protected">
+              ${'If '}
+              <span class="mwe-math-element">
+                <span class="mwe-math-mathml-inline" style="display:none;"><math><mi>V</mi></math></span>
+                <img class="mwe-math-fallback-image-inline" src="/math/V.svg" alt="V" />
+              </span>
+              ${' is a representation and '}
+              <span class="mwe-math-element">
+                <span class="mwe-math-mathml-inline" style="display:none;"><math><mi>W</mi></math></span>
+                <img class="mwe-math-fallback-image-inline" src="/math/W.svg" alt="W" />
+              </span>
+              ${' is a linear subspace that is preserved by the action, then the surrounding prose remains one long explanatory sentence without inline links or rich emphasis. '.repeat(8)}
+            </p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    setRect(document.getElementById('dense-protected') as HTMLElement, 24, 260, 520);
+
+    const settings = createSettings({ cacheEnabled: false });
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'GET_DEBUG_BLOCKS',
+      settings,
+      scope: 'main',
+    }) as DebugBlocksResponse;
+
+    expect(response.ok).toBe(true);
+    if (!response.ok) {
+      throw new Error('Expected debug response.');
+    }
+
+    const debug = response.debug as { groups: DebugGroup[] };
+    const denseGroup = debug.groups.find((group: DebugGroup) =>
+      group.preview.includes('is a representation and'),
+    );
+
+    expect(denseGroup).toBeDefined();
+    expect(denseGroup?.contentMode).toBe('text');
+    expect(denseGroup?.hasProtectedMarkers).toBe(true);
+    expect(denseGroup?.fragmentCount).toBeGreaterThan(1);
   });
 
   it('routes nLab-style structured definition wrappers through the text placeholder lane', async () => {

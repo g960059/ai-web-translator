@@ -16,6 +16,29 @@
       "128": "icon128.png"
     }
   },
+  "commands": {
+    "translate-page": {
+      "suggested_key": {
+        "default": "Alt+T",
+        "mac": "Alt+T"
+      },
+      "description": "このページを翻訳"
+    },
+    "toggle-translation": {
+      "suggested_key": {
+        "default": "Alt+O",
+        "mac": "Alt+O"
+      },
+      "description": "原文と翻訳を切り替え"
+    },
+    "translate-selection": {
+      "suggested_key": {
+        "default": "Alt+Shift+T",
+        "mac": "Alt+Shift+T"
+      },
+      "description": "選択範囲を翻訳"
+    }
+  },
   "permissions": [
     "storage",
     "activeTab",

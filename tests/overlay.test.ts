@@ -24,8 +24,8 @@ describe('TranslationOverlay', () => {
     `);
 
     const overlay = new TranslationOverlay(document);
-    const onTranslateSelection = vi.fn();
-    overlay.onTranslateSelection = onTranslateSelection;
+    const onQuickTranslateSelection = vi.fn();
+    overlay.onQuickTranslateSelection = onQuickTranslateSelection;
     overlay.attachSelectionListener();
     overlay.setResting();
 
@@ -36,7 +36,7 @@ describe('TranslationOverlay', () => {
     const bubbleAction = getWidgetShadowRoot().querySelector('.bubble-action') as HTMLButtonElement;
     bubbleAction.click();
 
-    expect(onTranslateSelection).toHaveBeenCalledTimes(1);
+    expect(onQuickTranslateSelection).toHaveBeenCalledTimes(1);
     expect(getWidgetHost().dataset.widgetState).toBe('resting');
   });
 
@@ -53,9 +53,9 @@ describe('TranslationOverlay', () => {
 
     const overlay = new TranslationOverlay(document);
     const onStartTranslation = vi.fn();
-    const onTranslateSelection = vi.fn();
+    const onQuickTranslateSelection = vi.fn();
     overlay.onStartTranslation = onStartTranslation;
-    overlay.onTranslateSelection = onTranslateSelection;
+    overlay.onQuickTranslateSelection = onQuickTranslateSelection;
     overlay.attachSelectionListener();
 
     selectElementContents(document.getElementById('target') as HTMLElement);
@@ -65,7 +65,7 @@ describe('TranslationOverlay', () => {
     const mascot = getWidgetShadowRoot().querySelector('.mascot') as HTMLButtonElement;
     mascot.click();
 
-    expect(onTranslateSelection).toHaveBeenCalledTimes(1);
+    expect(onQuickTranslateSelection).toHaveBeenCalledTimes(1);
     expect(onStartTranslation).not.toHaveBeenCalled();
   });
 

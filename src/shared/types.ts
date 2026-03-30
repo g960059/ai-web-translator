@@ -5,7 +5,10 @@ export type TranslationScope = 'page' | 'main' | 'selection';
 export type DefaultTranslationScope = Exclude<TranslationScope, 'selection'>;
 
 export type TranslationStyle = 'auto' | 'readable' | 'precise' | 'source-like';
+export type ModelPreset = 'accurate' | 'balanced' | 'fast' | 'custom';
 export type TranslationContentMode = 'html' | 'text';
+export type TranslationRegister = 'dearu' | 'desumasu';
+export type TranslationFragmentRole = 'prose' | 'heading' | 'label' | 'list-item' | 'caption';
 
 export type TranslationStatus =
   | 'idle'
@@ -24,12 +27,13 @@ export type WidgetState = 'off' | 'working' | 'resting' | 'retrying' | 'error' |
 export type BlockDisplayState = 'original' | 'translated';
 export type BlockWarningState = 'none' | 'retrying' | 'fallback-source' | 'error-final';
 
-export type PageDisplayState = 'original' | 'translated' | 'mixed';
+export type PageDisplayState = 'original' | 'translated' | 'bilingual' | 'mixed';
 
 export interface ExtensionSettings {
   provider: ProviderId;
   apiKey: string;
   model: string;
+  modelPreset: ModelPreset;
   targetLanguage: string;
   style: TranslationStyle;
   translateFullPage: boolean;
@@ -140,6 +144,9 @@ export interface SessionImmediateBatchMetrics {
 export interface SessionQualitySignals {
   sourceFallbackFragments: number;
   protectedMarkerFallbackFragments: number;
+  mixedRegisterSignals: number;
+  labelPunctuationCorrections: number;
+  continuationContextFragments: number;
 }
 
 export interface SessionWarningSummary {
@@ -186,10 +193,13 @@ export interface TranslationBatchRequest {
   sourceLanguage: string;
   targetLanguage: string;
   style: TranslationStyle;
+  pageRegister?: TranslationRegister;
   contentMode: TranslationContentMode;
   context: TranslationContext;
   fragments: string[];
   fragmentIds?: string[];
+  fragmentRoles?: TranslationFragmentRole[];
+  precedingContexts?: Array<string | null>;
   sectionContext?: string;
   glossary?: Array<{
     source: string;

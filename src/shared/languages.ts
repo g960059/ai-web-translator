@@ -25,7 +25,31 @@ export const languageSuggestions = languageOptions.map((language) => language.co
 
 export function findLanguageOption(code: string): LanguageOption | undefined {
   const normalized = code.trim().toLowerCase();
-  return languageOptions.find((language) => language.code.toLowerCase() === normalized);
+
+  // Exact match
+  const exact = languageOptions.find((language) => language.code.toLowerCase() === normalized);
+  if (exact) {
+    return exact;
+  }
+
+  // Special-case Chinese locale variants
+  const zhMap: Record<string, string> = { 'zh-hans': 'zh-cn', 'zh-hant': 'zh-tw' };
+  if (zhMap[normalized]) {
+    const zhMatch = languageOptions.find(
+      (language) => language.code.toLowerCase() === zhMap[normalized],
+    );
+    if (zhMatch) {
+      return zhMatch;
+    }
+  }
+
+  // Fallback: match on primary language tag (e.g. 'en-US' → 'en')
+  const primary = normalized.split('-')[0];
+  if (primary && primary !== normalized) {
+    return languageOptions.find((language) => language.code.toLowerCase() === primary);
+  }
+
+  return undefined;
 }
 
 export function formatLanguageLabel(code: string): string {

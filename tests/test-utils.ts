@@ -14,7 +14,8 @@ export function createSettings(overrides: Partial<ExtensionSettings> = {}): Exte
   return {
     provider: 'openrouter',
     apiKey: 'test-api-key',
-    model: 'openai/gpt-4o-mini',
+    model: 'google/gemini-3.1-flash-lite-preview',
+    modelPreset: 'custom',
     targetLanguage: 'ja',
     style: 'auto',
     translateFullPage: false,

@@ -2,12 +2,15 @@ import type {
   DefaultTranslationScope,
   ExtensionSettings,
   PageAnalysis,
+  PageDisplayState,
   ProviderId,
   ProviderModelInfo,
   SessionSnapshot,
   TabSessionState,
   TranslationBatchRequest,
+  TranslationRegister,
   TranslationBatchResult,
+  TranslationStyle,
 } from './types';
 
 export interface StartTranslationMessage {
@@ -44,6 +47,11 @@ export interface ClearCacheMessage {
 
 export interface CancelTranslationMessage {
   type: 'CANCEL_TRANSLATION';
+}
+
+export interface SetDisplayModeMessage {
+  type: 'SET_DISPLAY_MODE';
+  mode: PageDisplayState;
 }
 
 export interface FocusNextWarningBlockMessage {
@@ -104,9 +112,36 @@ export interface WarmTranslationProviderMessage {
   model: string;
 }
 
+export interface ValidateApiKeyMessage {
+  type: 'VALIDATE_API_KEY';
+  provider: ProviderId;
+  apiKey: string;
+}
+
+export interface ValidateApiKeyResponse extends ActionResponse {
+  valid?: boolean;
+}
+
+export interface TranslateSnippetMessage {
+  type: 'TRANSLATE_SNIPPET';
+  text: string;
+  provider: ProviderId;
+  apiKey: string;
+  model: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  style: TranslationStyle;
+  pageRegister?: TranslationRegister;
+}
+
+export interface TranslateSnippetResponse extends ActionResponse {
+  translatedText?: string;
+}
+
 export type ContentCommandMessage =
   | StartTranslationMessage
   | TogglePageMessage
+  | SetDisplayModeMessage
   | StartSelectionTranslationMessage
   | ToggleSelectionMessage
   | RetranslateSelectionMessage
@@ -120,12 +155,14 @@ export type ContentCommandMessage =
 
 export type BackgroundMessage =
   | TranslateApiMessage
+  | TranslateSnippetMessage
   | GetTabSessionStateMessage
   | SessionStateChangedMessage
   | ClearAllCacheMessage
   | CancelTranslationMessage
   | GetProviderModelsMessage
-  | WarmTranslationProviderMessage;
+  | WarmTranslationProviderMessage
+  | ValidateApiKeyMessage;
 
 export type RuntimeMessage =
   | ContentCommandMessage

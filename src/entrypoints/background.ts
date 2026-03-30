@@ -6,6 +6,8 @@ import type {
   ProviderModelsResponse,
   TabStateResponse,
   TranslateApiResponse,
+  TranslateSnippetResponse,
+  ValidateApiKeyResponse,
 } from '../shared/messages';
 import { clearAllTranslationCache } from '../shared/cache';
 import { getTranslationProvider } from '../core/provider';
@@ -67,6 +69,25 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
+chrome.commands.onCommand.addListener(async (command) => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    return;
+  }
+
+  switch (command) {
+    case 'translate-page':
+      void chrome.tabs.sendMessage(tab.id, { type: 'START_TRANSLATION' });
+      break;
+    case 'toggle-translation':
+      void chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_PAGE' });
+      break;
+    case 'translate-selection':
+      void chrome.tabs.sendMessage(tab.id, { type: 'START_SELECTION_TRANSLATION' });
+      break;
+  }
+});
+
 chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendResponse) => {
   void handleMessage(message, sender)
     .then((response) => sendResponse(response))
@@ -90,7 +111,7 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
 async function handleMessage(
   message: BackgroundMessage,
   sender: chrome.runtime.MessageSender,
-): Promise<TranslateApiResponse | TabStateResponse | ProviderModelsResponse | ActionResponse> {
+): Promise<TranslateApiResponse | TranslateSnippetResponse | TabStateResponse | ProviderModelsResponse | ValidateApiKeyResponse | ActionResponse> {
   switch (message.type) {
     case 'TRANSLATE_API': {
       const tabId = sender.tab?.id;
@@ -120,6 +141,54 @@ async function handleMessage(
             ok: false,
             message: 'Cancelled. Start a new run when ready.',
           };
+        }
+        throw error;
+      } finally {
+        if (tabId !== undefined) {
+          removeActiveTranslationController(tabId, abortController);
+        }
+      }
+    }
+    case 'TRANSLATE_SNIPPET': {
+      const provider = getTranslationProvider(message.provider);
+      const abortController = new AbortController();
+      const tabId = sender.tab?.id;
+      if (tabId !== undefined) {
+        const controllers = activeTranslationControllers.get(tabId) ?? new Set<AbortController>();
+        controllers.add(abortController);
+        activeTranslationControllers.set(tabId, controllers);
+      }
+
+      try {
+        const result = await provider.translateBatch(
+          {
+            provider: message.provider,
+            apiKey: message.apiKey,
+            model: message.model,
+            sourceLanguage: message.sourceLanguage,
+            targetLanguage: message.targetLanguage,
+            style: message.style,
+            pageRegister: message.pageRegister,
+            contentMode: 'text',
+            context: {
+              pageTitle: '',
+              pageDescription: '',
+              pageUrl: '',
+              sourceLanguage: message.sourceLanguage,
+              targetLanguage: message.targetLanguage,
+            },
+            fragments: [message.text],
+          },
+          { signal: abortController.signal },
+        );
+
+        return {
+          ok: true,
+          translatedText: result.translations[0] ?? '',
+        } satisfies TranslateSnippetResponse;
+      } catch (error) {
+        if (isCancellationError(error)) {
+          return { ok: false, message: 'Cancelled.' };
         }
         throw error;
       } finally {
@@ -195,6 +264,14 @@ async function handleMessage(
         ok: true,
         models,
       };
+    }
+    case 'VALIDATE_API_KEY': {
+      const provider = getTranslationProvider(message.provider);
+      if (!provider.validateApiKey) {
+        return { ok: true, valid: true };
+      }
+      const result = await provider.validateApiKey(message.apiKey);
+      return { ok: true, valid: result.valid, message: result.error };
     }
     case 'WARM_TRANSLATION_PROVIDER': {
       const provider = getTranslationProvider(message.provider);

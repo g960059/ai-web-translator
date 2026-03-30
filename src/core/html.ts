@@ -17,7 +17,28 @@ export interface ProtectedHtmlContent {
   htmlMap: Record<string, string>;
 }
 
-const ATOMIC_HTML_SELECTOR = 'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg';
+const ATOMIC_HTML_SELECTOR = [
+  'math',
+  'table',
+  'pre',
+  'code',
+  'ruby',
+  'img',
+  'picture',
+  'video',
+  'audio',
+  'iframe',
+  'svg',
+  'mjx-container',
+  'mjx-math',
+  '.MathJax',
+  '.MathJax_Display',
+  '.MathJax_Preview',
+  'script[type^="math/"]',
+  '.katex',
+  '.katex-display',
+];
+const ATOMIC_HTML_SELECTOR_QUERY = ATOMIC_HTML_SELECTOR.join(', ');
 const DANGEROUS_TRANSLATED_TAGS = new Set([
   'SCRIPT',
   'STYLE',
@@ -96,8 +117,9 @@ const VERY_DENSE_PROTECTED_PLACEHOLDER_MARKER_COUNT = 12;
 const MAX_PROTECTED_MARKERS_PER_SEGMENT = 2;
 const MAX_PROTECTED_MARKERS_PER_VERY_DENSE_SEGMENT = 1;
 const PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR =
-  'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"]';
-const PROTECTED_HTML_SELECTOR = 'math, .mwe-math-element, img.mw-file-element';
+  'math, table, pre, code, ruby, img, picture, video, audio, iframe, svg, form, input, select, textarea, button, br, hr, p, div, section, article, header, footer, aside, nav, ul, ol, li, dl, dt, dd, figure, figcaption, h1, h2, h3, h4, h5, h6, sup, .reference, .references, .reflist, .mwe-math-element, .mwe-math-fallback-image-inline, .mwe-math-fallback-image-display, a[href^=\"#cite_note\"], a[href^=\"#cite_ref\"], mjx-container, mjx-math, .MathJax, .MathJax_Display, .MathJax_Preview, script[type^="math/"], .katex, .katex-display';
+const PROTECTED_HTML_SELECTOR =
+  'math, .mwe-math-element, img.mw-file-element, mjx-container, .MathJax, .MathJax_Display, .katex, .katex-display';
 
 export function normalizeHtml(html: string): string {
   return html.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
@@ -272,12 +294,13 @@ export function splitPlaceholderRichTextIntoSafeSegments(
     topLevelSegments.length > 1
       ? topLevelSegments
       : protectedMarkerPieces;
+  const sentenceAwareSegments = coalescePlaceholderPiecesIntoSentenceUnits(candidateSegments);
   if (candidateSegments.length <= 1) {
     return [normalized];
   }
 
   const packed = packPlaceholderTextPieces(
-    candidateSegments,
+    sentenceAwareSegments,
     effectiveMaxChars,
     maxProtectedMarkersPerSegment,
   );
@@ -296,6 +319,38 @@ export function splitPlaceholderRichTextIntoSafeSegments(
       rebalanced.some(
         (segment) => countProtectedMarkers(segment) > maxProtectedMarkersPerSegment,
       ))
+  ) {
+    return [normalized];
+  }
+
+  return rebalanced;
+}
+
+export function splitDenseProtectedPlaceholderRichText(
+  content: string,
+  maxChars: number,
+  maxProtectedMarkersPerSegment = 1,
+): string[] {
+  const normalized = normalizeText(content);
+  const pieces = extractProtectedMarkerSegments(normalized);
+  const sentenceAwareSegments = coalescePlaceholderPiecesIntoSentenceUnits(pieces);
+  const packed = packPlaceholderTextPieces(
+    sentenceAwareSegments,
+    maxChars,
+    maxProtectedMarkersPerSegment,
+  );
+  const rebalanced = rebalanceDenseProtectedMarkerSegments(
+    packed,
+    maxChars,
+    maxProtectedMarkersPerSegment,
+  );
+
+  if (
+    rebalanced.length <= 1 ||
+    rebalanced.some((segment) => segment.length > maxChars) ||
+    rebalanced.some(
+      (segment) => countProtectedMarkers(segment) > maxProtectedMarkersPerSegment,
+    )
   ) {
     return [normalized];
   }
@@ -486,8 +541,8 @@ function splitHtmlNode(node: ChildNode, maxChars: number): string[] {
   const element = node as HTMLElement;
   if (
     !SPLITTABLE_HTML_CONTAINER_TAGS.has(element.tagName) ||
-    element.matches(ATOMIC_HTML_SELECTOR) ||
-    element.querySelector(ATOMIC_HTML_SELECTOR) ||
+    element.matches(ATOMIC_HTML_SELECTOR_QUERY) ||
+    element.querySelector(ATOMIC_HTML_SELECTOR_QUERY) ||
     element.childNodes.length <= 1
   ) {
     return [serialized];
@@ -760,6 +815,29 @@ function extractProtectedMarkerSegments(content: string): string[] {
   return pieces;
 }
 
+function coalescePlaceholderPiecesIntoSentenceUnits(pieces: string[]): string[] {
+  if (pieces.length <= 1) {
+    return pieces;
+  }
+
+  const units: string[] = [];
+  let current = '';
+
+  pieces.forEach((piece) => {
+    current = current ? concatenatePlaceholderPieces(current, piece) : piece;
+    if (endsPlaceholderSentenceUnit(piece)) {
+      units.push(current);
+      current = '';
+    }
+  });
+
+  if (current) {
+    units.push(current);
+  }
+
+  return units;
+}
+
 function rebalanceDenseProtectedMarkerSegments(
   segments: string[],
   maxChars: number,
@@ -811,6 +889,15 @@ function concatenatePlaceholderPieces(left: string, right: string): string {
 
 function isProtectedMarkerPiece(piece: string): boolean {
   return /^\[\[\s*x\d+\s*\]\]$/i.test(piece);
+}
+
+function endsPlaceholderSentenceUnit(piece: string): boolean {
+  const trimmed = piece.trim();
+  if (!trimmed || isProtectedMarkerPiece(trimmed)) {
+    return false;
+  }
+
+  return /(?:[.!?。！？:：]|\[\[\/t\d+\]\])$/i.test(trimmed);
 }
 
 function countProtectedMarkers(content: string): number {
@@ -897,6 +984,13 @@ function splitTextForPlaceholder(text: string, maxChars: number): string[] {
       return;
     }
 
+    const clauseChunks = splitLongPlaceholderSentenceByClauses(sentence, maxChars);
+    if (clauseChunks.length > 1) {
+      chunks.push(...clauseChunks);
+      current = '';
+      return;
+    }
+
     for (let start = 0; start < sentence.length; start += maxChars) {
       const piece = sentence.slice(start, start + maxChars).trim();
       if (piece) {
@@ -911,6 +1005,42 @@ function splitTextForPlaceholder(text: string, maxChars: number): string[] {
   }
 
   return chunks;
+}
+
+function splitLongPlaceholderSentenceByClauses(text: string, maxChars: number): string[] {
+  const clauses =
+    text.match(/[^,;:、，；：]+(?:[,;:、，；：]+|$)/g)?.map((clause) => clause.trim()) ?? [text];
+  if (clauses.length <= 1) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let current = '';
+
+  clauses.forEach((clause) => {
+    const candidate = current ? `${current} ${clause}` : clause;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      return;
+    }
+
+    if (current) {
+      chunks.push(current);
+    }
+
+    if (clause.length <= maxChars) {
+      current = clause;
+      return;
+    }
+
+    current = '';
+  });
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks.length > 1 ? chunks : [text];
 }
 
 function sanitizeTranslatedNodeTree(root: ParentNode): void {

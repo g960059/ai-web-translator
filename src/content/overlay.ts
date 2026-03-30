@@ -15,6 +15,14 @@ export class TranslationOverlay {
   private readonly bubbleText: HTMLSpanElement;
   private readonly bubbleAction: HTMLButtonElement;
 
+  /* ── Popover elements ── */
+  private readonly popoverHost: HTMLDivElement;
+  private readonly popoverShadowRoot: ShadowRoot;
+  private readonly popoverBody: HTMLDivElement;
+  private readonly popoverApplyBtn: HTMLButtonElement;
+  private readonly popoverCloseBtn: HTMLButtonElement;
+  private popoverDismissHandler: ((e: MouseEvent) => void) | null = null;
+
   private bubbleTimeoutId: number | null = null;
   private doneTransitionId: number | null = null;
   private currentState: WidgetState = 'off';
@@ -26,6 +34,8 @@ export class TranslationOverlay {
 
   onStartTranslation: (() => void) | null = null;
   onTranslateSelection: (() => void) | null = null;
+  onQuickTranslateSelection: (() => void) | null = null;
+  onApplySelectionInline: (() => void) | null = null;
   onRetry: (() => void) | null = null;
   onCancel: (() => void) | null = null;
   onFocusNextWarning: (() => void) | null = null;
@@ -220,6 +230,92 @@ export class TranslationOverlay {
       this.triggerBubbleAction();
     });
     this.syncDebugState();
+
+    /* ── Popover host (separate from widget, positioned absolutely) ── */
+    this.popoverHost = documentRef.createElement('div');
+    this.popoverHost.dataset.aiWebTranslatorPopover = 'true';
+    this.popoverHost.style.position = 'absolute';
+    this.popoverHost.style.zIndex = '2147483647';
+    this.popoverHost.style.pointerEvents = 'none';
+    this.popoverHost.style.display = 'none';
+    documentRef.body.appendChild(this.popoverHost);
+
+    this.popoverShadowRoot = this.popoverHost.attachShadow({ mode: 'open' });
+
+    const popoverWrapper = documentRef.createElement('div');
+    popoverWrapper.innerHTML = `
+      <style>
+        :host { all: initial; }
+        .popover {
+          pointer-events: auto;
+          box-sizing: border-box;
+          max-width: 400px;
+          min-width: 180px;
+          padding: 12px 16px;
+          border-radius: 10px;
+          background: #fff;
+          border: 1px solid rgba(0,0,0,0.08);
+          box-shadow: 0 6px 24px rgba(0,0,0,0.13);
+          font-family: "Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+          font-size: 13.5px;
+          line-height: 1.65;
+          color: #222;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .popover-body {
+          margin: 0 0 8px 0;
+        }
+        .popover-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          justify-content: flex-end;
+        }
+        .popover-btn {
+          border: none;
+          border-radius: 6px;
+          padding: 4px 12px;
+          font: inherit;
+          font-size: 12px;
+          cursor: pointer;
+          transition: background 100ms ease;
+        }
+        .popover-btn-close {
+          background: #f0f0f0;
+          color: #555;
+        }
+        .popover-btn-close:hover { background: #e4e4e4; }
+        .popover-btn-apply {
+          background: linear-gradient(180deg, #f6c649, #e5aa22);
+          color: #4a3312;
+          font-weight: 700;
+        }
+        .popover-btn-apply:hover { filter: brightness(1.05); }
+        .popover-loading {
+          color: #999;
+          font-style: italic;
+        }
+      </style>
+      <div class="popover">
+        <div class="popover-body"></div>
+        <div class="popover-actions">
+          <button class="popover-btn popover-btn-close" type="button">閉じる</button>
+          <button class="popover-btn popover-btn-apply" type="button">ページに反映</button>
+        </div>
+      </div>
+    `;
+
+    this.popoverShadowRoot.appendChild(popoverWrapper);
+    this.popoverBody = popoverWrapper.querySelector('.popover-body') as HTMLDivElement;
+    this.popoverCloseBtn = popoverWrapper.querySelector('.popover-btn-close') as HTMLButtonElement;
+    this.popoverApplyBtn = popoverWrapper.querySelector('.popover-btn-apply') as HTMLButtonElement;
+
+    this.popoverCloseBtn.addEventListener('click', () => this.hideTranslationPopover());
+    this.popoverApplyBtn.addEventListener('click', () => {
+      this.hideTranslationPopover();
+      this.onApplySelectionInline?.();
+    });
   }
 
   show(status: TranslationStatus, message: string, progressPercent: number): void {
@@ -267,13 +363,19 @@ export class TranslationOverlay {
     this.currentErrorMessage = '';
   }
 
-  setWorking(): void {
+  setWorking(progress?: { completed: number; total: number }): void {
     this.clearDoneTransition();
-    this.hideBubble();
     this.restingAction = 'none';
     this.setVisible(true);
     this.setState('working');
     this.currentErrorMessage = '';
+    if (progress && progress.total > 0) {
+      const pct = Math.round((progress.completed / progress.total) * 100);
+      const text = `翻訳中 ${progress.completed}/${progress.total}（${pct}%）`;
+      this.showBubble(text, '', 0, 'none');
+    } else {
+      this.hideBubble();
+    }
   }
 
   setRetrying(message = 'もう一度試しています…'): void {
@@ -373,7 +475,7 @@ export class TranslationOverlay {
   showSelectionBubble(): void {
     this.clearDoneTransition();
     this.setVisible(true);
-    this.showBubble(buildSelectionCopy(this.targetLanguage), '読む', 8000, 'start-selection');
+    this.showBubble(buildSelectionCopy(this.targetLanguage), '翻訳', 8000, 'start-selection');
   }
 
   detectAndPrompt(targetLanguage: string): void {
@@ -414,6 +516,91 @@ export class TranslationOverlay {
         this.handleSelectionChange();
       }, 250);
     });
+  }
+
+  showTranslationPopover(text: string, anchorRect: DOMRect): void {
+    this.popoverBody.textContent = text;
+    this.popoverBody.classList.remove('popover-loading');
+    this.popoverApplyBtn.style.display = '';
+
+    this.positionPopover(anchorRect);
+    this.popoverHost.style.display = '';
+    this.popoverHost.style.pointerEvents = 'auto';
+
+    this.attachPopoverDismissListener();
+  }
+
+  showTranslationPopoverLoading(anchorRect: DOMRect): void {
+    this.popoverBody.textContent = '翻訳中…';
+    this.popoverBody.classList.add('popover-loading');
+    this.popoverApplyBtn.style.display = 'none';
+
+    this.positionPopover(anchorRect);
+    this.popoverHost.style.display = '';
+    this.popoverHost.style.pointerEvents = 'auto';
+
+    this.attachPopoverDismissListener();
+  }
+
+  hideTranslationPopover(): void {
+    this.popoverHost.style.display = 'none';
+    this.popoverHost.style.pointerEvents = 'none';
+    this.detachPopoverDismissListener();
+  }
+
+  getSelectionRect(): DOMRect | null {
+    const selection = this.documentRef.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return null;
+    }
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      return null;
+    }
+    return rect;
+  }
+
+  private positionPopover(anchorRect: DOMRect): void {
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const gap = 6;
+
+    let top = anchorRect.bottom + scrollY + gap;
+    let left = anchorRect.left + scrollX;
+
+    // Clamp left so popover stays within viewport
+    const maxLeft = scrollX + window.innerWidth - 420;
+    if (left > maxLeft) {
+      left = Math.max(scrollX, maxLeft);
+    }
+
+    this.popoverHost.style.top = `${top}px`;
+    this.popoverHost.style.left = `${left}px`;
+  }
+
+  private attachPopoverDismissListener(): void {
+    this.detachPopoverDismissListener();
+    this.popoverDismissHandler = (e: MouseEvent) => {
+      const path = e.composedPath();
+      if (path.includes(this.popoverHost)) {
+        return;
+      }
+      this.hideTranslationPopover();
+    };
+    // Delay attachment so the click that opened the popover doesn't immediately close it
+    window.setTimeout(() => {
+      if (this.popoverDismissHandler) {
+        this.documentRef.addEventListener('click', this.popoverDismissHandler, true);
+      }
+    }, 0);
+  }
+
+  private detachPopoverDismissListener(): void {
+    if (this.popoverDismissHandler) {
+      this.documentRef.removeEventListener('click', this.popoverDismissHandler, true);
+      this.popoverDismissHandler = null;
+    }
   }
 
   private applyTranslationStatus(
@@ -506,7 +693,7 @@ export class TranslationOverlay {
         this.onStartTranslation?.();
         break;
       case 'start-selection':
-        this.onTranslateSelection?.();
+        this.onQuickTranslateSelection?.();
         break;
       case 'retry':
         this.onRetry?.();
