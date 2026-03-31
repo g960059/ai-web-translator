@@ -5,6 +5,7 @@ import {
   debugCollectRecoveryProbe,
   isLikelyAlreadyTargetLanguage,
   isLikelyUntranslated,
+  hasMixedLanguageContent,
   resolveScopeRoot,
   type BlockSeed,
 } from '../core/blocks';
@@ -1872,6 +1873,26 @@ export class TranslationController {
               if (detectedUntranslated) {
                 this.recordQualitySignal('untranslatedResponses');
               }
+
+              // Mixed-language quality gate: detect partially translated content
+              const detectedMixed =
+                !hasFallbackWarning &&
+                !detectedUntranslated &&
+                hasMixedLanguageContent(
+                  restored,
+                  originalText,
+                  options.settings.targetLanguage,
+                );
+              if (detectedMixed) {
+                this.recordQualitySignal('mixedLanguageDetections');
+                this.markItemsMixedLanguage(
+                  batch.filter((candidate) => candidate.group.groupKey === item.group.groupKey),
+                  '翻訳結果に未翻訳の文が残っています。再試行します。',
+                );
+                processedJobs += 1;
+                return; // Skip apply and cache — will be retried
+              }
+
               const dictTranslation = lookupCommonHeading(
                 originalText,
                 options.settings.targetLanguage,
@@ -1892,7 +1913,7 @@ export class TranslationController {
               }
               this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
               processedJobs += 1;
-              if (options.settings.cacheEnabled && !hasFallbackWarning) {
+              if (options.settings.cacheEnabled && !hasFallbackWarning && !detectedMixed) {
                 cacheEntries.push({
                   lookup: item.group.cacheLookup,
                   translation: restored,
@@ -1969,7 +1990,10 @@ export class TranslationController {
     for (let attempt = 0; attempt < MAX_WARNING_REPAIR_ATTEMPTS; attempt += 1) {
       this.throwIfSessionCancelled(options.sessionId);
       const warningRecords = this.collectWarningRecords().filter(
-        (record) => record.warningState === 'fallback-source' || record.warningState === 'error-final',
+        (record) =>
+          record.warningState === 'fallback-source' ||
+          record.warningState === 'error-final' ||
+          record.warningState === 'mixed-language',
       );
       if (warningRecords.length === 0) {
         return;
@@ -2712,7 +2736,7 @@ export class TranslationController {
       totalBlocks: warningRecords.length,
       retryingBlocks: warningRecords.filter((record) => record.warningState === 'retrying').length,
       fallbackSourceBlocks: warningRecords.filter(
-        (record) => record.warningState === 'fallback-source',
+        (record) => record.warningState === 'fallback-source' || record.warningState === 'mixed-language',
       ).length,
       errorBlocks: warningRecords.filter((record) => record.warningState === 'error-final').length,
     };
@@ -2753,6 +2777,14 @@ export class TranslationController {
     const localizedMessage = message ? localizeRuntimeError(message) : 'この部分は原文のまま残っています。';
     collectBatchRecords(items).forEach((record) => {
       this.setBlockWarningState(record, 'fallback-source', localizedMessage);
+    });
+    this.syncWarningSummary();
+  }
+
+  private markItemsMixedLanguage(items: TranslationBatchItem[], message: string): void {
+    const localizedMessage = localizeRuntimeError(message);
+    collectBatchRecords(items).forEach((record) => {
+      this.setBlockWarningState(record, 'mixed-language', localizedMessage);
     });
     this.syncWarningSummary();
   }
@@ -3399,6 +3431,7 @@ export class TranslationController {
         labelPunctuationCorrections: 0,
         continuationContextFragments: 0,
         untranslatedResponses: 0,
+        mixedLanguageDetections: 0,
       },
       warningStats: null,
     };

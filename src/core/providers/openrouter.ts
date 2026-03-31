@@ -81,7 +81,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       hasFragmentIds
         ? 'Return JSON: {"translations":[{"i":"0","t":"<html>"},{"i":"1","t":"<html>"}]}.'
         : 'Return JSON: {"translations":["<html>","<html>"]}.',
-      'Translate every fragment including headings and list items. Do not leave source-language text untranslated.',
+      'Translate every fragment completely. Never leave a source-language sentence or clause untranslated. Never mix source and target languages in the same sentence.',
       hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. No prose.',
     ]
       .filter(Boolean)
@@ -97,7 +97,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     hintInstruction,
     markerInstruction,
     roleInstruction,
-    'Translate every fragment including headings and list items. Do not leave source-language text untranslated.',
+    'Translate every fragment completely. Never leave a source-language sentence or clause untranslated. Never mix source and target languages in the same sentence.',
     hasFragmentIds
       ? 'Return JSON: {"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}.'
       : 'Return JSON: {"translations":["...","..."]}.',
@@ -454,7 +454,7 @@ export async function translateWithOpenRouter(
         model: normalizedRequest.model,
         max_tokens: buildMaxOutputTokens(normalizedRequest),
         response_format: { type: 'json_object' },
-        temperature: 0.2,
+        temperature: normalizedRequest.temperature ?? 0.2,
         messages: [
           {
             role: 'system',

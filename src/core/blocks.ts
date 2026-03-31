@@ -890,6 +890,95 @@ export function isLikelyUntranslated(
   return sourceTargetRatio < 0.08;
 }
 
+/**
+ * Detect if a translation result contains long stretches of source-language text
+ * mixed with target-language text. Catches cases like:
+ * - "Often the term 'representation of G' is also used for the representation space V."
+ *   (entire English sentence left in a Japanese paragraph)
+ * - "The trivial representation is given by ρ(s) = Id for all_s ∈ G.に対して与えられる。"
+ *   (English sentence with Japanese appended)
+ */
+export function hasMixedLanguageContent(
+  translatedText: string,
+  sourceText: string,
+  targetLanguage: string,
+): boolean {
+  const lang = targetLanguage.toLowerCase();
+  if (!hasDistinctTargetScript(lang)) {
+    return false;
+  }
+
+  // Strip HTML tags, protected markers, and control characters
+  const cleaned = translatedText
+    .replace(/<[^>]+>/g, '')
+    .replace(/\[\[\/?[tx]\d+\]\]/gi, '')
+    .replace(/\{\\displaystyle[^}]*\}/g, '')
+    .replace(/[\u0000-\u001f]/g, '');
+
+  const letters = Array.from(cleaned).filter((c) => /\p{L}/u.test(c));
+  if (letters.length < 20) {
+    return false;
+  }
+
+  // If there's almost no target script, isLikelyUntranslated handles it
+  const targetRatio = resolveTargetScriptRatio(letters.join(''), lang);
+  if (targetRatio < 0.05) {
+    return false;
+  }
+
+  // Extract runs of consecutive Latin characters (including spaces between words)
+  const latinRuns = extractLatinWordRuns(cleaned);
+  const sourceLower = sourceText.toLowerCase();
+
+  for (const run of latinRuns) {
+    const words = run.split(/\s+/).filter((w) => /^[a-zA-Z]{2,}$/.test(w));
+    if (words.length < 4) {
+      continue;
+    }
+
+    // Check if this run exists in the source text (avoid false positives on generated text)
+    const runNormalized = run.toLowerCase().replace(/\s+/g, ' ').trim();
+    const matchLength = Math.min(40, runNormalized.length);
+    if (sourceLower.includes(runNormalized.substring(0, matchLength))) {
+      return true;
+    }
+  }
+
+  // Also check for long Latin letter sequences (30+ characters)
+  for (const run of latinRuns) {
+    const latinLetters = (run.match(/[a-zA-Z]/g) || []).length;
+    if (latinLetters >= 30) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function extractLatinWordRuns(text: string): string[] {
+  const runs: string[] = [];
+  let current = '';
+
+  for (const char of text) {
+    if (/\p{Script=Latin}/u.test(char) || (current.length > 0 && /[\s\-'.,;:()]/.test(char))) {
+      current += char;
+    } else {
+      const trimmed = current.trim();
+      if (trimmed.length > 0) {
+        runs.push(trimmed);
+      }
+      current = '';
+    }
+  }
+
+  const trimmed = current.trim();
+  if (trimmed.length > 0) {
+    runs.push(trimmed);
+  }
+
+  return runs;
+}
+
 function hasDistinctTargetScript(targetLanguage: string): boolean {
   return (
     targetLanguage.startsWith('ja') ||

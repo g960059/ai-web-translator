@@ -24,7 +24,7 @@ export type TranslationStatus =
 export type WidgetState = 'off' | 'working' | 'resting' | 'retrying' | 'error' | 'done';
 
 export type BlockDisplayState = 'original' | 'translated';
-export type BlockWarningState = 'none' | 'retrying' | 'fallback-source' | 'error-final';
+export type BlockWarningState = 'none' | 'retrying' | 'fallback-source' | 'mixed-language' | 'error-final';
 
 export type PageDisplayState = 'original' | 'translated' | 'bilingual' | 'mixed';
 
@@ -146,6 +146,7 @@ export interface SessionQualitySignals {
   labelPunctuationCorrections: number;
   continuationContextFragments: number;
   untranslatedResponses: number;
+  mixedLanguageDetections: number;
 }
 
 export interface SessionWarningSummary {
@@ -206,6 +207,7 @@ export interface TranslationBatchRequest {
   }>;
   hasProtectedMarkers?: boolean;
   maxOutputTokens?: number;
+  temperature?: number;
 }
 
 export interface TranslationUsage {
