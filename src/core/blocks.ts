@@ -243,7 +243,11 @@ function isBoilerplateBlock(
     return false;
   }
 
-  if (normalized.length <= 18 && /^[a-z0-9\s\-_/|]+$/i.test(normalized)) {
+  if (
+    normalized.length <= 18 &&
+    /^[a-z0-9\s\-_/|]+$/i.test(normalized) &&
+    element.tagName !== 'P'
+  ) {
     return true;
   }
 
@@ -874,7 +878,7 @@ export function isLikelyUntranslated(
     return false;
   }
 
-  const minLetters = options?.minLetters ?? 16;
+  const minLetters = options?.minLetters ?? 8;
 
   const normalized = normalizeText(translatedText);
   const letters = Array.from(normalized).filter((char) => /\p{L}/u.test(char));
@@ -955,6 +959,15 @@ export function hasMixedLanguageContent(
   for (const run of latinRuns) {
     const latinLetters = (run.match(/[a-zA-Z]/g) || []).length;
     if (latinLetters >= 30) {
+      return true;
+    }
+  }
+
+  // Check for single English words (6+ chars) embedded directly between CJK characters
+  // e.g., "標数characteristicがゼロ" — the word "characteristic" should have been translated
+  const embeddedPattern = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]([a-zA-Z]{6,})[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu;
+  for (const match of cleaned.matchAll(embeddedPattern)) {
+    if (sourceLower.includes(match[1].toLowerCase())) {
       return true;
     }
   }

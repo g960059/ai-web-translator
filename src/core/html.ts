@@ -837,9 +837,19 @@ function coalescePlaceholderPiecesIntoSentenceUnits(pieces: string[]): string[] 
   const units: string[] = [];
   let current = '';
 
-  pieces.forEach((piece) => {
+  pieces.forEach((piece, index) => {
     current = current ? concatenatePlaceholderPieces(current, piece) : piece;
     if (endsPlaceholderSentenceUnit(piece)) {
+      // Don't split if the next piece is a protected marker followed by
+      // little or no text — e.g., "is a basis of" + [[x0]] + "." should
+      // stay together as one sentence unit.
+      const nextPiece = index + 1 < pieces.length ? pieces[index + 1] : null;
+      if (nextPiece && isProtectedMarkerPiece(nextPiece)) {
+        const pieceAfterMarker = index + 2 < pieces.length ? pieces[index + 2] : null;
+        if (!pieceAfterMarker || pieceAfterMarker.replace(/[\s.。!?！？,，;；:：)\]}/]+/g, '').length <= 3) {
+          return; // Keep accumulating — don't split here
+        }
+      }
       units.push(current);
       current = '';
     }
