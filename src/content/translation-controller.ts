@@ -31,6 +31,7 @@ import {
   splitDenseProtectedPlaceholderRichText,
   splitPlaceholderRichTextIntoSafeSegments,
   splitHtmlIntoSafeSegments,
+  extractTextFromProtectedHtml,
 } from '../core/html';
 import {
   getCachedTranslations,
@@ -2508,19 +2509,30 @@ export class TranslationController {
     protectedHtmlMap?: Record<string, string>;
   }> {
     if (record.contentMode === 'html' && !options.skipProtectedMarkers) {
+      // Pre-protect atomic HTML (math, images, etc.) BEFORE attempting
+      // placeholder-rich-text conversion. This allows the placeholder lane
+      // to succeed for paragraphs containing MathML — the math elements are
+      // replaced with [[xN]] markers first, so they no longer trigger the
+      // PLACEHOLDER_RICH_TEXT_DISALLOWED_SELECTOR early abort.
+      const wrappedSource = options.preferOriginalSource ? record.originalHtml : record.element.outerHTML;
+      const wrappedPreProtected = protectAtomicHtmlForTranslation(wrappedSource);
+
       const wrappedPlaceholderFragments = this.buildHtmlPlaceholderFragments(
-        options.preferOriginalSource ? record.originalHtml : record.element.outerHTML,
+        wrappedPreProtected?.content ?? wrappedSource,
         settings,
         true,
+        wrappedPreProtected ? { preProtected: wrappedPreProtected } : undefined,
       );
       if (wrappedPlaceholderFragments) {
         return wrappedPlaceholderFragments;
       }
 
+      const inlinePreProtected = protectAtomicHtmlForTranslation(record.originalHtml);
       const inlinePlaceholderFragments = this.buildHtmlPlaceholderFragments(
-        record.originalHtml,
+        inlinePreProtected?.content ?? record.originalHtml,
         settings,
         false,
+        inlinePreProtected ? { preProtected: inlinePreProtected } : undefined,
       );
       if (inlinePlaceholderFragments) {
         return inlinePlaceholderFragments;
@@ -2561,6 +2573,9 @@ export class TranslationController {
     sourceContent: string,
     settings: ExtensionSettings,
     skipWrapperRestore: boolean,
+    options?: {
+      preProtected?: { content: string; htmlMap: Record<string, string> };
+    },
   ): Array<{
     preparedContent: string;
     sourceHintText: string;
@@ -2575,7 +2590,7 @@ export class TranslationController {
     skipWrapperRestore?: boolean;
     protectedHtmlMap?: Record<string, string>;
   }> | null {
-    const protectedHtml = protectAtomicHtmlForTranslation(sourceContent);
+    const protectedHtml = options?.preProtected ?? protectAtomicHtmlForTranslation(sourceContent);
     const translatableSourceContent = protectedHtml?.content ?? sourceContent;
     const placeholder = preparePlaceholderRichTextForTranslation(translatableSourceContent);
     if (!placeholder) {
@@ -5008,16 +5023,14 @@ function extractRoleSourceText(
   content: string,
   contentMode: TranslationContentMode,
 ): string {
+  if (contentMode === 'html') {
+    return extractTextFromProtectedHtml(content);
+  }
+
   const withoutMarkers = content
     .replace(/\[\[\s*\/?\s*t\d+\s*\]\]/gi, ' ')
     .replace(/\[\[\s*x\d+\s*\]\]/gi, ' ');
-
-  if (contentMode === 'text') {
-    return normalizeText(withoutMarkers);
-  }
-
-  const parsed = new DOMParser().parseFromString(`<div>${withoutMarkers}</div>`, 'text/html');
-  return normalizeText(parsed.body.textContent ?? '');
+  return normalizeText(withoutMarkers);
 }
 
 function buildPrecedingContext(previousHintText: string): string | undefined {

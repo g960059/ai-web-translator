@@ -129,6 +129,20 @@ export function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Extract clean text from HTML by first replacing protected elements (math,
+ * images, etc.) with markers, then stripping those markers. This removes
+ * MathML annotation text like `{\displaystyle V}` that would otherwise leak
+ * into originalText and source hints.
+ */
+export function extractTextFromProtectedHtml(html: string): string {
+  const protectedResult = protectAtomicHtmlForTranslation(html);
+  const cleaned = protectedResult?.content ?? html;
+  const withoutMarkers = cleaned.replace(/\[\[\/?[tx]\d+\]\]/gi, ' ');
+  const parsed = new DOMParser().parseFromString(`<div>${withoutMarkers}</div>`, 'text/html');
+  return normalizeText(parsed.body.textContent ?? '');
+}
+
 export function prepareContentForTranslation(
   content: string,
   contentMode: TranslationContentMode,
