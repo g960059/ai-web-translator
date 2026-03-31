@@ -326,7 +326,7 @@ describe('translateWithOpenRouter', () => {
       f?: string[];
     };
 
-    expect(systemPrompt).toContain('Use s/g only as soft context.');
+    expect(systemPrompt).toContain('Follow g (glossary) entries for consistent terminology');
     expect(userPayload.s).toBe('Mathematics > Algebra');
     expect(userPayload.g).toEqual([
       {

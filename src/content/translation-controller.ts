@@ -4,6 +4,7 @@ import {
   collectTranslatableBlocks,
   debugCollectRecoveryProbe,
   isLikelyAlreadyTargetLanguage,
+  isLikelyUntranslated,
   resolveScopeRoot,
   type BlockSeed,
 } from '../core/blocks';
@@ -54,7 +55,7 @@ import {
 } from '../shared/estimate-calibration';
 import { logWithContext } from '../shared/debug-log';
 import { isRetryableRuntimeError, localizeRuntimeError } from '../shared/error-messages';
-import { loadSettings } from '../shared/settings';
+import { loadSettings, normalizeSettings } from '../shared/settings';
 import type {
   BlockWarningState,
   BlockDisplayState,
@@ -215,6 +216,7 @@ const IMMEDIATE_BATCH_ITEM_LIMIT = 6;
 const DEFERRED_BATCH_TOKEN_LIMIT = 6000;
 const DEFERRED_BATCH_ITEM_LIMIT = 36;
 const MAX_BATCH_RETRIES = 1;
+const MAX_WARNING_REPAIR_ATTEMPTS = 4;
 const RETRY_BACKOFF_MS = 1200;
 const API_WAIT_NOTICE_MS = 5000;
 const PROGRESS_EMIT_INTERVAL_MS = 250;
@@ -245,6 +247,83 @@ const STRUCTURAL_LABEL_TRANSLATIONS: Record<string, string> = {
   claim: '主張',
   warning: '注意',
 };
+const COMMON_HEADING_TRANSLATIONS: Record<string, Record<string, string>> = {
+  ja: {
+    'definition': '定義',
+    'definitions': '定義',
+    'definitions and concepts': '定義と概念',
+    'overview': '概要',
+    'introduction': 'はじめに',
+    'background': '背景',
+    'history': '歴史',
+    'summary': 'まとめ',
+    'conclusion': '結論',
+    'conclusions': '結論',
+    'see also': '関連項目',
+    'references': '参考文献',
+    'notes': '脚注',
+    'footnotes': '脚注',
+    'external links': '外部リンク',
+    'further reading': '関連文献',
+    'bibliography': '参考文献',
+    'generalizations': '一般化',
+    'generalization': '一般化',
+    'applications': '応用',
+    'examples': '例',
+    'properties': '性質',
+    'terminology': '用語',
+    'notation': '記法',
+    'motivation': '動機',
+    'prerequisites': '前提条件',
+    'related topics': '関連トピック',
+    'gallery': 'ギャラリー',
+    'contents': '目次',
+    'abstract': '概要',
+    'acknowledgments': '謝辞',
+    'acknowledgements': '謝辞',
+    'appendix': '付録',
+    'methods': '方法',
+    'results': '結果',
+    'discussion': '議論',
+    'related work': '関連研究',
+    'sources': '出典',
+    'citations': '引用',
+    'action': '作用',
+    'mapping': '写像',
+    'classification': '分類',
+    'comparison': '比較',
+    'construction': '構成',
+    'decomposition': '分解',
+    'extensions': '拡張',
+    'formulation': '定式化',
+    'structure': '構造',
+    'special cases': '特殊な場合',
+    'types': '種類',
+    'variants': '変種',
+  },
+};
+
+function lookupCommonHeading(sourceText: string, targetLanguage: string): string | null {
+  const lang = targetLanguage.toLowerCase().slice(0, 2);
+  const dict = COMMON_HEADING_TRANSLATIONS[lang];
+  if (!dict) {
+    return null;
+  }
+
+  const key = sourceText
+    .replace(/\[edit\]/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return dict[key] ?? null;
+}
+
+function looksUntranslatedShortText(translatedText: string, sourceText: string): boolean {
+  const stripNoise = (text: string) =>
+    text.replace(/<[^>]+>/g, '').replace(/\[edit\]/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return stripNoise(translatedText) === stripNoise(sourceText);
+}
+
 const LAZY_PREFETCH_MIN_TOKENS = 5200;
 const LAZY_PREFETCH_MAX_EXTRA_GROUPS = 12;
 const LAZY_PREFETCH_VIEWPORT_MULTIPLIER = 4;
@@ -890,6 +969,13 @@ export class TranslationController {
     this.throwIfSessionCancelled(sessionId);
 
     if (pendingGroups.length === 0) {
+      const calibration = await getEstimateCalibrationSnapshot(settings.provider, settings.model);
+      await this.retryWarningGroups({
+        sessionId,
+        settings,
+        context,
+        runtimeState: this.createRuntimeState(groups, calibration, settings.style),
+      });
       const completion = this.finishSession(sessionId);
       this.presentCompletionOverlay(statusLabel, completion?.warnings ?? null);
       return { ok: true, message: statusLabel };
@@ -990,6 +1076,12 @@ export class TranslationController {
     }
 
     this.throwIfSessionCancelled(sessionId);
+    await this.retryWarningGroups({
+      sessionId,
+      settings,
+      context,
+      runtimeState,
+    });
     const completion = this.finishSession(sessionId);
     this.presentCompletionOverlay(statusLabel, completion?.warnings ?? null);
     return { ok: true, message: statusLabel };
@@ -1211,6 +1303,10 @@ export class TranslationController {
     records: BlockRecord[],
     settings: ExtensionSettings,
     context: TranslationContext,
+    options: {
+      preferOriginalSource?: boolean;
+      skipProtectedMarkers?: boolean;
+    } = {},
   ): TranslationGroup[] {
     const groups = new Map<string, TranslationGroup>();
     const textJoiner = preferredTextJoiner(settings.targetLanguage);
@@ -1220,7 +1316,14 @@ export class TranslationController {
         return;
       }
 
-      const requestFragments = this.buildRequestFragments(record, settings);
+      const requestFragments = this.buildRequestFragments(
+        record,
+        settings,
+        {
+          preferOriginalSource: options.preferOriginalSource === true,
+          skipProtectedMarkers: options.skipProtectedMarkers === true,
+        },
+      );
       const requestContentMode = requestFragments[0]?.requestContentMode ?? record.contentMode;
       const normalizedSource = requestFragments
         .map((fragment) =>
@@ -1419,6 +1522,29 @@ export class TranslationController {
       if (cached) {
         this.recordCacheHit('persistentHits');
         this.applyGroupTranslation(group, cached, false);
+        refreshedDisplay = true;
+        processedJobs += 1;
+        this.updateProgress(
+          options.sessionId,
+          processedJobs,
+          options.totalJobs,
+          options.progressMessage,
+          options.showOverlay,
+        );
+        return;
+      }
+
+      // Dictionary-first heading translation: apply locally without API call.
+      // Check all records in the group — a heading group typically has one
+      // record, but may have more if blocks were merged.
+      const isHeadingGroup = group.records.some((r) => /^H[1-6]$/.test(r.element.tagName));
+      const headingSource = group.records.find((r) => /^H[1-6]$/.test(r.element.tagName));
+      const headingOriginal = headingSource?.originalText ?? group.records[0]?.originalText ?? '';
+      const headingDict = isHeadingGroup
+        ? lookupCommonHeading(headingOriginal, this.sessionSnapshot.targetLanguage)
+        : null;
+      if (headingDict && group.records.length === 1) {
+        this.applyGroupTranslation(group, headingDict, false);
         refreshedDisplay = true;
         processedJobs += 1;
         this.updateProgress(
@@ -1688,12 +1814,11 @@ export class TranslationController {
                   canonicalProtectedFragment,
                   item.protectedHtmlMap,
                 )
-                  ? item.preparedContent
+                  ? restoreProtectedHtml(item.preparedContent, item.protectedHtmlMap)
                   : canonicalProtectedFragment;
               if (
                 item.protectedHtmlMap &&
-                protectedSafeFragment === item.preparedContent &&
-                canonicalProtectedFragment !== item.preparedContent
+                protectedSafeFragment !== canonicalProtectedFragment
               ) {
                 this.recordQualitySignal('protectedMarkerFallbackFragments');
                 fallbackGroupKeys.add(item.group.groupKey);
@@ -1732,7 +1857,29 @@ export class TranslationController {
                 usedSourceFallback ||
                 fallbackGroupKeys.has(item.group.groupKey) ||
                 pendingFallbackWarnings.has(item.group.groupKey);
-              this.applyGroupTranslation(item.group, restored, false, {
+              const isHeadingOrLabel =
+                item.fragmentRole === 'heading' || item.fragmentRole === 'label';
+              let finalRestored = restored;
+              const originalText = item.group.records[0]?.originalText ?? '';
+              const detectedUntranslated =
+                !hasFallbackWarning &&
+                isLikelyUntranslated(
+                  restored,
+                  originalText,
+                  options.settings.targetLanguage,
+                  isHeadingOrLabel ? { minLetters: 4 } : undefined,
+                );
+              if (detectedUntranslated) {
+                this.recordQualitySignal('untranslatedResponses');
+              }
+              const dictTranslation = lookupCommonHeading(
+                originalText,
+                options.settings.targetLanguage,
+              );
+              if (dictTranslation && looksUntranslatedShortText(restored, originalText)) {
+                finalRestored = dictTranslation;
+              }
+              this.applyGroupTranslation(item.group, finalRestored, false, {
                 clearWarnings: !hasFallbackWarning,
               });
               if (hasFallbackWarning) {
@@ -1745,7 +1892,7 @@ export class TranslationController {
               }
               this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
               processedJobs += 1;
-              if (options.settings.cacheEnabled) {
+              if (options.settings.cacheEnabled && !hasFallbackWarning) {
                 cacheEntries.push({
                   lookup: item.group.cacheLookup,
                   translation: restored,
@@ -1811,6 +1958,150 @@ export class TranslationController {
     );
 
     return processedJobs;
+  }
+
+  private async retryWarningGroups(options: {
+    sessionId: string;
+    settings: ResolvedSettings;
+    context: TranslationContext;
+    runtimeState: TranslationRuntimeState;
+  }): Promise<void> {
+    for (let attempt = 0; attempt < MAX_WARNING_REPAIR_ATTEMPTS; attempt += 1) {
+      this.throwIfSessionCancelled(options.sessionId);
+      const warningRecords = this.collectWarningRecords().filter(
+        (record) => record.warningState === 'fallback-source' || record.warningState === 'error-final',
+      );
+      if (warningRecords.length === 0) {
+        return;
+      }
+
+      const retryGroups = this.buildDerivedGroups(
+        warningRecords,
+        options.settings,
+        options.context,
+        {
+          preferOriginalSource: true,
+          skipProtectedMarkers: attempt >= 1,
+        },
+      );
+      if (retryGroups.length === 0) {
+        return;
+      }
+
+      const repairRuntimeState = this.createWarningRepairRuntimeState(options.runtimeState);
+
+      for (const group of retryGroups) {
+        this.throwIfSessionCancelled(options.sessionId);
+        const items = createBatchItems([group], repairRuntimeState.calibration);
+        this.markItemsRetrying(items, '未解決の箇所を再試行しています。');
+
+        let result: TranslationRequestResult | null = null;
+        let fallbackMessage: string | undefined;
+
+        try {
+          result = await this.requestTranslationsWithRetry({
+            items,
+            settings: options.settings,
+            context: options.context,
+            runtimeState: repairRuntimeState,
+            sessionId: options.sessionId,
+            overlayMessage: '未解決の箇所を再試行しています…',
+            showOverlay: false,
+            metricsPhase: 'deferred',
+          });
+        } catch (error) {
+          fallbackMessage = getErrorMessage(error, 'Translation request failed.');
+          this.applyOriginalGroupContent(group);
+          this.markItemsFallback(items, fallbackMessage);
+          continue;
+        }
+
+        const fragments: string[] = [];
+        let unresolved = false;
+
+        for (const [index, item] of items.entries()) {
+          const translatedFragment = normalizeTranslatedFragmentForQuality(
+            result.translations[index],
+            item,
+            repairRuntimeState,
+            this.recordQualitySignal.bind(this),
+          );
+          const preparedFragment = restorePreparedContent(
+            translatedFragment,
+            item.restoreContentMode,
+            item.restoreMap,
+          );
+          const normalizedProtectedFragment =
+            item.placeholderTagMap || item.protectedHtmlMap
+              ? tightenProtectedMarkerSpacing(preparedFragment, options.settings.targetLanguage)
+              : preparedFragment;
+          const canonicalProtectedFragment = item.protectedHtmlMap
+            ? canonicalizeProtectedHtmlMarkers(
+                normalizedProtectedFragment,
+                item.protectedHtmlMap,
+              )
+            : normalizedProtectedFragment;
+          const protectedSafeFragment =
+            item.protectedHtmlMap &&
+            !hasAllProtectedMarkers(canonicalProtectedFragment, item.protectedHtmlMap)
+              ? restoreProtectedHtml(item.preparedContent, item.protectedHtmlMap)
+              : canonicalProtectedFragment;
+          if (
+            item.protectedHtmlMap &&
+            protectedSafeFragment !== canonicalProtectedFragment &&
+            canonicalProtectedFragment !== item.preparedContent
+          ) {
+            this.recordQualitySignal('protectedMarkerFallbackFragments');
+            unresolved = true;
+            break;
+          }
+          const placeholderRestoredFragment = item.placeholderTagMap
+            ? restorePlaceholderRichText(protectedSafeFragment, item.placeholderTagMap)
+            : protectedSafeFragment;
+          const wrappedPlaceholderFragment =
+            !item.skipWrapperRestore &&
+            item.placeholderWrapperPrefix &&
+            item.placeholderWrapperSuffix
+              ? `${item.placeholderWrapperPrefix}${placeholderRestoredFragment}${item.placeholderWrapperSuffix}`
+              : placeholderRestoredFragment;
+          const restoredFragment = item.protectedHtmlMap
+            ? restoreProtectedHtml(wrappedPlaceholderFragment, item.protectedHtmlMap)
+            : wrappedPlaceholderFragment;
+          fragments.push(restoredFragment);
+        }
+
+        if (unresolved || fragments.length !== items.length) {
+          this.applyOriginalGroupContent(group);
+          this.markItemsFallback(items);
+          continue;
+        }
+
+        const restored = joinTranslatedGroupOutput(group, fragments);
+        this.applyGroupTranslation(group, restored, false, { clearWarnings: true });
+      }
+
+      this.refreshDisplayState();
+    }
+  }
+
+  private createWarningRepairRuntimeState(
+    runtimeState: TranslationRuntimeState,
+  ): TranslationRuntimeState {
+    return {
+      ...runtimeState,
+      batchScale: {
+        text: Math.min(runtimeState.batchScale.text, 0.75),
+        html: Math.min(runtimeState.batchScale.html, 0.75),
+      },
+      maxConcurrency: 1,
+    };
+  }
+
+  private applyOriginalGroupContent(group: TranslationGroup): void {
+    const fallbackContent = getGroupOriginalContent(group);
+    this.applyGroupTranslation(group, fallbackContent, false, {
+      clearWarnings: false,
+    });
   }
 
   private async requestTranslations(
@@ -2135,7 +2426,7 @@ export class TranslationController {
     providedSettings?: ExtensionSettings,
     providedScope?: DefaultTranslationScope,
   ): Promise<ResolvedSettings> {
-    const stored = providedSettings ?? (await loadSettings());
+    const stored = normalizeSettings(providedSettings ?? (await loadSettings()));
     this.overlay.setTargetLanguage(stored.targetLanguage);
     return {
       ...stored,
@@ -2174,6 +2465,10 @@ export class TranslationController {
   private buildRequestFragments(
     record: BlockRecord,
     settings: ExtensionSettings,
+    options: {
+      preferOriginalSource?: boolean;
+      skipProtectedMarkers?: boolean;
+    } = {},
   ): Array<{
     preparedContent: string;
     sourceHintText: string;
@@ -2188,9 +2483,9 @@ export class TranslationController {
     skipWrapperRestore?: boolean;
     protectedHtmlMap?: Record<string, string>;
   }> {
-    if (record.contentMode === 'html') {
+    if (record.contentMode === 'html' && !options.skipProtectedMarkers) {
       const wrappedPlaceholderFragments = this.buildHtmlPlaceholderFragments(
-        record.element.outerHTML,
+        options.preferOriginalSource ? record.originalHtml : record.element.outerHTML,
         settings,
         true,
       );
@@ -2211,7 +2506,9 @@ export class TranslationController {
     const sourceContent =
       record.contentMode === 'text' ? record.originalText : record.originalHtml;
     const protectedHtml =
-      record.contentMode === 'html' ? protectAtomicHtmlForTranslation(sourceContent) : null;
+      record.contentMode === 'html' && !options.skipProtectedMarkers
+        ? protectAtomicHtmlForTranslation(sourceContent)
+        : null;
     const translatableSourceContent = protectedHtml?.content ?? sourceContent;
 
     const segments =
@@ -2474,14 +2771,24 @@ export class TranslationController {
     refreshDisplayState = true,
     options: { clearWarnings?: boolean } = {},
   ): void {
+    let content = translatedContent;
+    const originalText = group.records[0]?.originalText ?? '';
+    const dictTranslation = lookupCommonHeading(originalText, this.sessionSnapshot.targetLanguage);
+    if (dictTranslation && looksUntranslatedShortText(content, originalText)) {
+      content = dictTranslation;
+    }
+
+    // Strip any residual protected markers that leaked through restoration
+    content = content.replace(/\[\[\/?[tx]\d+\]\]/gi, '');
+
     group.records.forEach((record) => {
       if (record.contentMode === 'text') {
-        record.element.textContent = translatedContent;
+        record.element.textContent = content;
       } else {
-        setElementHtmlContent(record.element, translatedContent, { sanitize: true });
+        setElementHtmlContent(record.element, content, { sanitize: true });
       }
 
-      record.translatedContent = translatedContent;
+      record.translatedContent = content;
       record.displayState = 'translated';
       if (options.clearWarnings ?? true) {
         this.clearBlockWarning(record);
@@ -2867,6 +3174,12 @@ export class TranslationController {
     session.processing = false;
     this.recordLazyVisibleCompletion(session);
     if (session.pendingGroups.size === 0) {
+      await this.retryWarningGroups({
+        sessionId: session.sessionId,
+        settings: session.settings,
+        context: session.context,
+        runtimeState: session.runtimeState,
+      });
       const completion = this.finishSession(session.sessionId);
       this.cleanupLazyPageSessionResources(session);
       this.presentCompletionOverlay('ページ全体を訳し終えました。', completion?.warnings ?? null);
@@ -3085,6 +3398,7 @@ export class TranslationController {
         mixedRegisterSignals: 0,
         labelPunctuationCorrections: 0,
         continuationContextFragments: 0,
+        untranslatedResponses: 0,
       },
       warningStats: null,
     };
@@ -4193,6 +4507,17 @@ function isGlossaryCandidateGroup(group: TranslationGroup): boolean {
 
 function joinTranslatedGroupOutput(group: TranslationGroup, translatedFragments: string[]): string {
   return translatedFragments.join(group.joiner);
+}
+
+function getGroupOriginalContent(group: TranslationGroup): string {
+  const firstRecord = group.records[0];
+  if (!firstRecord) {
+    return '';
+  }
+
+  return firstRecord.contentMode === 'text'
+    ? firstRecord.originalText
+    : firstRecord.originalHtml;
 }
 
 function tightenProtectedMarkerSpacing(content: string, targetLanguage: string): string {

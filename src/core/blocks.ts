@@ -227,6 +227,12 @@ function isBoilerplateBlock(
   text: string,
   options?: { selectionMode?: boolean },
 ): boolean {
+  // Heading elements (h1-h6) are always translatable — they serve as
+  // navigation labels that readers need in the target language.
+  if (/^H[1-6]$/.test(element.tagName)) {
+    return false;
+  }
+
   const normalized = normalizeText(text).toLowerCase();
   const proseLike = looksLikeProseText(normalized);
   if (normalized.length <= 2) {
@@ -843,6 +849,59 @@ export function isLikelyAlreadyTargetLanguage(text: string, targetLanguage: stri
 
   const scriptRatio = resolveTargetScriptRatio(sample.join(''), targetLanguage.toLowerCase());
   return scriptRatio >= 0.45;
+}
+
+/**
+ * Detect if a translation result appears to still be in the source language
+ * (i.e., the model returned source text instead of a real translation).
+ * Only meaningful when the target language uses a distinct script (CJK, Cyrillic, etc.).
+ */
+export function isLikelyUntranslated(
+  translatedText: string,
+  sourceText: string,
+  targetLanguage: string,
+  options?: { minLetters?: number },
+): boolean {
+  const lang = targetLanguage.toLowerCase();
+  if (!hasDistinctTargetScript(lang)) {
+    return false;
+  }
+
+  const minLetters = options?.minLetters ?? 16;
+
+  const normalized = normalizeText(translatedText);
+  const letters = Array.from(normalized).filter((char) => /\p{L}/u.test(char));
+  if (letters.length < minLetters) {
+    return false;
+  }
+
+  const targetRatio = resolveTargetScriptRatio(letters.join(''), lang);
+  if (targetRatio >= 0.08) {
+    return false;
+  }
+
+  const sourceNormalized = normalizeText(sourceText);
+  const sourceLetters = Array.from(sourceNormalized).filter((char) => /\p{L}/u.test(char));
+  if (sourceLetters.length < minLetters) {
+    return false;
+  }
+
+  const sourceTargetRatio = resolveTargetScriptRatio(sourceLetters.join(''), lang);
+  return sourceTargetRatio < 0.08;
+}
+
+function hasDistinctTargetScript(targetLanguage: string): boolean {
+  return (
+    targetLanguage.startsWith('ja') ||
+    targetLanguage.startsWith('zh') ||
+    targetLanguage.startsWith('ko') ||
+    targetLanguage.startsWith('th') ||
+    targetLanguage.startsWith('ru') ||
+    targetLanguage.startsWith('uk') ||
+    targetLanguage.startsWith('ar') ||
+    targetLanguage.startsWith('he') ||
+    targetLanguage.startsWith('hi')
+  );
 }
 
 function resolveLinkDensity(element: HTMLElement, normalizedLength: number): number {

@@ -43,7 +43,16 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     : usesFragmentObjects
       ? 'Input is JSON array of fragment objects.'
       : 'Input is JSON array.';
-  const hintInstruction = hasHints ? 'Use s/g only as soft context.' : null;
+  const hintInstruction = hasHints
+    ? [
+        request.sectionContext ? 'Use s as context for the section topic.' : null,
+        request.glossary?.length
+          ? 'Follow g (glossary) entries for consistent terminology unless the context clearly demands otherwise.'
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || null
+    : null;
   const fragmentObjectInstruction = usesFragmentObjects
     ? 'Each fragment object uses t=source text, optional i=id, optional r=role, optional p=preceding context.'
     : null;
@@ -51,7 +60,12 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     ? 'Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged. Every marker from the source fragment must appear exactly once in the translation, in the same order.'
     : null;
   const roleInstruction = hasFragmentRoles
-    ? 'If r=label, translate it as a structural label, not as a full sentence. Do not add Japanese sentence punctuation to labels.'
+    ? [
+        'If r=heading, translate it as a concise section heading.',
+        'If r=label, translate it as a structural label, not as a full sentence. Do not add Japanese sentence punctuation to labels.',
+        'If r=list-item, translate it as a list entry, preserving the item structure.',
+        'If r=caption, translate it as a short descriptive caption.',
+      ].join(' ')
     : null;
   if (request.contentMode === 'html') {
     return [
@@ -67,6 +81,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       hasFragmentIds
         ? 'Return JSON: {"translations":[{"i":"0","t":"<html>"},{"i":"1","t":"<html>"}]}.'
         : 'Return JSON: {"translations":["<html>","<html>"]}.',
+      'Translate every fragment including headings and list items. Do not leave source-language text untranslated.',
       hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. No prose.',
     ]
       .filter(Boolean)
@@ -82,6 +97,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     hintInstruction,
     markerInstruction,
     roleInstruction,
+    'Translate every fragment including headings and list items. Do not leave source-language text untranslated.',
     hasFragmentIds
       ? 'Return JSON: {"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}.'
       : 'Return JSON: {"translations":["...","..."]}.',
@@ -409,6 +425,13 @@ export async function translateWithOpenRouter(
   request: TranslationBatchRequest,
   options: { signal?: AbortSignal } = {},
 ): Promise<TranslationBatchResult> {
+  const normalizedRequest: TranslationBatchRequest = {
+    ...request,
+    apiKey: request.apiKey.trim(),
+    model: request.model.trim(),
+    targetLanguage: request.targetLanguage.trim(),
+    sourceLanguage: request.sourceLanguage.trim(),
+  };
   const abortController = new AbortController();
   const handleExternalAbort = () => {
     abortController.abort();
@@ -423,23 +446,23 @@ export async function translateWithOpenRouter(
     response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${request.apiKey}`,
+        Authorization: `Bearer ${normalizedRequest.apiKey}`,
         'Content-Type': 'application/json',
       },
       signal: abortController.signal,
       body: JSON.stringify({
-        model: request.model,
-        max_tokens: buildMaxOutputTokens(request),
+        model: normalizedRequest.model,
+        max_tokens: buildMaxOutputTokens(normalizedRequest),
         response_format: { type: 'json_object' },
         temperature: 0.2,
         messages: [
           {
             role: 'system',
-            content: buildSystemPrompt(request),
+            content: buildSystemPrompt(normalizedRequest),
           },
           {
             role: 'user',
-            content: buildUserPayload(request),
+            content: buildUserPayload(normalizedRequest),
           },
         ],
       }),
@@ -481,7 +504,7 @@ export async function translateWithOpenRouter(
 
   let translations: string[];
   try {
-    translations = parseTranslations(content, request);
+    translations = parseTranslations(content, normalizedRequest);
   } catch (error) {
     if (finishReason === 'length') {
       throw new Error('Provider response reached output limit.');

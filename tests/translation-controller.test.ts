@@ -1436,9 +1436,14 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(providerCalls.flat()).toEqual([
+    const allFragments = providerCalls.flat();
+    expect(allFragments).toContain(
       'Representation theory studies group actions on vector spaces.',
-    ]);
+    );
+    // Non-reader section body content must still be skipped
+    expect(allFragments).not.toContain(
+      'Isaacs, Character Theory of Finite Groups.',
+    );
     expect((document.getElementById('ref-text') as HTMLElement).textContent).toBe(
       'Isaacs, Character Theory of Finite Groups.',
     );
@@ -1724,7 +1729,8 @@ describe('TranslationController', () => {
     });
 
     expect(response.ok).toBe(true);
-    expect(providerCallCount).toBe(1);
+    // 1 initial + 1 marker retry (fails) + 1 marker-free retry (succeeds)
+    expect(providerCallCount).toBe(3);
     expect(document.querySelectorAll('.mwe-math-element')).toHaveLength(1);
     expect(document.querySelectorAll('img.mwe-math-fallback-image-inline')).toHaveLength(1);
     expect((document.getElementById('hybrid') as HTMLElement).innerHTML).toContain('/math/G.svg');
@@ -1732,12 +1738,9 @@ describe('TranslationController', () => {
     const snapshotResponse = await controller.handleMessage({
       type: 'GET_SESSION_SNAPSHOT',
     }) as { ok: boolean; snapshot?: { status?: string; warnings?: any; metrics?: any } };
-    expect(snapshotResponse.snapshot?.status).toBe('completed_with_warnings');
-    expect(snapshotResponse.snapshot?.warnings?.fallbackSourceBlocks).toBe(1);
-    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBe(1);
-    expect((document.getElementById('hybrid') as HTMLElement).dataset.aiwtWarning).toBe(
-      'fallback-source',
-    );
+    // Marker-free retry recovers the block, so final status is completed
+    expect(snapshotResponse.snapshot?.status).toBe('completed');
+    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBeGreaterThanOrEqual(1);
   });
 
   it('keeps protected-marker fallback warnings when the affected group completes in a later batch', async () => {
@@ -1808,12 +1811,83 @@ describe('TranslationController', () => {
     const snapshotResponse = await controller.handleMessage({
       type: 'GET_SESSION_SNAPSHOT',
     }) as { ok: boolean; snapshot?: { status?: string; warnings?: any; metrics?: any } };
-    expect(snapshotResponse.snapshot?.status).toBe('completed_with_warnings');
-    expect(snapshotResponse.snapshot?.warnings?.fallbackSourceBlocks).toBe(1);
+    // Marker-free retry succeeds, so warnings are cleared
+    expect(snapshotResponse.snapshot?.status).toBe('completed');
     expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBeGreaterThanOrEqual(1);
-    expect((document.getElementById('hybrid-late') as HTMLElement).dataset.aiwtWarning).toBe(
-      'fallback-source',
+  });
+
+  it('automatically repairs protected-marker fallback blocks before finishing when a later retry succeeds', async () => {
+    setDocumentHtml(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <body>
+          <main>
+            <p id="hybrid">
+              The representation theory uses
+              <span class="mwe-math-element">
+                <span class="mwe-math-mathml-inline" style="display: none;"><math><mi>G</mi></math></span>
+                <img class="mwe-math-fallback-image-inline" src="/math/G.svg" alt="G" />
+              </span>
+              in the proof.
+            </p>
+          </main>
+        </body>
+      </html>
+    `);
+
+    const chromeMock = getChromeMock();
+    const settings = createSettings({ cacheEnabled: false, targetLanguage: 'ja' });
+    let providerCallCount = 0;
+
+    (chromeMock.runtime.sendMessage as any).mockImplementation(
+      async (message: {
+        type: string;
+        request?: { fragments: string[] };
+      }) => {
+        if (message.type === 'SESSION_STATE_CHANGED') {
+          return { ok: true };
+        }
+
+        if (message.type === 'TRANSLATE_API' && message.request) {
+          providerCallCount += 1;
+          return {
+            ok: true,
+            result: {
+              translations: message.request.fragments.map((fragment) => {
+                if (providerCallCount < 3) {
+                  return fragment.replace(/\[\[x\d+\]\]/g, '').replace('representation theory', '表現論');
+                }
+                return fragment.replace('representation theory', '表現論');
+              }),
+            },
+          };
+        }
+
+        return { ok: true };
+      },
     );
+
+    const controller = new TranslationController(document);
+    const response = await controller.handleMessage({
+      type: 'START_TRANSLATION',
+      settings,
+      scope: 'main',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(providerCallCount).toBe(3);
+
+    const hybrid = document.getElementById('hybrid') as HTMLElement;
+    expect(hybrid.dataset.aiwtWarning).toBeUndefined();
+    expect(hybrid.innerHTML).toContain('表現論');
+    expect(hybrid.innerHTML).toContain('/math/G.svg');
+
+    const snapshotResponse = await controller.handleMessage({
+      type: 'GET_SESSION_SNAPSHOT',
+    }) as { ok: boolean; snapshot?: { status?: string; warnings?: any; metrics?: any } };
+    expect(snapshotResponse.snapshot?.status).toBe('completed');
+    expect(snapshotResponse.snapshot?.warnings).toBeNull();
+    expect(snapshotResponse.snapshot?.metrics?.qualitySignals?.protectedMarkerFallbackFragments).toBe(2);
   });
 
   it('does not warn when protected markers only change bracket style or spacing', async () => {

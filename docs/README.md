@@ -12,6 +12,10 @@ This repository uses four doc surfaces:
   - repeatable operational procedures
 
 Current starting points:
+- **Translation quality & model comparison (2026-03-30)**:
+  - Pipeline improvements: [2026-03-30-translation-quality-pipeline-and-heading-fixes.md](changes/2026-03-30-translation-quality-pipeline-and-heading-fixes.md)
+  - Full-page model comparison: [2026-03-30-model-comparison-full-page.md](metrics/2026-03-30-model-comparison-full-page.md)
+-
 - Current metrics baseline: [2026-03-29-representation-theory-durable-baseline.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-durable-baseline.md)
 - Current HTML stability sample: [2026-03-29-representation-theory-stability-sample.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-representation-theory-stability-sample.md)
 - Current XHTML/XML track: [2026-03-29-yoneda-lemma-xhtml-track.md](/Users/hirakawa/ghq/github.com/g960059/ai-web-translator/docs/metrics/2026-03-29-yoneda-lemma-xhtml-track.md)
