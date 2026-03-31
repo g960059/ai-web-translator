@@ -837,19 +837,9 @@ function coalescePlaceholderPiecesIntoSentenceUnits(pieces: string[]): string[] 
   const units: string[] = [];
   let current = '';
 
-  pieces.forEach((piece, index) => {
+  pieces.forEach((piece) => {
     current = current ? concatenatePlaceholderPieces(current, piece) : piece;
     if (endsPlaceholderSentenceUnit(piece)) {
-      // Don't split if the next piece is a protected marker followed by
-      // little or no text — e.g., "is a basis of" + [[x0]] + "." should
-      // stay together as one sentence unit.
-      const nextPiece = index + 1 < pieces.length ? pieces[index + 1] : null;
-      if (nextPiece && isProtectedMarkerPiece(nextPiece)) {
-        const pieceAfterMarker = index + 2 < pieces.length ? pieces[index + 2] : null;
-        if (!pieceAfterMarker || pieceAfterMarker.replace(/[\s.。!?！？,，;；:：)\]}/]+/g, '').length <= 3) {
-          return; // Keep accumulating — don't split here
-        }
-      }
       units.push(current);
       current = '';
     }
@@ -876,8 +866,15 @@ function rebalanceDenseProtectedMarkerSegments(
     }
 
     const pieces = extractProtectedMarkerSegments(segment);
-    const packed = packPlaceholderTextPieces(
+    // Apply sentence-unit coalescing so markers at sentence boundaries
+    // (e.g., "is a basis of [[x0]].") stay together, but only when the
+    // resulting unit won't exceed the per-segment marker limit.
+    const sentenceAware = coalesceProtectedPiecesWithMarkerBudget(
       pieces,
+      maxProtectedMarkersPerSegment,
+    );
+    const packed = packPlaceholderTextPieces(
+      sentenceAware,
       maxChars,
       maxProtectedMarkersPerSegment,
     );
@@ -909,6 +906,52 @@ function concatenatePlaceholderPieces(left: string, right: string): string {
   return shouldConcatenatePlaceholderPiecesWithoutSpace(left, right)
     ? `${left}${right}`
     : `${left} ${right}`;
+}
+
+function coalesceProtectedPiecesWithMarkerBudget(
+  pieces: string[],
+  maxMarkersPerUnit: number,
+): string[] {
+  if (pieces.length <= 1) {
+    return pieces;
+  }
+
+  const units: string[] = [];
+  let current = '';
+  let currentMarkers = 0;
+
+  for (let i = 0; i < pieces.length; i++) {
+    const piece = pieces[i];
+    const pieceMarkers = countProtectedMarkers(piece);
+
+    // If adding this piece would exceed the marker budget, flush first
+    if (currentMarkers > 0 && currentMarkers + pieceMarkers > maxMarkersPerUnit && current) {
+      units.push(current);
+      current = '';
+      currentMarkers = 0;
+    }
+
+    current = current ? concatenatePlaceholderPieces(current, piece) : piece;
+    currentMarkers += pieceMarkers;
+
+    if (endsPlaceholderSentenceUnit(piece)) {
+      const nextPiece = i + 1 < pieces.length ? pieces[i + 1] : null;
+      const nextIsMarker = nextPiece && isProtectedMarkerPiece(nextPiece);
+      // Keep the marker attached if it won't exceed the budget
+      if (nextIsMarker && currentMarkers + 1 <= maxMarkersPerUnit) {
+        continue; // Don't split — keep accumulating
+      }
+      units.push(current);
+      current = '';
+      currentMarkers = 0;
+    }
+  }
+
+  if (current) {
+    units.push(current);
+  }
+
+  return units;
 }
 
 function isProtectedMarkerPiece(piece: string): boolean {
