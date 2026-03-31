@@ -286,7 +286,7 @@ function isBoilerplateBlock(
 
 function looksLikeProseText(normalizedText: string): boolean {
   const wordCount = normalizedText.split(/\s+/).filter(Boolean).length;
-  if (wordCount < 8) {
+  if (wordCount < 5) {
     return false;
   }
 
@@ -999,7 +999,12 @@ function resolveLinkDensity(element: HTMLElement, normalizedLength: number): num
   }
 
   const linkTextLength = Array.from(element.querySelectorAll('a')).reduce(
-    (sum, link) => sum + normalizeText(link.textContent ?? '').length,
+    (sum, link) => {
+      if (link.closest('sup.reference, sup.noprint, .reference')) {
+        return sum;
+      }
+      return sum + normalizeText(link.textContent ?? '').length;
+    },
     0,
   );
   return linkTextLength / normalizedLength;
