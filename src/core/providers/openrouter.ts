@@ -19,7 +19,7 @@ interface OpenRouterModelsResponse {
 export const OPENROUTER_REQUEST_TIMEOUT_MS = 30_000;
 export const OPENROUTER_WARMUP_TIMEOUT_MS = 8_000;
 const OPENROUTER_MAX_OUTPUT_TOKENS_MIN = 192;
-const OPENROUTER_MAX_OUTPUT_TOKENS_MAX = 7000;
+const OPENROUTER_MAX_OUTPUT_TOKENS_MAX = 10000;
 const OPENROUTER_MAX_OUTPUT_TOKENS_HEADROOM = 1.45;
 
 function buildSystemPrompt(request: TranslationBatchRequest): string {

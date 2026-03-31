@@ -1057,9 +1057,23 @@ function resolveSectionContext(element: HTMLElement): string {
   return parts.slice(-2).join(' > ');
 }
 
+const SEE_ALSO_HEADING_PATTERN = /^see also$/i;
+
 function isNonReaderSectionBlock(element: HTMLElement): boolean {
   const heading = findNearestHeadingText(element);
-  return Boolean(heading && NON_READER_SECTION_HEADING_PATTERN.test(heading));
+  if (!heading || !NON_READER_SECTION_HEADING_PATTERN.test(heading)) {
+    return false;
+  }
+
+  // "See also" section list items are short navigational links worth translating
+  if (
+    SEE_ALSO_HEADING_PATTERN.test(heading) &&
+    (element.tagName === 'LI' || element.tagName === 'UL')
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function findNearestHeadingText(element: HTMLElement): string {
