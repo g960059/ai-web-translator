@@ -363,15 +363,17 @@ export class TranslationOverlay {
     this.currentErrorMessage = '';
   }
 
-  setWorking(progress?: { completed: number; total: number }): void {
+  setWorking(options?: { completed?: number; total?: number; message?: string }): void {
     this.clearDoneTransition();
     this.restingAction = 'none';
     this.setVisible(true);
     this.setState('working');
     this.currentErrorMessage = '';
-    if (progress && progress.total > 0) {
-      const pct = Math.round((progress.completed / progress.total) * 100);
-      const text = `翻訳中 ${progress.completed}/${progress.total}（${pct}%）`;
+    if (options?.message) {
+      this.showBubble(options.message, '', 1500, 'none');
+    } else if (options?.total && options.total > 0 && options.completed !== undefined) {
+      const pct = Math.round((options.completed / options.total) * 100);
+      const text = `翻訳中 ${options.completed}/${options.total}（${pct}%）`;
       this.showBubble(text, '', 0, 'none');
     } else {
       this.hideBubble();

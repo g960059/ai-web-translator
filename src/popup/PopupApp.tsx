@@ -310,7 +310,9 @@ export function PopupApp() {
             </div>
           ) : (
             <>
-              <h2 className="panel-title">{popupMode === 'active' ? '翻訳中' : popupMode === 'translated' ? '翻訳しました' : '翻訳する'}</h2>
+              {popupMode !== 'ready' && (
+                <h2 className="panel-title">{popupMode === 'active' ? '翻訳中' : '翻訳しました'}</h2>
+              )}
 
               {/* Scope: 本文のみ / ページ全体 */}
               <div className="segment-group">
@@ -346,7 +348,7 @@ export function PopupApp() {
 
               {/* Cost */}
               {(popupMode === 'ready' || popupMode === 'translated') && estimatedCost !== null && (
-                <p className="cost-note">約{formatEstimatedCost(estimatedCost)}</p>
+                <p className="cost-note">{formatEstimatedCost(estimatedCost)}</p>
               )}
 
               {/* Progress (active) */}
@@ -385,10 +387,21 @@ export function PopupApp() {
             <span>キャッシュを使う</span>
           </label>
 
+          {activeTabUrl && canTranslateCurrentPage && (
+            <div className="cache-page-item">
+              <div className="cache-page-info">
+                <a className="cache-page-url" href={activeTabUrl} target="_blank" rel="noreferrer" title={activeTabUrl}>
+                  {formatPageUrl(activeTabUrl)}
+                </a>
+                {hasPageTranslation && <span className="cache-current-badge">翻訳済み</span>}
+              </div>
+              <button className="button button-muted cache-delete-button" onClick={() => void handleClearPageCache()} disabled={working}>
+                削除
+              </button>
+            </div>
+          )}
+
           <div className="tertiary-actions">
-            <button className="button button-muted" onClick={() => void handleClearPageCache()} disabled={working || activeTabId === null || isUnavailablePage}>
-              このページの保存済み翻訳を消す
-            </button>
           </div>
 
           {confirmClearAll ? (
@@ -520,6 +533,16 @@ function formatEstimatedCost(cost: number): string {
   if (jpy < 1) return '1円未満';
   if (jpy < 10) return `約${jpy.toFixed(1)}円`;
   return `約${Math.round(jpy)}円`;
+}
+
+function formatPageUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.length > 30 ? parsed.pathname.slice(0, 27) + '...' : parsed.pathname;
+    return `${parsed.hostname}${path}`;
+  } catch {
+    return url.slice(0, 40);
+  }
 }
 
 function formatTabMessagingError(error: unknown, fallback: string): string {

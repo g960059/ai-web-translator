@@ -1069,7 +1069,7 @@ export class TranslationController {
         this.overlay.setWorking();
       } else {
         this.recordPhaseTiming('lazyVisibleCompletedMs');
-        this.overlay.setResting('続きを読み進めると、自動で訳していきます。', 1800);
+        this.overlay.setResting('続きを読み進めると、自動で翻訳していきます。', 1800);
       }
       return {
         ok: true,
@@ -3138,7 +3138,7 @@ export class TranslationController {
       },
       { immediate: true },
     );
-    this.overlay.setWorking();
+    this.overlay.setWorking({ message: '翻訳を再開しています' });
     const queuedGroups = Array.from(session.queuedGroupKeys)
       .map((groupKey) => session.pendingGroups.get(groupKey))
       .filter((group): group is TranslationGroup => Boolean(group));
