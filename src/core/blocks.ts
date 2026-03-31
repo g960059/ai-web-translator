@@ -867,6 +867,13 @@ export function isLikelyUntranslated(
     return false;
   }
 
+  // Skip math/formula fragments — short text consisting only of Latin letters,
+  // Greek letters, digits, math symbols, and punctuation is not translatable content.
+  const stripped = normalizeText(sourceText).replace(/[\s\d=+\-*/<>≤≥≠≈∈∉⊂⊃∪∩∀∃→←↔×⊗⊕⟨⟩{}()\[\]|,.:;!?'"^_\\]/g, '');
+  if (stripped.length <= 8 && /^[\p{Script=Latin}\p{Script=Greek}]*$/u.test(stripped)) {
+    return false;
+  }
+
   const minLetters = options?.minLetters ?? 16;
 
   const normalized = normalizeText(translatedText);
