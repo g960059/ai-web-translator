@@ -503,6 +503,137 @@ body {
   outline-offset: 2px;
 }
 
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--surface-border);
+  padding: 0 16px;
+}
+
+.tab-button {
+  flex: 1;
+  border: none;
+  padding: 12px 8px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 120ms, border-color 120ms;
+}
+
+.tab-button[data-active='true'] {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent);
+}
+
+.tab-button:hover:not([data-active='true']) {
+  color: var(--text);
+}
+
+/* Panel Title */
+.panel-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+}
+
+/* Segment Control */
+.segment-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.segment-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.segment-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+}
+
+.segment-button {
+  border: none;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.segment-button[data-selected='true'] {
+  background: linear-gradient(180deg, rgba(254, 243, 199, 0.98), rgba(253, 230, 138, 0.98));
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.segment-button:hover:not([data-selected='true']) {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.segment-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.segment-hint-model {
+  font-family: monospace;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* Cost Note */
+.cost-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+/* Progress */
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(192, 139, 26, 0.15);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f6c649, #c08b1a);
+  border-radius: 3px;
+  transition: width 300ms ease;
+}
+
+/* Setup card simplified */
+.setup-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
 @media (max-width: 420px) {
   body {
     min-width: 340px;

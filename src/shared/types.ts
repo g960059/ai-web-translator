@@ -5,6 +5,7 @@ export type TranslationScope = 'page' | 'main' | 'selection';
 export type DefaultTranslationScope = Exclude<TranslationScope, 'selection'>;
 
 export type TranslationStyle = 'auto' | 'readable' | 'precise' | 'source-like';
+export type ModelPreset = 'fast' | 'accurate';
 export type TranslationContentMode = 'html' | 'text';
 export type TranslationRegister = 'dearu' | 'desumasu';
 export type TranslationFragmentRole = 'prose' | 'heading' | 'label' | 'list-item' | 'caption';
@@ -32,6 +33,7 @@ export interface ExtensionSettings {
   provider: ProviderId;
   apiKey: string;
   model: string;
+  modelPreset: ModelPreset;
   targetLanguage: string;
   style: TranslationStyle;
   translateFullPage: boolean;

@@ -15,7 +15,7 @@ export function createSettings(overrides: Partial<ExtensionSettings> = {}): Exte
     provider: 'openrouter',
     apiKey: 'test-api-key',
     model: 'google/gemini-3.1-flash-lite-preview',
-    modelPreset: 'custom',
+    modelPreset: 'fast',
     targetLanguage: 'ja',
     style: 'auto',
     translateFullPage: false,

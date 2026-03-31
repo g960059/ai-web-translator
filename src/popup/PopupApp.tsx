@@ -11,11 +11,9 @@ import type {
 } from '../shared/messages';
 import {
   languageOptions,
-  findLanguageOption,
-  formatLanguageLabel,
 } from '../shared/languages';
 import { localizeRuntimeError } from '../shared/error-messages';
-import { DEFAULT_SETTINGS, MODEL_PRESETS, loadSettings, saveSettings } from '../shared/settings';
+import { DEFAULT_SETTINGS, MODEL_PRESETS, loadSettings, normalizeSettings, saveSettings } from '../shared/settings';
 import type {
   ExtensionSettings,
   ModelPreset,
@@ -49,33 +47,14 @@ const MESSAGE_MAP: Record<string, string> = {
 };
 
 const STYLE_OPTIONS: Array<{ value: TranslationStyle; label: string; help: string }> = [
-  {
-    value: 'auto',
-    label: '自動',
-    help: 'ページに合う読みやすさを自動で選びます。',
-  },
-  {
-    value: 'readable',
-    label: '読みやすく',
-    help: '自然でやさしい言い回しを優先します。',
-  },
-  {
-    value: 'precise',
-    label: '正確に',
-    help: '意味の正確さを優先します。',
-  },
-  {
-    value: 'source-like',
-    label: '原文寄り',
-    help: '原文の構造や雰囲気を残します。',
-  },
+  { value: 'auto', label: '自動', help: 'ページに合う読みやすさを自動で選びます。' },
+  { value: 'readable', label: '読みやすく', help: '自然でやさしい言い回しを優先します。' },
+  { value: 'precise', label: '正確に', help: '意味の正確さを優先します。' },
+  { value: 'source-like', label: '原文寄り', help: '原文の構造や雰囲気を残します。' },
 ];
 
 type PopupMode = 'setup' | 'ready' | 'active' | 'translated' | 'unavailable';
-type ActiveTabInfo = {
-  id: number | null;
-  url: string | null;
-};
+type PopupView = 'translate' | 'cache' | 'settings';
 
 export function PopupApp() {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
@@ -89,85 +68,54 @@ export function PopupApp() {
   const [hasSelection, setHasSelection] = useState(false);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [apiKeyValidation, setApiKeyValidation] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [apiKeyError, setApiKeyError] = useState('');
+  const [popupView, setPopupView] = useState<PopupView>('translate');
   const activeTabIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     void initialize();
-
     const listener = (message: unknown) => {
-      if (!isTabSessionUpdatedMessage(message)) {
-        return;
-      }
-
-      if (message.state.tabId === activeTabIdRef.current) {
-        setTabState(message.state);
-      }
+      if (!isTabSessionUpdatedMessage(message)) return;
+      if (message.state.tabId === activeTabIdRef.current) setTabState(message.state);
     };
-
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
 
-  useEffect(() => {
-    activeTabIdRef.current = activeTabId;
-  }, [activeTabId]);
+  useEffect(() => { activeTabIdRef.current = activeTabId; }, [activeTabId]);
 
   useEffect(() => {
-    if (!statusMessage || statusTone === 'error') {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setStatusMessage('');
-    }, 3500);
-
-    return () => window.clearTimeout(timeoutId);
+    if (!statusMessage || statusTone === 'error') return;
+    const id = window.setTimeout(() => setStatusMessage(''), 3500);
+    return () => window.clearTimeout(id);
   }, [statusMessage, statusTone]);
 
   const estimatedCost =
     analysis && models.length > 0
-      ? estimateCostUsd(
-          settings.model,
-          models,
-          analysis.estimatedInputTokens,
-          analysis.estimatedOutputTokens,
-        )
+      ? estimateCostUsd(settings.model, models, analysis.estimatedInputTokens, analysis.estimatedOutputTokens)
       : null;
 
   const missingApiKey = settings.apiKey.trim().length === 0;
   const isActive = tabState ? ACTIVE_STATUSES.has(tabState.status) : false;
   const hasPageTranslation = Boolean(tabState?.hasTranslations);
-  const canResumeCancelledTranslation =
-    tabState?.status === 'cancelled' && Boolean(tabState.hasTranslations);
+  const canResumeCancelledTranslation = tabState?.status === 'cancelled' && Boolean(tabState.hasTranslations);
   const canTranslateCurrentPage = isSupportedPageUrl(activeTabUrl);
   const isUnavailablePage = !loading && !canTranslateCurrentPage;
-  const selectedLanguage = findLanguageOption(settings.targetLanguage);
+  const popupMode: PopupMode = isUnavailablePage ? 'unavailable'
+    : missingApiKey ? 'setup'
+    : isActive ? 'active'
+    : hasPageTranslation ? 'translated'
+    : 'ready';
+
   const primaryLanguageOptions = languageOptions.slice(0, PRIMARY_LANGUAGE_COUNT);
   const additionalLanguageOptions = languageOptions.filter(
-    (language) => !primaryLanguageOptions.some((primary) => primary.code === language.code),
+    (lang) => !primaryLanguageOptions.some((p) => p.code === lang.code),
   );
-  const popupMode: PopupMode = isUnavailablePage
-    ? 'unavailable'
-    : missingApiKey
-      ? 'setup'
-      : isActive
-        ? 'active'
-        : hasPageTranslation
-          ? 'translated'
-          : 'ready';
 
-  const primaryLabel = getPrimaryLabel({
-    missingApiKey,
-    hasPageTranslation,
-    canResumeCancelledTranslation,
-    isActive,
-    tabState,
-  });
+  // --- Business Logic (unchanged) ---
 
   async function initialize(): Promise<void> {
     setLoading(true);
@@ -177,38 +125,20 @@ export function PopupApp() {
       setActiveTabId(activeTab.id);
       setActiveTabUrl(activeTab.url);
       setHasHydrated(true);
-
       if (activeTab.id !== null) {
-        const stateResponse = (await chrome.runtime.sendMessage({
-          type: 'GET_TAB_SESSION_STATE',
-          tabId: activeTab.id,
-        })) as TabStateResponse;
-        if (stateResponse.ok && stateResponse.state) {
-          setTabState(stateResponse.state);
-        }
+        const stateResponse = (await chrome.runtime.sendMessage({ type: 'GET_TAB_SESSION_STATE', tabId: activeTab.id })) as TabStateResponse;
+        if (stateResponse.ok && stateResponse.state) setTabState(stateResponse.state);
       }
-
-      const modelsResponse = (await chrome.runtime.sendMessage({
-        type: 'GET_PROVIDER_MODELS',
-      })) as ProviderModelsResponse;
-      if (modelsResponse.ok && modelsResponse.models) {
-        setModels(modelsResponse.models);
-      }
-
+      const modelsResponse = (await chrome.runtime.sendMessage({ type: 'GET_PROVIDER_MODELS' })) as ProviderModelsResponse;
+      if (modelsResponse.ok && modelsResponse.models) setModels(modelsResponse.models);
       if (activeTab.id !== null && isSupportedPageUrl(activeTab.url)) {
-        await Promise.all([
-          refreshAnalysis(activeTab.id, storedSettings),
-          refreshSelectionState(activeTab.id),
-        ]);
+        await Promise.all([refreshAnalysis(activeTab.id, storedSettings), refreshSelectionState(activeTab.id)]);
       } else {
         setAnalysis(null);
         setHasSelection(false);
       }
     } catch (error) {
-      showStatus(
-        error instanceof Error ? localizeMessage(error.message) : 'ポップアップの読み込みに失敗しました。',
-        'error',
-      );
+      showStatus(error instanceof Error ? localizeMessage(error.message) : 'ポップアップの読み込みに失敗しました。', 'error');
     } finally {
       setLoading(false);
     }
@@ -216,44 +146,27 @@ export function PopupApp() {
 
   function updateSettings(patch: Partial<ExtensionSettings>): void {
     setSettings((current) => {
-      const nextSettings = {
-        ...current,
-        ...patch,
-      };
-      if (hasHydrated) {
-        void saveSettings(nextSettings);
-      }
+      const next = normalizeSettings({ ...current, ...patch });
+      if (hasHydrated) void saveSettings(next);
       setConfirmClearAll(false);
-      return nextSettings;
+      return next;
     });
   }
 
   function showStatus(message: string, tone: 'info' | 'success' | 'error' = 'info'): void {
-    if (!message) {
-      setStatusMessage('');
-      return;
-    }
-
+    if (!message) { setStatusMessage(''); return; }
     setStatusTone(tone);
     setStatusMessage(localizeMessage(message));
   }
 
-  function clearStatus(): void {
-    setStatusMessage('');
-  }
+  function clearStatus(): void { setStatusMessage(''); }
 
   async function handleValidateApiKey(): Promise<void> {
-    if (!settings.apiKey.trim()) {
-      return;
-    }
+    if (!settings.apiKey.trim()) return;
     setApiKeyValidation('checking');
     setApiKeyError('');
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'VALIDATE_API_KEY',
-        provider: settings.provider,
-        apiKey: settings.apiKey,
-      }) as { ok: boolean; valid?: boolean; message?: string };
+      const response = await chrome.runtime.sendMessage({ type: 'VALIDATE_API_KEY', provider: settings.provider, apiKey: settings.apiKey }) as { ok: boolean; valid?: boolean; message?: string };
       if (response.valid) {
         setApiKeyValidation('valid');
         showStatus('API Key の接続を確認しました。', 'success');
@@ -268,1007 +181,368 @@ export function PopupApp() {
     }
   }
 
-  async function runContentAction(
-    message: ContentCommandMessage,
-  ): Promise<ActionResponse | AnalysisResponse | SelectionStateResponse | null> {
-    if (activeTabId === null) {
-      showStatus('通常の Web ページを開いてから使ってください。', 'error');
-      return null;
-    }
-
+  async function runContentAction(message: ContentCommandMessage): Promise<ActionResponse | AnalysisResponse | SelectionStateResponse | null> {
+    if (activeTabId === null) { showStatus('通常の Web ページを開いてから使ってください。', 'error'); return null; }
     try {
       clearStatus();
-      return (await chrome.tabs.sendMessage(activeTabId, message)) as
-        | ActionResponse
-        | AnalysisResponse
-        | SelectionStateResponse;
+      return (await chrome.tabs.sendMessage(activeTabId, message)) as ActionResponse | AnalysisResponse | SelectionStateResponse;
     } catch (error) {
-      showStatus(
-        formatTabMessagingError(error, 'このページでは拡張から翻訳できません。'),
-        'error',
-      );
+      showStatus(formatTabMessagingError(error, 'このページでは拡張から翻訳できません。'), 'error');
       return null;
     }
   }
 
   async function handlePrimaryAction(): Promise<void> {
-    if (missingApiKey) {
-      showStatus('OpenRouter の API Key を設定すると翻訳を実行できます。', 'error');
-      return;
-    }
-
-    if (canResumeCancelledTranslation) {
-      await handleStartPageTranslation();
-      return;
-    }
-
-    if (hasPageTranslation) {
-      await handleTogglePageView();
-      return;
-    }
-
+    if (missingApiKey) { setPopupView('settings'); return; }
+    if (canResumeCancelledTranslation) { await handleStartPageTranslation(); return; }
+    if (hasPageTranslation) { await handleTogglePageView(); return; }
     await handleStartPageTranslation();
   }
 
   async function handleStartPageTranslation(): Promise<void> {
     setWorking(true);
     try {
-      const response = await runContentAction({
-        type: 'START_TRANSLATION',
-        settings,
-        scope: resolveScope(settings),
-      });
-      if (!response) {
-        return;
-      }
-      showStatus(
-        response.message || '見えているところから翻訳を始めました。',
-        response.ok === false ? 'error' : 'success',
-      );
-      if (activeTabId !== null) {
-        await Promise.all([refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
-      }
-    } finally {
-      setWorking(false);
-    }
+      const ns = normalizeSettings(settings);
+      if (ns.model !== settings.model || ns.targetLanguage !== settings.targetLanguage) setSettings(ns);
+      const response = await runContentAction({ type: 'START_TRANSLATION', settings: ns, scope: resolveScope(ns) });
+      if (!response) return;
+      showStatus(response.message || '見えているところから翻訳を始めました。', response.ok === false ? 'error' : 'success');
+      if (activeTabId !== null) await Promise.all([refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
+    } finally { setWorking(false); }
   }
 
   async function handleTogglePageView(): Promise<void> {
     setWorking(true);
     try {
-      const response = await runContentAction({
-        type: 'TOGGLE_PAGE',
-        settings,
-        scope: resolveScope(settings),
-      });
-      if (!response) {
-        return;
-      }
+      const ns = normalizeSettings(settings);
+      const response = await runContentAction({ type: 'TOGGLE_PAGE', settings: ns, scope: resolveScope(ns) });
+      if (!response) return;
       showStatus(response.message || '', response.ok === false ? 'error' : 'success');
-      if (activeTabId !== null) {
-        await Promise.all([refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
-      }
-    } finally {
-      setWorking(false);
-    }
+      if (activeTabId !== null) await Promise.all([refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
+    } finally { setWorking(false); }
   }
 
   async function handleSelectionTranslation(forceRefresh: boolean): Promise<void> {
-    if (missingApiKey) {
-      showStatus('OpenRouter の API key を入れると選択範囲を翻訳できます。', 'error');
-      return;
-    }
-
+    if (missingApiKey) { showStatus('OpenRouter の API key を入れると選択範囲を翻訳できます。', 'error'); return; }
     setWorking(true);
     try {
-      const response = await runContentAction({
-        type: forceRefresh ? 'RETRANSLATE_SELECTION' : 'START_SELECTION_TRANSLATION',
-        settings,
-      });
-      if (!response) {
-        return;
-      }
+      const ns = normalizeSettings(settings);
+      const response = await runContentAction({ type: forceRefresh ? 'RETRANSLATE_SELECTION' : 'START_SELECTION_TRANSLATION', settings: ns });
+      if (!response) return;
       showStatus(response.message || '', response.ok === false ? 'error' : 'success');
-      if (activeTabId !== null) {
-        await Promise.all([refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
-      }
-    } finally {
-      setWorking(false);
-    }
+      if (activeTabId !== null) await Promise.all([refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
+    } finally { setWorking(false); }
   }
 
   async function handleClearPageCache(): Promise<void> {
     setWorking(true);
     try {
-      const response = await runContentAction({
-        type: 'CLEAR_CACHE',
-        settings,
-      });
-      if (!response) {
-        return;
-      }
+      const ns = normalizeSettings(settings);
+      const response = await runContentAction({ type: 'CLEAR_CACHE', settings: ns });
+      if (!response) return;
       showStatus(response.message || '', response.ok === false ? 'error' : 'success');
-      if (activeTabId !== null) {
-        await Promise.all([
-          refreshAnalysis(activeTabId, settings),
-          refreshTabState(activeTabId),
-          refreshSelectionState(activeTabId),
-        ]);
-      }
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function handleFocusWarningBlock(): Promise<void> {
-    setWorking(true);
-    try {
-      const response = await runContentAction({
-        type: 'FOCUS_NEXT_WARNING_BLOCK',
-      });
-      if (!response) {
-        return;
-      }
-      showStatus(response.message || '', response.ok === false ? 'error' : 'info');
-    } finally {
-      setWorking(false);
-    }
+      if (activeTabId !== null) await Promise.all([refreshAnalysis(activeTabId, ns), refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
+    } finally { setWorking(false); }
   }
 
   async function handleClearAllCache(): Promise<void> {
-    if (!confirmClearAll) {
-      setConfirmClearAll(true);
-      return;
-    }
-
+    if (!confirmClearAll) { setConfirmClearAll(true); return; }
     setWorking(true);
     try {
-      const response = (await chrome.runtime.sendMessage({
-        type: 'CLEAR_ALL_CACHE',
-      })) as ActionResponse;
+      const response = (await chrome.runtime.sendMessage({ type: 'CLEAR_ALL_CACHE' })) as ActionResponse;
       showStatus(response.message || '', response.ok === false ? 'error' : 'success');
-      if (activeTabId !== null && canTranslateCurrentPage) {
-        await refreshAnalysis(activeTabId, settings);
-      }
+      if (activeTabId !== null && canTranslateCurrentPage) await refreshAnalysis(activeTabId, normalizeSettings(settings));
       setConfirmClearAll(false);
-    } finally {
-      setWorking(false);
-    }
+    } finally { setWorking(false); }
   }
 
   async function refreshAnalysis(tabId: number, nextSettings: ExtensionSettings): Promise<void> {
     try {
-      const response = (await chrome.tabs.sendMessage(tabId, {
-        type: 'GET_PAGE_ANALYSIS',
-        settings: nextSettings,
-        scope: resolveScope(nextSettings),
-      })) as AnalysisResponse;
-
-      if (response.ok && response.analysis) {
-        setAnalysis(response.analysis);
-        return;
-      }
-
+      const response = (await chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_ANALYSIS', settings: nextSettings, scope: resolveScope(nextSettings) })) as AnalysisResponse;
+      if (response.ok && response.analysis) { setAnalysis(response.analysis); return; }
       setAnalysis(null);
-      if (response.message) {
-        showStatus(response.message, 'error');
-      }
+      if (response.message) showStatus(response.message, 'error');
     } catch (error) {
       setAnalysis(null);
-      showStatus(
-        formatTabMessagingError(error, 'このページでは見積もりを出せませんでした。'),
-        'error',
-      );
+      showStatus(formatTabMessagingError(error, 'このページでは見積もりを出せませんでした。'), 'error');
     }
   }
 
   async function refreshSelectionState(tabId: number): Promise<void> {
     try {
-      const response = (await chrome.tabs.sendMessage(tabId, {
-        type: 'GET_SELECTION_STATE',
-      })) as SelectionStateResponse;
+      const response = (await chrome.tabs.sendMessage(tabId, { type: 'GET_SELECTION_STATE' })) as SelectionStateResponse;
       setHasSelection(Boolean(response.ok && response.hasSelection));
-    } catch {
-      setHasSelection(false);
-    }
+    } catch { setHasSelection(false); }
   }
 
   async function refreshTabState(tabId: number): Promise<void> {
-    const response = (await chrome.runtime.sendMessage({
-      type: 'GET_TAB_SESSION_STATE',
-      tabId,
-    })) as TabStateResponse;
-    if (response.ok) {
-      setTabState(response.state ?? null);
-    }
+    const response = (await chrome.runtime.sendMessage({ type: 'GET_TAB_SESSION_STATE', tabId })) as TabStateResponse;
+    if (response.ok) setTabState(response.state ?? null);
   }
 
-  const selectedLanguageLabel = selectedLanguage?.label ?? formatLanguageLabel(settings.targetLanguage);
-  const showLanguageControls = popupMode === 'ready' || popupMode === 'active' || popupMode === 'translated';
-  const showPrimaryAction = popupMode !== 'unavailable';
-  const showSetupCard = popupMode === 'setup';
-  const showUnavailableCard = popupMode === 'unavailable';
-  const canClearPageCache = !working && activeTabId !== null && !isUnavailablePage;
-  const failureReason =
-    tabState?.status === 'failed' ? localizeRuntimeError(tabState.lastError) : null;
-  const warningSummary = tabState?.warnings ?? null;
-  const hasWarnings = Boolean(warningSummary?.totalBlocks);
+  const primaryLabel = getPrimaryLabel({ missingApiKey, hasPageTranslation, canResumeCancelledTranslation, isActive, tabState });
+  const currentPreset = MODEL_PRESETS[settings.modelPreset];
+
+  // --- Render ---
 
   return (
     <main className="popup-shell" data-mode={popupMode}>
-      <section className="panel panel-main panel-main-compact">
-        <div className="panel-header-row">
-          <div className="panel-heading panel-heading-compact">
-            <h1>{buildCompactTitle(popupMode, selectedLanguageLabel)}</h1>
-            <p className="helper-copy">
-              {buildCompactLead({
-                mode: popupMode,
-                analysis,
-                translateFullPage: settings.translateFullPage,
-              })}
-            </p>
-          </div>
+      {/* Tab Navigation */}
+      <nav className="tab-nav" role="tablist">
+        <button type="button" className="tab-button" data-active={popupView === 'translate'} onClick={() => setPopupView('translate')}>翻訳</button>
+        <button type="button" className="tab-button" data-active={popupView === 'cache'} onClick={() => setPopupView('cache')}>キャッシュ</button>
+        <button type="button" className="tab-button" data-active={popupView === 'settings'} onClick={() => setPopupView('settings')}>設定</button>
+      </nav>
 
-          <div className="panel-header-side">
-            <div className="state-chip" data-tone={getStateTone(tabState, popupMode)}>
-              {renderStateLabel(tabState, loading, popupMode)}
+      {/* Tab: Translate */}
+      {popupView === 'translate' && (
+        <section className="panel panel-main">
+          {popupMode === 'setup' ? (
+            <div className="setup-card">
+              <h2>翻訳を使う</h2>
+              <p className="helper-copy">OpenRouter の API Key を設定すると翻訳を実行できます。</p>
+              <button type="button" className="button button-primary" onClick={() => setPopupView('settings')}>設定へ</button>
             </div>
+          ) : popupMode === 'unavailable' ? (
+            <div className="focus-card">
+              <h2>このページでは使えません</h2>
+              <p className="helper-copy">通常の Web ページを開くと使えます。</p>
+            </div>
+          ) : (
+            <>
+              <h2 className="panel-title">{popupMode === 'active' ? '翻訳中' : popupMode === 'translated' ? '翻訳しました' : '翻訳する'}</h2>
 
-            {showLanguageControls && (
-              <div className="meta-stack">
-                <span className="mini-chip">{selectedLanguageLabel}</span>
-                <span className="mini-chip">
-                  {settings.translateFullPage ? 'ページ全体' : '本文だけ'}
-                </span>
+              {/* Scope: 本文のみ / ページ全体 */}
+              <div className="segment-group">
+                <span className="segment-label">範囲</span>
+                <div className="segment-control">
+                  <button type="button" className="segment-button" data-selected={!settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: false })}>本文のみ</button>
+                  <button type="button" className="segment-button" data-selected={settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: true })}>ページ全体</button>
+                </div>
+                {!settings.translateFullPage && (
+                  <p className="segment-hint">ヘッダー・サイドバー・フッターを除外して翻訳</p>
+                )}
               </div>
-            )}
-          </div>
-        </div>
 
-        {showSetupCard ? (
-          <div className="setup-card">
-            <div className="panel-heading">
-              <p className="panel-kicker">最初の設定</p>
-              <h2>翻訳サービスを利用するには OpenRouter の API Key が必要です</h2>
-              <p className="helper-copy">
-                OpenRouter で API Key を作成すると、このページで翻訳を実行できます。
-              </p>
-            </div>
-
-            <label className="field">
-              <span>OpenRouter API key</span>
-              <input
-                type="password"
-                value={settings.apiKey}
-                onChange={(event) => updateSettings({ apiKey: event.target.value })}
-                placeholder="sk-or-v1-..."
-              />
-            </label>
-
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() => void handleValidateApiKey()}
-              disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}
-            >
-              {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
-            </button>
-            {apiKeyValidation === 'invalid' && apiKeyError && (
-              <p className="soft-note soft-note-error">{apiKeyError}</p>
-            )}
-            {apiKeyValidation === 'valid' && (
-              <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>
-            )}
-
-            <a
-              className="button button-secondary button-link-card"
-              href="https://openrouter.ai/keys"
-              target="_blank"
-              rel="noreferrer"
-            >
-              OpenRouter で API key を作る
-            </a>
-
-            <p className="trust-note">
-              API key はこの拡張のローカル設定に保存され、翻訳リクエストを送るときだけ OpenRouter に使われます。
-            </p>
-          </div>
-        ) : showUnavailableCard ? (
-          <div className="focus-card focus-card-warning">
-            <p className="panel-kicker">このページでは使えません</p>
-            <h2>通常の Web ページを開くと、そのまま翻訳できます</h2>
-            <p className="helper-copy">
-              Chrome の設定画面や拡張ページでは content script が動きません。記事やドキュメントのページで開き直すと使えます。
-            </p>
-            <p className="soft-note">設定は保持されるので、次のページではすぐ使えます。</p>
-          </div>
-        ) : (
-          <div className="focus-card">
-            <p className="panel-kicker">このタブでできること</p>
-            <h2>{selectedLanguageLabel}に翻訳する</h2>
-            <p className="helper-copy">
-              {buildMainSummary(analysis, settings.translateFullPage, popupMode)}
-            </p>
-            {failureReason && (
-              <p className="soft-note soft-note-error">
-                原因: {failureReason}
-              </p>
-            )}
-            {tabState?.status === 'completed_with_warnings' && warningSummary && (
-              <p className="soft-note soft-note-warning">
-                {warningSummary.totalBlocks}箇所はそのまま残っています。
-              </p>
-            )}
-            {tabState?.status === 'cancelled' && hasPageTranslation && (
-              <p className="soft-note">
-                止めたところから、あとで続きを再開できます。
-              </p>
-            )}
-            {popupMode === 'ready' && estimatedCost !== null && analysis && (
-              <p className="soft-note">
-                {analysis.blockCount}ブロック・約{Math.round(analysis.sourceChars / 1000)}k文字
-                — 翻訳すると {formatEstimatedCost(estimatedCost)} ほどかかる見込みです。
-              </p>
-            )}
-            {popupMode === 'translated' && estimatedCost !== null && (
-              <p className="soft-note">
-                このページの料金の目安は {formatEstimatedCost(estimatedCost)} です。
-              </p>
-            )}
-            {popupMode === 'active' && (
-              <p className="soft-note">
-                止めたいときは、ページ右下のウィジェットから操作してください。
-              </p>
-            )}
-          </div>
-        )}
-
-        {hasWarnings && (
-          <div className="focus-card focus-card-warning">
-            <p className="panel-kicker">一部そのまま残っています</p>
-            <h2>{buildWarningLead(warningSummary!)}</h2>
-            <p className="helper-copy">
-              {buildWarningSummaryText(warningSummary!)}
-            </p>
-            <div className="tertiary-actions">
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => void handleFocusWarningBlock()}
-                disabled={working || loading}
-              >
-                未解決箇所へ
-              </button>
-            </div>
-          </div>
-        )}
-
-        {showPrimaryAction && (
-          <div className="primary-actions">
-            <button
-              className="button button-primary"
-              onClick={() => void handlePrimaryAction()}
-              disabled={working || loading || (missingApiKey && settings.apiKey.trim().length === 0)}
-            >
-              {primaryLabel}
-            </button>
-
-            {hasSelection && !missingApiKey && (
-              <button
-                className="button button-secondary"
-                onClick={() => void handleSelectionTranslation(false)}
-                disabled={working || loading}
-              >
-                この部分だけ読む
-              </button>
-            )}
-          </div>
-        )}
-
-        {!missingApiKey && !settings.translateFullPage && !showUnavailableCard && (
-          <button
-            type="button"
-            className="button-link"
-            onClick={() => updateSettings({ translateFullPage: true })}
-          >
-            本文が足りないときは、ページ全体も試す
-          </button>
-        )}
-
-      </section>
-
-      {showLanguageControls && (
-        <section className="panel panel-quick-settings">
-          <div className="field">
-            <span className="section-title">読む言語</span>
-            <div className="language-pills" role="group" aria-label="Target language">
-              {primaryLanguageOptions.map((language) => (
-                <button
-                  key={language.code}
-                  type="button"
-                  className="pill-button"
-                  data-selected={settings.targetLanguage === language.code}
-                  onClick={() => updateSettings({ targetLanguage: language.code })}
-                >
-                  <span>{language.label}</span>
-                  <small>{language.nativeLabel}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <span className="section-title">モデル</span>
-            <div className="language-pills" role="group" aria-label="Model preset">
-              {(Object.keys(MODEL_PRESETS) as Array<Exclude<ModelPreset, 'custom'>>).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className="pill-button"
-                  data-selected={settings.modelPreset === key}
-                  title={MODEL_PRESETS[key].description}
-                  onClick={() => updateSettings({ modelPreset: key, model: MODEL_PRESETS[key].model })}
-                >
-                  <span>{MODEL_PRESETS[key].label}</span>
-                </button>
-              ))}
-              <button
-                type="button"
-                className="pill-button"
-                data-selected={settings.modelPreset === 'custom'}
-                onClick={() => updateSettings({ modelPreset: 'custom' })}
-              >
-                <span>カスタム</span>
-              </button>
-            </div>
-            {settings.modelPreset === 'custom' && (
-              <label className="field field-inline">
-                <input
-                  list="model-suggestions"
-                  value={settings.model}
-                  onChange={(event) => updateSettings({ model: event.target.value })}
-                  placeholder="モデル ID を入力"
-                />
-                <datalist id="model-suggestions">
-                  {models.map((model) => (
-                    <option value={model.id} key={model.id}>
-                      {model.name}
-                    </option>
+              {/* Model: fast / accurate */}
+              <div className="segment-group">
+                <span className="segment-label">モデル</span>
+                <div className="segment-control">
+                  {(Object.keys(MODEL_PRESETS) as ModelPreset[]).map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      className="segment-button"
+                      data-selected={settings.modelPreset === preset}
+                      onClick={() => updateSettings({ modelPreset: preset })}
+                      title={`${MODEL_PRESETS[preset].description}\n(${MODEL_PRESETS[preset].modelId})`}
+                    >
+                      {MODEL_PRESETS[preset].label}
+                    </button>
                   ))}
-                </datalist>
-              </label>
-            )}
-          </div>
+                </div>
+                <p className="segment-hint segment-hint-model">{currentPreset.modelId}</p>
+              </div>
+
+              {/* Cost */}
+              {(popupMode === 'ready' || popupMode === 'translated') && estimatedCost !== null && (
+                <p className="cost-note">約{formatEstimatedCost(estimatedCost)}</p>
+              )}
+
+              {/* Progress (active) */}
+              {popupMode === 'active' && tabState && (
+                <div className="progress-section">
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${tabState.progressPercent}%` }} />
+                  </div>
+                  <p className="soft-note">{translateStatus(tabState.status)} {tabState.progressPercent}%</p>
+                </div>
+              )}
+
+              {/* Primary Action */}
+              <div className="primary-actions">
+                <button className="button button-primary" onClick={() => void handlePrimaryAction()} disabled={working || loading}>
+                  {primaryLabel}
+                </button>
+                {hasSelection && !missingApiKey && (
+                  <button className="button button-secondary" onClick={() => void handleSelectionTranslation(false)} disabled={working || loading}>
+                    この部分だけ読む
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </section>
       )}
 
-      <details
-        className="panel details-panel"
-        open={advancedOpen}
-        onToggle={(event) => setAdvancedOpen((event.currentTarget as HTMLDetailsElement).open)}
-      >
-        <summary>言語と設定を調整する</summary>
-        <p className="helper-copy">
-          ふだんはこのままで大丈夫です。必要になったときだけ変えられます。
-        </p>
-
-        {popupMode !== 'setup' && (
-          <section className="settings-section">
-            <h3 className="section-title">接続</h3>
-            <label className="field">
-              <span>OpenRouter API key</span>
-              <input
-                type="password"
-                value={settings.apiKey}
-                onChange={(event) => updateSettings({ apiKey: event.target.value })}
-                placeholder="sk-or-v1-..."
-              />
-            </label>
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() => void handleValidateApiKey()}
-              disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}
-            >
-              {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
-            </button>
-            {apiKeyValidation === 'invalid' && apiKeyError && (
-              <p className="soft-note soft-note-error">{apiKeyError}</p>
-            )}
-            {apiKeyValidation === 'valid' && (
-              <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>
-            )}
-          </section>
-        )}
-
-        <section className="settings-section">
-          <h3 className="section-title">翻訳の設定</h3>
-
-          <div className="field">
-            <span>読む言語</span>
-            <div className="language-pills" role="group" aria-label="Target language">
-              {primaryLanguageOptions.map((language) => (
-                <button
-                  key={language.code}
-                  type="button"
-                  className="pill-button"
-                  data-selected={settings.targetLanguage === language.code}
-                  onClick={() => updateSettings({ targetLanguage: language.code })}
-                >
-                  <span>{language.label}</span>
-                  <small>{language.nativeLabel}</small>
-                </button>
-              ))}
-            </div>
-            <label className="field field-inline">
-              <span>ほかの言語</span>
-              <select
-                aria-label="ほかの言語"
-                value={
-                  primaryLanguageOptions.some((language) => language.code === settings.targetLanguage)
-                    ? ''
-                    : settings.targetLanguage
-                }
-                onChange={(event) => {
-                  if (!event.target.value) {
-                    return;
-                  }
-                  updateSettings({ targetLanguage: event.target.value });
-                }}
-              >
-                <option value="">ほかの言語を選ぶ</option>
-                {additionalLanguageOptions.map((language) => (
-                  <option key={language.code} value={language.code}>
-                    {language.label} / {language.nativeLabel}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <label className="field">
-            <span>翻訳の雰囲気</span>
-            <select
-              aria-label="翻訳の雰囲気"
-              value={settings.style}
-              onChange={(event) =>
-                updateSettings({
-                  style: event.target.value as TranslationStyle,
-                })
-              }
-            >
-              {STYLE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <p className="helper-copy helper-copy-compact">
-              {STYLE_OPTIONS.find((option) => option.value === settings.style)?.help}
-            </p>
-          </label>
+      {/* Tab: Cache */}
+      {popupView === 'cache' && (
+        <section className="panel">
+          <h2 className="panel-title">翻訳済みページ</h2>
 
           <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={settings.translateFullPage}
-              onChange={(event) => updateSettings({ translateFullPage: event.target.checked })}
-            />
-            <span>本文だけで足りないときは、メニューやサイドバーも含めて翻訳する</span>
+            <input type="checkbox" checked={settings.cacheEnabled} onChange={(e) => updateSettings({ cacheEnabled: e.target.checked })} />
+            <span>キャッシュを使う</span>
           </label>
-        </section>
-
-        <section className="settings-section">
-          <h3 className="section-title">モデルと保存</h3>
-
-          <label className="field">
-            <span>Model</span>
-            <input
-              list="model-suggestions"
-              value={settings.model}
-              onChange={(event) => updateSettings({ model: event.target.value })}
-            />
-            <datalist id="model-suggestions">
-              {models.map((model) => (
-                <option value={model.id} key={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </datalist>
-          </label>
-
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={settings.cacheEnabled}
-              onChange={(event) => updateSettings({ cacheEnabled: event.target.checked })}
-            />
-            <span>前に訳した同じ内容があれば、保存済みの翻訳を使う</span>
-          </label>
-        </section>
-
-        <section className="settings-section settings-section-danger">
-          <h3 className="section-title">データ管理</h3>
 
           <div className="tertiary-actions">
-            <button
-              className="button button-muted"
-              onClick={() => void handleClearPageCache()}
-              disabled={!canClearPageCache}
-            >
+            <button className="button button-muted" onClick={() => void handleClearPageCache()} disabled={working || activeTabId === null || isUnavailablePage}>
               このページの保存済み翻訳を消す
             </button>
           </div>
 
           {confirmClearAll ? (
             <div className="confirm-inline">
-              <p className="helper-copy helper-copy-compact">
-                保存している翻訳をすべて消します。元に戻せません。
-              </p>
+              <p className="helper-copy">保存している翻訳をすべて消します。元に戻せません。</p>
               <div className="confirm-actions">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={() => setConfirmClearAll(false)}
-                  disabled={working}
-                >
-                  やめる
-                </button>
-                <button
-                  type="button"
-                  className="button button-danger"
-                  onClick={() => void handleClearAllCache()}
-                  disabled={working}
-                >
-                  本当に消す
-                </button>
+                <button type="button" className="button button-secondary" onClick={() => setConfirmClearAll(false)} disabled={working}>やめる</button>
+                <button type="button" className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>本当に消す</button>
               </div>
             </div>
           ) : (
-            <button
-              className="button button-danger"
-              onClick={() => void handleClearAllCache()}
-              disabled={working}
-            >
+            <button className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>
               すべての保存済み翻訳を消す
             </button>
           )}
         </section>
-      </details>
+      )}
 
+      {/* Tab: Settings */}
+      {popupView === 'settings' && (
+        <section className="panel">
+          <div className="settings-section">
+            <h3 className="section-title">接続</h3>
+            <label className="field">
+              <span>OpenRouter API Key</span>
+              <input type="password" value={settings.apiKey} onChange={(e) => updateSettings({ apiKey: e.target.value })} placeholder="sk-or-v1-..." />
+            </label>
+            <button type="button" className="button button-secondary" onClick={() => void handleValidateApiKey()} disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}>
+              {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
+            </button>
+            {apiKeyValidation === 'invalid' && apiKeyError && <p className="soft-note soft-note-error">{apiKeyError}</p>}
+            {apiKeyValidation === 'valid' && <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>}
+            <a className="button button-secondary button-link-card" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">OpenRouter で API Key を作る</a>
+          </div>
+
+          <div className="settings-section">
+            <h3 className="section-title">翻訳設定</h3>
+
+            <div className="field">
+              <span>読む言語</span>
+              <div className="language-pills" role="group">
+                {primaryLanguageOptions.map((lang) => (
+                  <button key={lang.code} type="button" className="pill-button" data-selected={settings.targetLanguage === lang.code} onClick={() => updateSettings({ targetLanguage: lang.code })}>
+                    <span>{lang.label}</span>
+                    <small>{lang.nativeLabel}</small>
+                  </button>
+                ))}
+              </div>
+              <label className="field field-inline">
+                <span>ほかの言語</span>
+                <select
+                  value={primaryLanguageOptions.some((l) => l.code === settings.targetLanguage) ? '' : settings.targetLanguage}
+                  onChange={(e) => { if (e.target.value) updateSettings({ targetLanguage: e.target.value }); }}
+                >
+                  <option value="">ほかの言語を選ぶ</option>
+                  {additionalLanguageOptions.map((lang) => (
+                    <option key={lang.code} value={lang.code}>{lang.label} / {lang.nativeLabel}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="field">
+              <span>翻訳スタイル</span>
+              <select aria-label="翻訳スタイル" value={settings.style} onChange={(e) => updateSettings({ style: e.target.value as TranslationStyle })}>
+                {STYLE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+              <p className="helper-copy">{STYLE_OPTIONS.find((o) => o.value === settings.style)?.help}</p>
+            </label>
+          </div>
+        </section>
+      )}
+
+      {/* Status Banner */}
       {statusMessage && (
         <div className="status-banner" data-tone={statusTone}>
           <span>{statusMessage}</span>
-          <button
-            type="button"
-            className="status-dismiss"
-            onClick={clearStatus}
-            aria-label="状態メッセージを閉じる"
-          >
-            ×
-          </button>
+          <button type="button" className="status-dismiss" onClick={clearStatus} aria-label="閉じる">×</button>
         </div>
       )}
     </main>
   );
 }
 
+// --- Utility functions ---
+
 function resolveScope(settings: ExtensionSettings): 'main' | 'page' {
   return settings.translateFullPage ? 'page' : 'main';
 }
 
-function getPrimaryLabel(options: {
-  missingApiKey: boolean;
-  hasPageTranslation: boolean;
-  canResumeCancelledTranslation: boolean;
-  isActive: boolean;
-  tabState: TabSessionState | null;
-}): string {
-  if (options.isActive) {
-    return '翻訳しています...';
-  }
-
-  if (options.missingApiKey) {
-    return 'API Key を設定する';
-  }
-
-  if (options.canResumeCancelledTranslation) {
-    return '続きを再開する';
-  }
-
+function getPrimaryLabel(options: { missingApiKey: boolean; hasPageTranslation: boolean; canResumeCancelledTranslation: boolean; isActive: boolean; tabState: TabSessionState | null }): string {
+  if (options.isActive) return '翻訳しています...';
+  if (options.missingApiKey) return '設定へ';
+  if (options.canResumeCancelledTranslation) return '続きを再開する';
   if (options.hasPageTranslation) {
     const ds = options.tabState?.displayState;
     if (ds === 'translated') return '対訳を表示';
     if (ds === 'bilingual') return '原文に戻す';
     return '翻訳のみ';
   }
-
   return 'このページを翻訳する';
-}
-
-function buildCompactTitle(mode: PopupMode, languageLabel: string): string {
-  switch (mode) {
-    case 'setup':
-      return 'このページの翻訳を実行します。';
-    case 'unavailable':
-      return 'このページでは使えません。';
-    case 'active':
-      return `${languageLabel}に翻訳しています。`;
-    case 'translated':
-      return `${languageLabel}に翻訳しました。`;
-    case 'ready':
-    default:
-      return `${languageLabel}に翻訳します。`;
-  }
-}
-
-function buildCompactLead(options: {
-  mode: PopupMode;
-  analysis: PageAnalysis | null;
-  translateFullPage: boolean;
-}): string {
-  if (options.mode === 'setup') {
-    return '最初に一度だけ設定すれば、このタブから翻訳を実行できます。';
-  }
-
-  if (options.mode === 'unavailable') {
-    return '通常の Web ページを開くと使えます。';
-  }
-
-  if (options.mode === 'active') {
-    return '見えているところから順に進めています。';
-  }
-
-  if (options.mode === 'translated') {
-    return '本文を優先して翻訳しました。';
-  }
-
-  if (!options.analysis) {
-    return options.translateFullPage
-      ? 'ページ全体を順に翻訳します。'
-      : '本文を優先して、見えているところから翻訳します。';
-  }
-
-  if (options.translateFullPage) {
-    return 'ページ全体を対象にしつつ、見えているところから始めます。';
-  }
-
-  return '本文を優先して、見えているところから翻訳します。';
-}
-
-function buildMainSummary(
-  analysis: PageAnalysis | null,
-  translateFullPage: boolean,
-  mode: PopupMode,
-): string {
-  if (mode === 'setup') {
-    return '設定後はこのタブから翻訳を実行できます。';
-  }
-
-  if (mode === 'unavailable') {
-    return '記事やドキュメントのページでは、そのまま本文から翻訳できます。';
-  }
-
-  if (mode === 'translated') {
-    return '必要なら原文に戻したり、文体を変えて訳し直したりできます。';
-  }
-
-  if (!analysis) {
-    return translateFullPage
-      ? 'ページ全体を対象にしますが、まず見えているところから始めます。'
-      : '本文を優先して、見えているところから始めます。';
-  }
-
-  if (analysis.blockCount <= 6) {
-    return '軽めのページなので、すぐ翻訳を実行できます。';
-  }
-
-  if (analysis.blockCount <= 16) {
-    return '少し長めですが、見えているところから順に翻訳します。';
-  }
-
-  return translateFullPage
-    ? '長いページなので、ページ全体を順に翻訳します。'
-    : '長いページなので、まず本文を優先して翻訳します。';
-}
-
-function renderStateLabel(
-  state: TabSessionState | null,
-  loading: boolean,
-  mode: PopupMode,
-): string {
-  if (loading) {
-    return '読み込み中';
-  }
-
-  if (mode === 'setup') {
-    return '初回設定';
-  }
-
-  if (mode === 'unavailable') {
-    return '使えないページ';
-  }
-
-  if (!state) {
-    return 'まだ翻訳していません';
-  }
-
-  if (state.status === 'failed') {
-    return '翻訳に失敗しました';
-  }
-
-  if (state.status === 'completed_with_warnings') {
-    return '一部そのまま残っています';
-  }
-
-  if (state.status === 'cancelled') {
-    return '停止しました';
-  }
-
-  if (state.status === 'lazy') {
-    return `必要なところから ${state.progressPercent}%`;
-  }
-
-  if (ACTIVE_STATUSES.has(state.status)) {
-    return `${translateStatus(state.status)} ${state.progressPercent}%`;
-  }
-
-  switch (state.displayState) {
-    case 'translated':
-      return '翻訳を表示中';
-    case 'bilingual':
-      return '対訳を表示中';
-    case 'mixed':
-      return '一部だけ翻訳中';
-    default:
-      return '原文を表示中';
-  }
-}
-
-function getStateTone(
-  state: TabSessionState | null,
-  mode: PopupMode,
-): 'original' | 'translated' | 'mixed' | 'setup' | 'warning' {
-  if (mode === 'setup') {
-    return 'setup';
-  }
-
-  if (mode === 'unavailable') {
-    return 'warning';
-  }
-
-  if (state?.status === 'completed_with_warnings') {
-    return 'warning';
-  }
-
-  const ds = state?.displayState;
-  if (ds === 'bilingual') return 'translated';
-  return ds || 'original';
 }
 
 function translateStatus(status: string): string {
   switch (status) {
-    case 'scanning':
-      return '読み取り中';
-    case 'queued':
-      return '準備中';
-    case 'translating':
-      return '翻訳中';
-    case 'retrying':
-      return '再試行中';
-    case 'lazy':
-      return '続き待ち';
-    default:
-      return status;
+    case 'scanning': return '読み取り中';
+    case 'queued': return '準備中';
+    case 'translating': return '翻訳中';
+    case 'retrying': return '再試行中';
+    case 'lazy': return '続き待ち';
+    default: return status;
   }
 }
 
-async function getActiveTabInfo(): Promise<ActiveTabInfo> {
+async function getActiveTabInfo(): Promise<{ id: number | null; url: string | null }> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  return {
-    id: tabs[0]?.id ?? null,
-    url: tabs[0]?.url ?? null,
-  };
+  return { id: tabs[0]?.id ?? null, url: tabs[0]?.url ?? null };
 }
 
 function isSupportedPageUrl(url: string | null): boolean {
-  if (!url) {
-    return false;
-  }
-
-  const blockedPrefixes = ['chrome://', 'chrome-extension://', 'edge://', 'about:'];
-  return !blockedPrefixes.some((prefix) => url.startsWith(prefix));
+  if (!url) return false;
+  return !['chrome://', 'chrome-extension://', 'edge://', 'about:'].some((p) => url.startsWith(p));
 }
 
 function formatEstimatedCost(cost: number): string {
-  if (cost === 0) {
-    return '0.1円未満';
-  }
-
-  const approxJpy = cost * APPROX_JPY_PER_USD;
-
-  if (approxJpy < 0.1) {
-    return '0.1円未満';
-  }
-
-  if (approxJpy < 1) {
-    return '1円未満';
-  }
-
-  if (approxJpy < 10) {
-    return `約${approxJpy.toFixed(1)}円`;
-  }
-
-  return `約${Math.round(approxJpy)}円`;
+  if (cost === 0) return '0.1円未満';
+  const jpy = cost * APPROX_JPY_PER_USD;
+  if (jpy < 0.1) return '0.1円未満';
+  if (jpy < 1) return '1円未満';
+  if (jpy < 10) return `約${jpy.toFixed(1)}円`;
+  return `約${Math.round(jpy)}円`;
 }
 
 function formatTabMessagingError(error: unknown, fallback: string): string {
-  if (!(error instanceof Error)) {
-    return fallback;
+  if (!(error instanceof Error)) return fallback;
+  if (error.message.includes('Receiving end does not exist') || error.message.includes('Could not establish connection')) {
+    return 'このページでは使えません。通常の Web ページで試してください。';
   }
-
-  if (
-    error.message.includes('Receiving end does not exist') ||
-    error.message.includes('Could not establish connection')
-  ) {
-    return 'このページでは使えません。Chrome の設定画面や拡張ページではなく、通常の Web ページで試してください。';
-  }
-
   return localizeMessage(error.message);
 }
 
 function localizeMessage(message: string): string {
-  if (MESSAGE_MAP[message]) {
-    return MESSAGE_MAP[message];
-  }
-
-  const localizedRuntimeError = localizeRuntimeError(message);
-  if (localizedRuntimeError !== '翻訳に失敗しました。') {
-    return localizedRuntimeError;
-  }
-
-  const translatedCount = message.match(/^Translated (\d+) selected blocks\.$/);
-  if (translatedCount) {
-    return `選択した ${translatedCount[1]} 箇所を翻訳しました。`;
-  }
-
-  const retranslatedCount = message.match(/^Re-translated (\d+) selected blocks\.$/);
-  if (retranslatedCount) {
-    return `選択した ${retranslatedCount[1]} 箇所を新しく翻訳しました。`;
-  }
-
+  if (MESSAGE_MAP[message]) return MESSAGE_MAP[message];
+  const localized = localizeRuntimeError(message);
+  if (localized !== '翻訳に失敗しました。') return localized;
+  const m1 = message.match(/^Translated (\d+) selected blocks\.$/);
+  if (m1) return `選択した ${m1[1]} 箇所を翻訳しました。`;
+  const m2 = message.match(/^Re-translated (\d+) selected blocks\.$/);
+  if (m2) return `選択した ${m2[1]} 箇所を新しく翻訳しました。`;
   return message;
 }
 
-function buildWarningLead(
-  warningSummary: NonNullable<TabSessionState['warnings']>,
-): string {
-  if (warningSummary.errorBlocks > 0) {
-    return `${warningSummary.totalBlocks}箇所は確認が必要です`;
-  }
-
-  return `${warningSummary.totalBlocks}箇所は原文のまま残っています`;
-}
-
-function buildWarningSummaryText(
-  warningSummary: NonNullable<TabSessionState['warnings']>,
-): string {
-  if (warningSummary.errorBlocks > 0 && warningSummary.fallbackSourceBlocks > 0) {
-    return `原文のまま残った箇所が ${warningSummary.fallbackSourceBlocks} 件、再確認が必要な箇所が ${warningSummary.errorBlocks} 件あります。`;
-  }
-
-  if (warningSummary.errorBlocks > 0) {
-    return `再確認が必要な箇所が ${warningSummary.errorBlocks} 件あります。`;
-  }
-
-  return `原文のまま残った箇所が ${warningSummary.fallbackSourceBlocks} 件あります。`;
-}
-
 function isTabSessionUpdatedMessage(message: unknown): message is TabSessionUpdatedMessage {
-  if (typeof message !== 'object' || message === null) {
-    return false;
-  }
-
-  const candidate = message as Partial<TabSessionUpdatedMessage>;
-  return candidate.type === 'TAB_SESSION_UPDATED' && candidate.state?.tabId !== undefined;
+  if (typeof message !== 'object' || message === null) return false;
+  const c = message as Partial<TabSessionUpdatedMessage>;
+  return c.type === 'TAB_SESSION_UPDATED' && c.state?.tabId !== undefined;
 }
