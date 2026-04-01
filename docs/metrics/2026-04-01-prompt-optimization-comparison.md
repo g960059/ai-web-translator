@@ -150,17 +150,55 @@ Issues found: eval script captured comparison report instead of translation text
 - Heading formatting consistently correct
 - **Verdict: Keep as default**
 
-## Decision
+## Round 1 Decision
 
-**Original prompt retained.** No prompt changes adopted.
+Original prompt retained over A/B/C candidates (content-changing variants).
 
-Token savings from shortening do not compensate for:
-- Heading structure corruption (A, B)
-- Terminology errors (B)
-- Evaluator disagreement indicating instability (B)
+## Round 2: Content-Preserving Shortening (V1/V2/V3)
 
-## Future Considerations
+Tested 3 variants that preserve all instructions but shorten wording only.
 
-- Add `p=preceding context (do NOT re-translate p content)` to reduce duplicate translation (Opus Issue 3 finding)
-- Fix See also LI items being filtered by short-ASCII boilerplate check
-- Consider re-testing Candidate C with fixed eval pipeline
+### Prompt Variants
+
+**V1 (-15% tokens)** — Adopted as new default:
+- Fragment instruction shortened, marker instruction 2→1 sentence
+- Role instructions 4 sentences → semicolon-delimited
+- Glossary hedge removed, redundant completeness sentence removed
+
+**V2 (-47% tokens)** — Not adopted:
+- Merged hintShape + fragmentObject + contentMode into single line
+- Eliminated separate HTML/text return paths
+- Marker/role/completeness further compressed
+
+**V3 (-56% tokens)** — Not adopted:
+- Maximum compression using semicolons/commas
+- Arrow notation for roles (heading→concise)
+- Single unified return path
+
+### Performance
+
+| Variant | fast time | fast reqs | accurate time | accurate reqs |
+|---------|:--------:|:---------:|:------------:|:------------:|
+| V1 | 102s | 44 | 84s | 42 |
+| V2 | **77s** | **37** | 107s | 43 |
+| V3 | 142s | 53 | 151s | 61 |
+
+### Quality (Opus + Codex average)
+
+| Variant | Opus | Codex | Combined |
+|---------|:----:|:-----:|:--------:|
+| **V1** | 8.25 | 7.75 | **8.00** |
+| V2 | 7.75 | 6.50 | 7.13 |
+| V3 | 7.25 | 4.75 | 6.00 |
+
+### Round 2 Decision
+
+**V1 adopted** (commit 8ccf942). Quality identical to Original with -7.5% prompt tokens, -17% fast translation time, -29% markerFallback.
+
+V2 rejected: fast was fastest (77s) but accurate had quality issues (noun drops, sentence truncation). Codex scored accurate at 6.0/10.
+
+V3 rejected: over-compressed, heading structure corruption (title/breadcrumb leak into body text), slower than V1 despite fewer tokens (142s vs 102s due to 5 batch splits).
+
+## Final State
+
+Production prompt = V1 (minor shortening from original). All instructions preserved, wording tightened ~15%.
