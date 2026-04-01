@@ -850,10 +850,13 @@ export class TranslationController {
     const settings = await this.resolveSettings(providedSettings);
     const records = this.collectPageScan(settings.resolvedScope).records;
     await this.clearCacheForRecords(records, settings);
-    this.restoreRecords(records);
+    // Clear translatedContent BEFORE restoreRecords so that
+    // refreshDisplayState (called inside restoreRecords) correctly
+    // recomputes hasTranslations as false.
     records.forEach((record) => {
       record.translatedContent = null;
     });
+    this.restoreRecords(records);
     this.pageScans.clear();
 
     this.setSnapshot({

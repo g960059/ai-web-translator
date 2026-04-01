@@ -283,9 +283,11 @@ export function PopupApp() {
   async function handleCancelTranslation(): Promise<void> {
     setWorking(true);
     try {
-      await chrome.runtime.sendMessage({ type: 'CANCEL_TRANSLATION' });
+      // Send to content script (not background) to properly cancel lazy session
+      const response = await runContentAction({ type: 'CANCEL_TRANSLATION' });
+      if (!response) return; // runContentAction already showed error
       if (activeTabId !== null) await refreshTabState(activeTabId);
-      showStatus('翻訳を止めました。', 'info');
+      showStatus(response.message || '翻訳を止めました。', response.ok === false ? 'error' : 'info');
     } finally {
       setWorking(false);
     }
