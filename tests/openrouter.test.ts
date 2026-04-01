@@ -326,7 +326,7 @@ describe('translateWithOpenRouter', () => {
       f?: string[];
     };
 
-    expect(systemPrompt).toContain('Follow g (glossary) entries for consistent terminology');
+    expect(systemPrompt).toContain('Follow g entries for consistent terminology');
     expect(userPayload.s).toBe('Mathematics > Algebra');
     expect(userPayload.g).toEqual([
       {
@@ -416,7 +416,7 @@ describe('translateWithOpenRouter', () => {
 
     expect(systemPrompt).toContain('[[t0]]');
     expect(systemPrompt).toContain('[[x0]]');
-    expect(systemPrompt).toContain('must appear exactly once');
+    expect(systemPrompt).toContain('same count and order');
   });
 
   it('includes page register, fragment roles, and continuation context in the request contract', async () => {
@@ -454,8 +454,8 @@ describe('translateWithOpenRouter', () => {
     const userPayload = JSON.parse(String(messages[1]?.content ?? '[]')) as Array<Record<string, string>>;
 
     expect(systemPrompt).toContain('Japanese register: dearu');
-    expect(systemPrompt).toContain('r=label');
-    expect(systemPrompt).toContain('Do not add Japanese sentence punctuation to labels');
+    expect(systemPrompt).toContain('Roles:');
+    expect(systemPrompt).toContain('label=structural label (no sentence punctuation)');
     expect(userPayload).toEqual([
       { t: 'Remark.', r: 'label' },
       { t: 'The statement continues here.', r: 'prose', p: 'Remark.' },

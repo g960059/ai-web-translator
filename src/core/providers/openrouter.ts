@@ -45,27 +45,22 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       : 'Input is JSON array.';
   const hintInstruction = hasHints
     ? [
-        request.sectionContext ? 'Use s as context for the section topic.' : null,
+        request.sectionContext ? 'Use s for section context.' : null,
         request.glossary?.length
-          ? 'Follow g (glossary) entries for consistent terminology unless the context clearly demands otherwise.'
+          ? 'Follow g entries for consistent terminology.'
           : null,
       ]
         .filter(Boolean)
         .join(' ') || null
     : null;
   const fragmentObjectInstruction = usesFragmentObjects
-    ? 'Each fragment object uses t=source text, optional i=id, optional r=role, optional p=preceding context.'
+    ? 'Each fragment: t=source, optional i=id, r=role, p=preceding context.'
     : null;
   const markerInstruction = request.hasProtectedMarkers
-    ? 'Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged. Every marker from the source fragment must appear exactly once in the translation, in the same order.'
+    ? 'Preserve all [[t0]], [[/t0]], [[x0]] markers exactly, same count and order.'
     : null;
   const roleInstruction = hasFragmentRoles
-    ? [
-        'If r=heading, translate it as a concise section heading.',
-        'If r=label, translate it as a structural label, not as a full sentence. Do not add Japanese sentence punctuation to labels.',
-        'If r=list-item, translate it as a list entry, preserving the item structure.',
-        'If r=caption, translate it as a short descriptive caption.',
-      ].join(' ')
+    ? 'Roles: heading=concise heading; label=structural label (no sentence punctuation); list-item=list entry; caption=short caption.'
     : null;
   if (request.contentMode === 'html') {
     return [
@@ -73,7 +68,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       hintShape,
       fragmentObjectInstruction,
       'Each fragment is HTML.',
-      'Keep tags, URLs, emphasis, and inline math intact.',
+      'Keep tags, URLs, and inline math intact.',
       buildStyleInstruction(request),
       hintInstruction,
       markerInstruction,
@@ -81,7 +76,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       hasFragmentIds
         ? 'Return JSON: {"translations":[{"i":"0","t":"<html>"},{"i":"1","t":"<html>"}]}.'
         : 'Return JSON: {"translations":["<html>","<html>"]}.',
-      'Translate every fragment completely. Never leave a source-language sentence or clause untranslated. Never mix source and target languages in the same sentence.',
+      'Translate every fragment completely. Do not leave source text untranslated.',
       hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. No prose.',
     ]
       .filter(Boolean)
@@ -97,7 +92,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     hintInstruction,
     markerInstruction,
     roleInstruction,
-    'Translate every fragment completely. Never leave a source-language sentence or clause untranslated. Never mix source and target languages in the same sentence.',
+    'Translate every fragment completely. Do not leave source text untranslated.',
     hasFragmentIds
       ? 'Return JSON: {"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}.'
       : 'Return JSON: {"translations":["...","..."]}.',
