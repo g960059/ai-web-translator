@@ -2862,6 +2862,9 @@ export class TranslationController {
     content = content.replace(/\[\[\/?[tx]\d+\]\]/gi, '');
     // Normalize double punctuation produced by models
     content = content.replace(/。{2,}/g, '。');
+    // Remove orphan sentence-final punctuation at the start of text
+    // (caused by MathML boundary splitting: "。巡回群の..." → "巡回群の...")
+    content = content.replace(/^[。．.]\s*/u, '');
     // Remove duplicate adjacent sentences (model sometimes repeats the same
     // definition in two slightly different phrasings)
     content = deduplicateAdjacentSentences(content);
@@ -4611,9 +4614,19 @@ function tightenProtectedMarkerSpacing(content: string, targetLanguage: string):
     return content;
   }
 
-  return content
+  // Remove spaces around markers for CJK, but preserve a space between
+  // a particle (を、は、が、に etc.) and a marker when the marker is followed
+  // by another particle (の、に、で etc.). Without this, "V を [[x1]] の表現"
+  // becomes "Vを[[x1]]の表現" → "Vをの表現" after marker restoration.
+  let result = content
     .replace(/\s*(\[\[(?:\/?t\d+|x\d+)\]\])\s*/gi, '$1')
     .replace(/\s+([。、！？])/g, '$1');
+  // Re-insert space: particle + marker + particle → particle + space + marker
+  result = result.replace(
+    /([はがをにもへや])(\[\[(?:x\d+)\]\])([のにでがをはもへ])/gi,
+    '$1 $2$3',
+  );
+  return result;
 }
 
 function hasAllProtectedMarkers(

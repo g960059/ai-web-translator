@@ -54,7 +54,7 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
         .join(' ') || null
     : null;
   const fragmentObjectInstruction = usesFragmentObjects
-    ? 'Each fragment object uses t=source text, optional i=id, optional r=role, optional p=preceding context.'
+    ? 'Each fragment: t=source text, i=id, r=role, p=preceding context (reference only — do not re-translate p content).'
     : null;
   const markerInstruction = request.hasProtectedMarkers
     ? 'Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged. Every marker from the source fragment must appear exactly once in the translation, in the same order.'

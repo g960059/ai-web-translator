@@ -243,11 +243,15 @@ function isBoilerplateBlock(
     return false;
   }
 
-  if (
-    normalized.length <= 18 &&
-    /^[a-z0-9\s\-_/|]+$/i.test(normalized) &&
-    element.tagName !== 'P'
-  ) {
+  if (normalized.length <= 18 && /^[a-z0-9\s\-_/|]+$/i.test(normalized) && element.tagName !== 'P') {
+    // Exempt LI items inside "See also" sections — they are short link texts
+    // like "Character theory" that should be translated.
+    if (element.tagName === 'LI') {
+      const heading = findNearestHeadingText(element);
+      if (heading && SEE_ALSO_HEADING_PATTERN.test(heading.replace(/\[edit\]/gi, '').trim().toLowerCase())) {
+        return false;
+      }
+    }
     return true;
   }
 
