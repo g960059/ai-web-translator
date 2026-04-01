@@ -1078,11 +1078,10 @@ function isNonReaderSectionBlock(element: HTMLElement): boolean {
     return false;
   }
 
-  // "See also" section list items are short navigational links worth translating
-  if (
-    SEE_ALSO_HEADING_PATTERN.test(heading) &&
-    (element.tagName === 'LI' || element.tagName === 'UL')
-  ) {
+  // "See also" section list items are short navigational links worth translating.
+  // Only exempt LI (not UL) — UL as a merged block sends raw HTML that leaves
+  // link text untranslated.
+  if (SEE_ALSO_HEADING_PATTERN.test(heading) && element.tagName === 'LI') {
     return false;
   }
 

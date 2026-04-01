@@ -320,6 +320,39 @@ function lookupCommonHeading(sourceText: string, targetLanguage: string): string
   return dict[key] ?? null;
 }
 
+function deduplicateAdjacentSentences(text: string): string {
+  const sentences = text.split(/(?<=[。！？])\s*/);
+  if (sentences.length <= 1) {
+    return text;
+  }
+
+  const result: string[] = [sentences[0]];
+  for (let i = 1; i < sentences.length; i++) {
+    const prev = result[result.length - 1];
+    const curr = sentences[i];
+    if (!curr || areSimilarSentences(prev, curr)) {
+      continue;
+    }
+    result.push(curr);
+  }
+
+  return result.join('');
+}
+
+function areSimilarSentences(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const na = a.replace(/\s+/g, '');
+  const nb = b.replace(/\s+/g, '');
+  if (na === nb) return true;
+  const shorter = Math.min(na.length, nb.length);
+  if (shorter < 15) return false;
+  let matches = 0;
+  for (let i = 0; i < shorter; i++) {
+    if (na[i] === nb[i]) matches++;
+  }
+  return matches / shorter > 0.75;
+}
+
 function looksUntranslatedShortText(translatedText: string, sourceText: string): boolean {
   const stripNoise = (text: string) =>
     text.replace(/<[^>]+>/g, '').replace(/\[edit\]/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -2829,6 +2862,9 @@ export class TranslationController {
     content = content.replace(/\[\[\/?[tx]\d+\]\]/gi, '');
     // Normalize double punctuation produced by models
     content = content.replace(/。{2,}/g, '。');
+    // Remove duplicate adjacent sentences (model sometimes repeats the same
+    // definition in two slightly different phrasings)
+    content = deduplicateAdjacentSentences(content);
 
     group.records.forEach((record) => {
       if (record.contentMode === 'text') {
