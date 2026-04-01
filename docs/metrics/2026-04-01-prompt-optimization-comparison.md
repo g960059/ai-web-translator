@@ -13,6 +13,77 @@ Compared 4 system prompt variants on Wikipedia "Representation theory of finite 
 | **B** | Balanced shortening | -25% | English |
 | **C** | Restructured (output-first) | -37% | Japanese |
 
+## Prompt Text (text mode, all conditions active)
+
+### Original (Current Production)
+
+```
+Translate en -> ja.
+Input is JSON object {"s","g","f"}.
+Each fragment object uses t=source text, optional i=id, optional r=role, optional p=preceding context.
+Each fragment is plain text.
+Style: fluent expository prose that reads naturally on the page. Japanese register: dearu. Do not mix dearu and desu-masu styles.
+Use s as context for the section topic. Follow g (glossary) entries for consistent terminology unless the context clearly demands otherwise.
+Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged. Every marker from the source fragment must appear exactly once in the translation, in the same order.
+If r=heading, translate it as a concise section heading. If r=label, translate it as a structural label, not as a full sentence. Do not add Japanese sentence punctuation to labels. If r=list-item, translate it as a list entry, preserving the item structure. If r=caption, translate it as a short descriptive caption.
+Translate every fragment completely. Never leave a source-language sentence or clause untranslated. Never mix source and target languages in the same sentence.
+Return JSON: {"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}.
+Same ids, same count. No prose.
+```
+
+### Candidate A — Aggressive Japanese Shortening (-50% tokens)
+
+```
+en→jaに翻訳せよ。
+入力: JSON {"s":セクション文脈,"g":用語集,"f":フラグメント配列}。各フラグメント: {t:原文, i:ID, r:役割, p:前文脈}。
+文体: 自然なである調(敬体混在禁止)。gの用語に従うこと。
+マーカー([[t0]]等)は原文と同一の順序・個数で保持。
+r=heading→簡潔な見出し、r=label→ラベル(句点不要)、r=list-item→箇条書き、r=caption→短い説明文。
+全文を完訳し原語を残すな。
+出力JSON: {"translations":[{"i":"0","t":"..."},...]}。ID・個数一致。説明文不要。
+```
+
+Issues found: heading structure corruption (breadcrumb leak), Peter-Weyl heading turned into body text (fast preset), book title over-translation.
+
+### Candidate B — Balanced English Shortening (-25% tokens)
+
+```
+Translate en -> ja.
+Input is {"s","g","f"}; each f item is {"t","i?","r?","p?"}, and t is plain text.
+Use s for section context, p for local continuity, and g for terminology consistency unless context clearly requires otherwise.
+Style: fluent expository prose that reads naturally on the page. Japanese register: dearu. Do not mix dearu and desu-masu styles.
+Preserve protected markers such as [[t0]], [[/t0]], and [[x0]] exactly unchanged, once each, in source order.
+Role rules: heading=concise heading; label=structural label, not a full sentence, no Japanese sentence punctuation; list-item=preserve item structure; caption=short descriptive caption.
+Translate every fragment completely. Do not leave source-language text untranslated.
+Return only JSON: {"translations":[{"i":"...","t":"..."}]}. Keep the same ids and fragment count.
+```
+
+Issues found: large evaluator disagreement (Opus 8.50 vs Codex 6.40), terminology errors in accurate preset ("対合的既約表現").
+
+### Candidate C — Restructured Japanese, Output-First (-37% tokens)
+
+```
+## 出力形式(厳守)
+{"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}
+- ID・個数は入力フラグメントと完全一致
+- JSON以外の文章・説明は一切出力しない
+
+## タスク
+en→jaへ全フラグメントを完訳する。原語を訳文に混ぜない。
+
+## 入力形式
+JSON {"s":セクション文脈, "g":用語集, "f":フラグメント配列}
+フラグメント: {t:原文, i:ID, r:役割, p:前文脈}。各フラグメントはプレーンテキスト。
+
+## 翻訳ルール
+1. 文体: 自然なである調の説明文。です・ます調を混ぜない。
+2. gの用語を一貫して使用。sはセクション話題の参考情報。
+3. マーカー([[t0]], [[/t0]], [[x0]]等)は原文と同じ順序・個数で保持。
+4. 役割別処理: heading→簡潔な見出し / label→構造ラベル(句点不要) / list-item→箇条書き / caption→短い説明文。
+```
+
+Issues found: eval script captured comparison report instead of translation text (Codex rated 1.0/10), "完備" mistranslation in fast preset (should be "完全").
+
 ## Performance Metrics
 
 | Candidate | Preset | Time | Requests | markerFallback | Status |
