@@ -1792,21 +1792,38 @@ export class TranslationController {
               });
             } catch (error) {
               if (shouldFallbackToOriginalBatch(batch, error)) {
-                usedSourceFallback = true;
-                sourceFallbackMessage = getErrorMessage(error, 'Translation request failed.');
-                logWithContext('warn', '[AI Web Translator] Falling back to source fragment after output-limit failure.', {
-                  pageKey: this.pageKey,
-                  sessionId: options.sessionId,
-                  contentMode: batch[0]?.contentMode ?? 'unknown',
-                  fragmentLength: batch[0]?.preparedContent.length ?? 0,
-                });
-                this.recordQualitySignal('sourceFallbackFragments', batch.length);
-                batch.forEach((item) => {
-                  pendingFallbackWarnings.set(item.group.groupKey, sourceFallbackMessage ?? undefined);
-                });
-                result = {
-                  translations: batch.map((item) => item.preparedContent),
-                };
+                // Before giving up, retry once with doubled max_tokens.
+                // A 26-char fragment hitting the output limit is usually a
+                // max_tokens estimation issue, not a genuine content problem.
+                try {
+                  result = await this.requestTranslationsWithRetry({
+                    items: batch,
+                    settings: options.settings,
+                    context: options.context,
+                    runtimeState: options.runtimeState,
+                    sessionId: options.sessionId,
+                    overlayMessage: '出力制限を回避して再試行中…',
+                    showOverlay: options.showOverlay,
+                    metricsPhase: options.metricsPhase,
+                    maxOutputTokensOverride: 16000,
+                  });
+                } catch {
+                  usedSourceFallback = true;
+                  sourceFallbackMessage = getErrorMessage(error, 'Translation request failed.');
+                  logWithContext('warn', '[AI Web Translator] Falling back to source fragment after output-limit failure.', {
+                    pageKey: this.pageKey,
+                    sessionId: options.sessionId,
+                    contentMode: batch[0]?.contentMode ?? 'unknown',
+                    fragmentLength: batch[0]?.preparedContent.length ?? 0,
+                  });
+                  this.recordQualitySignal('sourceFallbackFragments', batch.length);
+                  batch.forEach((item) => {
+                    pendingFallbackWarnings.set(item.group.groupKey, sourceFallbackMessage ?? undefined);
+                  });
+                  result = {
+                    translations: batch.map((item) => item.preparedContent),
+                  };
+                }
               } else {
                 throw error;
               }
@@ -2168,6 +2185,7 @@ export class TranslationController {
     context: TranslationContext,
     runtimeState: TranslationRuntimeState,
     sessionId: string,
+    overrides?: { maxOutputTokens?: number },
   ): Promise<TranslationRequestResult> {
     this.throwIfSessionCancelled(sessionId);
     const requestFragments = items.map((item) => item.preparedContent);
@@ -2205,7 +2223,7 @@ export class TranslationController {
       sectionContext: resolveBatchSectionContext(items),
       glossary: buildGlossaryHints(runtimeState, items),
       hasProtectedMarkers,
-      maxOutputTokens: estimateCompletionTokensForBatch(
+      maxOutputTokens: overrides?.maxOutputTokens ?? estimateCompletionTokensForBatch(
         batchEstimate,
         runtimeState.calibration,
       ),
@@ -2257,6 +2275,7 @@ export class TranslationController {
     overlayMessage: string;
     showOverlay: boolean;
     metricsPhase: 'immediate' | 'lazyVisible' | 'deferred';
+    maxOutputTokensOverride?: number;
   }): Promise<TranslationRequestResult> {
     let attempt = 0;
 
@@ -2329,6 +2348,7 @@ export class TranslationController {
           options.context,
           options.runtimeState,
           options.sessionId,
+          options.maxOutputTokensOverride ? { maxOutputTokens: options.maxOutputTokensOverride } : undefined,
         );
         if (options.metricsPhase === 'immediate' && requestStartedAt > 0) {
           this.recordImmediateBatchLatency(
