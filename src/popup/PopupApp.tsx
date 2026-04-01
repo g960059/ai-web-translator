@@ -406,13 +406,13 @@ export function PopupApp() {
             <span>キャッシュを使う</span>
           </label>
 
-          {activeTabUrl && canTranslateCurrentPage && (
+          {activeTabUrl && canTranslateCurrentPage && hasPageTranslation && (
             <div className="cache-page-item">
               <div className="cache-page-info">
                 <a className="cache-page-url" href={activeTabUrl} target="_blank" rel="noreferrer" title={activeTabUrl}>
                   {formatPageUrl(activeTabUrl)}
                 </a>
-                {hasPageTranslation && <span className="cache-current-badge">翻訳済み</span>}
+                <span className="cache-current-badge">翻訳済み</span>
               </div>
               <button className="button button-muted cache-delete-button" onClick={() => void handleClearPageCache()} disabled={working}>
                 削除
