@@ -280,6 +280,17 @@ export function PopupApp() {
     if (response.ok) setTabState(response.state ?? null);
   }
 
+  async function handleCancelTranslation(): Promise<void> {
+    setWorking(true);
+    try {
+      await chrome.runtime.sendMessage({ type: 'CANCEL_TRANSLATION' });
+      if (activeTabId !== null) await refreshTabState(activeTabId);
+      showStatus('翻訳を止めました。', 'info');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   const primaryLabel = getPrimaryLabel({ missingApiKey, hasPageTranslation, canResumeCancelledTranslation, isActive, tabState });
   const currentPreset = MODEL_PRESETS[settings.modelPreset];
 
@@ -363,9 +374,15 @@ export function PopupApp() {
 
               {/* Primary Action */}
               <div className="primary-actions">
-                <button className="button button-primary" onClick={() => void handlePrimaryAction()} disabled={working || loading}>
-                  {primaryLabel}
-                </button>
+                {popupMode === 'active' ? (
+                  <button className="button button-danger" onClick={() => void handleCancelTranslation()} disabled={working || loading}>
+                    翻訳を停止する
+                  </button>
+                ) : (
+                  <button className="button button-primary" onClick={() => void handlePrimaryAction()} disabled={working || loading}>
+                    {primaryLabel}
+                  </button>
+                )}
                 {hasSelection && !missingApiKey && (
                   <button className="button button-secondary" onClick={() => void handleSelectionTranslation(false)} disabled={working || loading}>
                     この部分だけ読む
