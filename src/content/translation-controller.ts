@@ -2827,6 +2827,8 @@ export class TranslationController {
 
     // Strip any residual protected markers that leaked through restoration
     content = content.replace(/\[\[\/?[tx]\d+\]\]/gi, '');
+    // Normalize double punctuation produced by models
+    content = content.replace(/。{2,}/g, '。');
 
     group.records.forEach((record) => {
       if (record.contentMode === 'text') {

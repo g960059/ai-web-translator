@@ -924,11 +924,26 @@ function coalesceProtectedPiecesWithMarkerBudget(
     const piece = pieces[i];
     const pieceMarkers = countProtectedMarkers(piece);
 
-    // If adding this piece would exceed the marker budget, flush first
-    if (currentMarkers > 0 && currentMarkers + pieceMarkers > maxMarkersPerUnit && current) {
-      units.push(current);
-      current = '';
-      currentMarkers = 0;
+    // If adding this piece would exceed the marker budget, flush first —
+    // but only if the current piece is a marker. Don't flush before a text
+    // piece that follows a marker, as that would split "is a basis of [[x0]]".
+    if (
+      currentMarkers > 0 &&
+      currentMarkers + pieceMarkers > maxMarkersPerUnit &&
+      current &&
+      pieceMarkers > 0
+    ) {
+      // Only flush if the piece after this marker has substantial text
+      // (not just trailing punctuation). If the marker is sentence-final
+      // like "basis of [[x0]].", keep it attached.
+      const pieceAfterThis = i + 1 < pieces.length ? pieces[i + 1] : null;
+      const afterIsSubstantial = pieceAfterThis &&
+        pieceAfterThis.replace(/[\s.。!?！？,，;；:：)\]}/]+/g, '').length > 3;
+      if (afterIsSubstantial) {
+        units.push(current);
+        current = '';
+        currentMarkers = 0;
+      }
     }
 
     current = current ? concatenatePlaceholderPieces(current, piece) : piece;
@@ -937,9 +952,16 @@ function coalesceProtectedPiecesWithMarkerBudget(
     if (endsPlaceholderSentenceUnit(piece)) {
       const nextPiece = i + 1 < pieces.length ? pieces[i + 1] : null;
       const nextIsMarker = nextPiece && isProtectedMarkerPiece(nextPiece);
-      // Keep the marker attached if it won't exceed the budget
-      if (nextIsMarker && currentMarkers + 1 <= maxMarkersPerUnit) {
-        continue; // Don't split — keep accumulating
+      if (nextIsMarker) {
+        // Check what follows the marker — if it's just punctuation or
+        // nothing, the marker is a sentence-final variable (e.g., "basis of [[x0]].")
+        // and MUST stay attached even if it exceeds the marker budget.
+        const pieceAfterMarker = i + 2 < pieces.length ? pieces[i + 2] : null;
+        const afterMarkerIsTrailing = !pieceAfterMarker ||
+          pieceAfterMarker.replace(/[\s.。!?！？,，;；:：)\]}/]+/g, '').length <= 3;
+        if (afterMarkerIsTrailing || currentMarkers + 1 <= maxMarkersPerUnit) {
+          continue; // Don't split — keep accumulating
+        }
       }
       units.push(current);
       current = '';
