@@ -5147,20 +5147,18 @@ function shouldSplitBatchAfterFailure(error: unknown): boolean {
   }
 
   const lowerMessage = getErrorMessage(error, '').trim().toLowerCase();
-  return lowerMessage.includes('invalid translations payload');
+  return lowerMessage.includes('invalid translations payload') ||
+    lowerMessage.includes('output limit');
 }
 
 function shouldFallbackToOriginalBatch(
-  batch: TranslationBatchItem[],
+  _batch: TranslationBatchItem[],
   error: unknown,
 ): boolean {
-  // Only fall back for single-item batches. Multi-item batches are split
-  // by requestTranslationsWithRetry; the 16000-token retry is now handled
-  // inside the split path for individual unsplittable fragments.
-  if (batch.length !== 1) {
-    return false;
-  }
-
+  // Allow fallback for any batch size to prevent session crashes.
+  // For multi-item batches this is a last resort after splitting failed.
+  // Single-item unsplittable fragments get a 16000-token retry first
+  // (inside requestTranslationsWithRetry) before reaching this path.
   return (
     error instanceof OutputLimitTranslationError ||
     getErrorMessage(error, '').trim().toLowerCase().includes('output limit')
