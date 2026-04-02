@@ -5014,7 +5014,7 @@ function splitSingleItemForRetry(item: TranslationBatchItem | undefined): Transl
         )
       : splitHtmlIntoSafeSegments(
           item.preparedContent,
-          Math.max(240, Math.floor(item.preparedContent.length / 2)),
+          Math.max(120, Math.floor(item.preparedContent.length / 2)),
         );
 
   if (segments.length < 2) {

@@ -18,9 +18,9 @@ interface OpenRouterModelsResponse {
 
 export const OPENROUTER_REQUEST_TIMEOUT_MS = 30_000;
 export const OPENROUTER_WARMUP_TIMEOUT_MS = 8_000;
-const OPENROUTER_MAX_OUTPUT_TOKENS_MIN = 192;
-const OPENROUTER_MAX_OUTPUT_TOKENS_MAX = 10000;
-const OPENROUTER_MAX_OUTPUT_TOKENS_HEADROOM = 1.45;
+const OPENROUTER_MAX_OUTPUT_TOKENS_MIN = 400;
+const OPENROUTER_MAX_OUTPUT_TOKENS_MAX = 16000;
+const OPENROUTER_MAX_OUTPUT_TOKENS_HEADROOM = 1.65;
 
 function buildSystemPrompt(request: TranslationBatchRequest): string {
   const sourceLanguage =
@@ -530,13 +530,15 @@ export async function translateWithOpenRouter(
 }
 
 function buildMaxOutputTokens(request: TranslationBatchRequest): number {
-  const estimatedCompletionTokens =
-    request.maxOutputTokens ??
-    estimateCompletionTokensForBatch({
-      contentMode: request.contentMode,
-      preparedChars: request.fragments.reduce((sum, fragment) => sum + fragment.length, 0),
-      fragmentCount: request.fragments.length,
-    });
+  if (request.maxOutputTokens) {
+    return request.maxOutputTokens;
+  }
+
+  const estimatedCompletionTokens = estimateCompletionTokensForBatch({
+    contentMode: request.contentMode,
+    preparedChars: request.fragments.reduce((sum, fragment) => sum + fragment.length, 0),
+    fragmentCount: request.fragments.length,
+  });
 
   return clamp(
     Math.ceil(estimatedCompletionTokens * OPENROUTER_MAX_OUTPUT_TOKENS_HEADROOM),
