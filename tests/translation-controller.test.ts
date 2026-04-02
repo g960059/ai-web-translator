@@ -397,7 +397,8 @@ describe('TranslationController', () => {
       scope: 'main',
     });
     expect(translateResponse.ok).toBe(true);
-    expect(chromeMock.storage.local.get).toHaveBeenCalledTimes(3);
+    // 3 original reads (calibration, cache lookup, cache index) + 1 from page index recording
+    expect(chromeMock.storage.local.get).toHaveBeenCalledTimes(4);
   });
 
   it('sanitizes dangerous html returned by the provider before applying it to the page', async () => {
@@ -2307,7 +2308,8 @@ describe('TranslationController', () => {
       scope: 'main',
     });
 
-    await vi.advanceTimersByTimeAsync(1200);
+    // Advance enough for exponential backoff with jitter (base 1200ms ± 20%)
+    await vi.advanceTimersByTimeAsync(1500);
     const response = await responsePromise;
 
     expect(response.ok).toBe(true);

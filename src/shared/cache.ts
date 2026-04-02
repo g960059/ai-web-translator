@@ -1,7 +1,17 @@
 import { hashString } from './hash';
-import type { ExtensionSettings, TranslationContentMode } from './types';
+import type { DefaultTranslationScope, ExtensionSettings, TranslationContentMode } from './types';
 
 const CACHE_PREFIX = 'translation-cache:v2:';
+const PAGE_INDEX_KEY = 'translation-pages:v1';
+
+export interface PageIndexEntry {
+  url: string;
+  title: string;
+  translatedAt: number;
+  model: string;
+  targetLanguage: string;
+  scope: DefaultTranslationScope;
+}
 const CACHE_INDEX_KEY = `${CACHE_PREFIX}index`;
 const CACHE_SOFT_LIMIT_BYTES = 8 * 1024 * 1024;
 const CACHE_TARGET_BYTES = 7 * 1024 * 1024;
@@ -114,6 +124,46 @@ export async function clearAllTranslationCache(): Promise<void> {
   if (keys.length > 0) {
     await chrome.storage.local.remove(keys);
   }
+  await clearPageIndex();
+}
+
+// --- Page Index (translation history) ---
+// The read-modify-write cycle below is not atomic across content scripts.
+// Concurrent translations in separate tabs can race, causing one entry to be
+// lost. This is accepted as low-impact: the lost entry will be re-recorded
+// the next time that page is translated.
+
+const MAX_PAGE_INDEX_ENTRIES = 200;
+
+export async function getPageIndex(): Promise<Record<string, PageIndexEntry>> {
+  const result = await chrome.storage.local.get(PAGE_INDEX_KEY);
+  return (result[PAGE_INDEX_KEY] as Record<string, PageIndexEntry>) ?? {};
+}
+
+export async function setPageIndexEntry(entry: PageIndexEntry): Promise<void> {
+  const index = await getPageIndex();
+  index[entry.url] = entry;
+  const urls = Object.keys(index);
+  if (urls.length > MAX_PAGE_INDEX_ENTRIES) {
+    const sorted = urls
+      .map((url) => ({ url, at: index[url].translatedAt }))
+      .sort((a, b) => a.at - b.at);
+    const excess = sorted.slice(0, urls.length - MAX_PAGE_INDEX_ENTRIES);
+    for (const { url } of excess) {
+      delete index[url];
+    }
+  }
+  await chrome.storage.local.set({ [PAGE_INDEX_KEY]: index });
+}
+
+export async function removePageIndexEntry(url: string): Promise<void> {
+  const index = await getPageIndex();
+  delete index[url];
+  await chrome.storage.local.set({ [PAGE_INDEX_KEY]: index });
+}
+
+async function clearPageIndex(): Promise<void> {
+  await chrome.storage.local.remove(PAGE_INDEX_KEY);
 }
 
 async function setCachedItemsWithEviction(items: Record<string, string>): Promise<void> {

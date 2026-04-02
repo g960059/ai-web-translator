@@ -73,6 +73,18 @@ if (document.head) {
   });
 }
 
+const URL_POLL_INTERVAL_MS = 1000;
+const urlPollId = window.setInterval(() => {
+  if (window.location.href !== lastObservedUrl) {
+    resetForNavigation();
+  }
+}, URL_POLL_INTERVAL_MS);
+
+const keepAlivePort = chrome.runtime.connect({ name: 'content-keepalive' });
+keepAlivePort.onDisconnect.addListener(() => {
+  window.clearInterval(urlPollId);
+});
+
 patchHistoryMethod('pushState');
 patchHistoryMethod('replaceState');
 

@@ -13,6 +13,7 @@ import {
   languageOptions,
 } from '../shared/languages';
 import { localizeRuntimeError } from '../shared/error-messages';
+import { getPageIndex, removePageIndexEntry, type PageIndexEntry } from '../shared/cache';
 import { DEFAULT_SETTINGS, MODEL_PRESETS, loadSettings, normalizeSettings, saveSettings } from '../shared/settings';
 import type {
   ExtensionSettings,
@@ -73,6 +74,7 @@ export function PopupApp() {
   const [apiKeyValidation, setApiKeyValidation] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [apiKeyError, setApiKeyError] = useState('');
   const [popupView, setPopupView] = useState<PopupView>('translate');
+  const [pageIndex, setPageIndex] = useState<Record<string, PageIndexEntry>>({});
   const activeTabIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -92,6 +94,12 @@ export function PopupApp() {
     const id = window.setTimeout(() => setStatusMessage(''), 3500);
     return () => window.clearTimeout(id);
   }, [statusMessage, statusTone]);
+
+  useEffect(() => {
+    if (popupView === 'cache') {
+      void getPageIndex().then(setPageIndex);
+    }
+  }, [popupView]);
 
   const estimatedCost =
     analysis && models.length > 0
@@ -241,6 +249,14 @@ export function PopupApp() {
       const response = await runContentAction({ type: 'CLEAR_CACHE', settings: ns });
       if (!response) return;
       showStatus(response.message || '', response.ok === false ? 'error' : 'success');
+      if (activeTabUrl) {
+        await removePageIndexEntry(activeTabUrl);
+        setPageIndex((prev) => {
+          const next = { ...prev };
+          delete next[activeTabUrl];
+          return next;
+        });
+      }
       if (activeTabId !== null) await Promise.all([refreshAnalysis(activeTabId, ns), refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
     } finally { setWorking(false); }
   }
@@ -251,9 +267,19 @@ export function PopupApp() {
     try {
       const response = (await chrome.runtime.sendMessage({ type: 'CLEAR_ALL_CACHE' })) as ActionResponse;
       showStatus(response.message || '', response.ok === false ? 'error' : 'success');
+      setPageIndex({});
       if (activeTabId !== null && canTranslateCurrentPage) await refreshAnalysis(activeTabId, normalizeSettings(settings));
       setConfirmClearAll(false);
     } finally { setWorking(false); }
+  }
+
+  async function handleRemoveFromPageIndex(url: string): Promise<void> {
+    await removePageIndexEntry(url);
+    setPageIndex((prev) => {
+      const next = { ...prev };
+      delete next[url];
+      return next;
+    });
   }
 
   async function refreshAnalysis(tabId: number, nextSettings: ExtensionSettings): Promise<void> {
@@ -407,34 +433,59 @@ export function PopupApp() {
           </label>
 
           {activeTabUrl && canTranslateCurrentPage && hasPageTranslation && (
-            <div className="cache-page-item">
+            <div className="cache-page-item cache-page-item-current">
               <div className="cache-page-info">
                 <a className="cache-page-url" href={activeTabUrl} target="_blank" rel="noreferrer" title={activeTabUrl}>
                   {formatPageUrl(activeTabUrl)}
                 </a>
-                <span className="cache-current-badge">翻訳済み</span>
+                <span className="cache-current-badge">現在のページ</span>
               </div>
               <button className="button button-muted cache-delete-button" onClick={() => void handleClearPageCache()} disabled={working}>
-                削除
+                キャッシュ削除
               </button>
             </div>
           )}
 
-          <div className="tertiary-actions">
-          </div>
-
-          {confirmClearAll ? (
-            <div className="confirm-inline">
-              <p className="helper-copy">保存している翻訳をすべて消します。元に戻せません。</p>
-              <div className="confirm-actions">
-                <button type="button" className="button button-secondary" onClick={() => setConfirmClearAll(false)} disabled={working}>やめる</button>
-                <button type="button" className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>本当に消す</button>
-              </div>
+          {Object.values(pageIndex).length > 0 ? (
+            <div className="cache-page-list">
+              {Object.values(pageIndex)
+                .sort((a, b) => b.translatedAt - a.translatedAt)
+                .map((entry) => (
+                  <div className="cache-page-item" key={entry.url}>
+                    <div className="cache-page-info">
+                      <a className="cache-page-url" href={entry.url} target="_blank" rel="noreferrer" title={entry.url}>
+                        {entry.title || formatPageUrl(entry.url)}
+                      </a>
+                      <span className="cache-meta">
+                        {formatRelativeDate(entry.translatedAt)}
+                      </span>
+                    </div>
+                    <button className="button button-muted cache-delete-button" onClick={() => void handleRemoveFromPageIndex(entry.url)} disabled={working}>
+                      削除
+                    </button>
+                  </div>
+                ))}
             </div>
-          ) : (
-            <button className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>
-              すべての保存済み翻訳を消す
-            </button>
+          ) : !hasPageTranslation && (
+            <p className="helper-copy" style={{ textAlign: 'center', padding: '16px 0', opacity: 0.7 }}>
+              翻訳したページがここに表示されます
+            </p>
+          )}
+
+          {(Object.values(pageIndex).length > 0 || hasPageTranslation) && (
+            confirmClearAll ? (
+              <div className="confirm-inline">
+                <p className="helper-copy">保存している翻訳をすべて消します。元に戻せません。</p>
+                <div className="confirm-actions">
+                  <button type="button" className="button button-secondary" onClick={() => setConfirmClearAll(false)} disabled={working}>やめる</button>
+                  <button type="button" className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>本当に消す</button>
+                </div>
+              </div>
+            ) : (
+              <button className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>
+                すべての保存済み翻訳を消す
+              </button>
+            )
           )}
         </section>
       )}
@@ -552,6 +603,19 @@ function formatEstimatedCost(cost: number): string {
   if (jpy < 1) return '1円未満';
   if (jpy < 10) return `約${jpy.toFixed(1)}円`;
   return `約${Math.round(jpy)}円`;
+}
+
+function formatRelativeDate(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return 'たった今';
+  if (minutes < 60) return `${minutes}分前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}時間前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}日前`;
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function formatPageUrl(url: string): string {

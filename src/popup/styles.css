@@ -671,10 +671,29 @@ body {
   align-self: flex-start;
 }
 
+.cache-page-item-current {
+  background: rgba(111, 171, 112, 0.08);
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
 .cache-delete-button {
   flex-shrink: 0;
   padding: 6px 10px !important;
   font-size: 11px !important;
+}
+
+.cache-page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.cache-meta {
+  font-size: 10px;
+  color: var(--text-soft);
+  line-height: 1.4;
 }
 
 /* Setup card simplified */

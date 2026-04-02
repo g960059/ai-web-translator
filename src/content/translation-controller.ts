@@ -38,6 +38,7 @@ import {
   removeCachedTranslations,
   serializeTranslationCacheLookup,
   setCachedTranslations,
+  setPageIndexEntry,
   type TranslationCacheLookup,
 } from '../shared/cache';
 import type {
@@ -217,7 +218,7 @@ const IMMEDIATE_BATCH_TOKEN_LIMIT = 1050;
 const IMMEDIATE_BATCH_ITEM_LIMIT = 6;
 const DEFERRED_BATCH_TOKEN_LIMIT = 6000;
 const DEFERRED_BATCH_ITEM_LIMIT = 36;
-const MAX_BATCH_RETRIES = 1;
+const MAX_BATCH_RETRIES = 3;
 const MAX_WARNING_REPAIR_ATTEMPTS = 4;
 const RETRY_BACKOFF_MS = 1200;
 const API_WAIT_NOTICE_MS = 5000;
@@ -412,6 +413,16 @@ export class TranslationController {
   private providerWarmupPromise: Promise<void> | null = null;
   private providerWarmupKey: string | null = null;
   private lastFocusedWarningBlockId: string | null = null;
+  private pageIndexRecorded = false;
+  private lastUsedModel = '';
+  private dynamicContentObserver: MutationObserver | null = null;
+  private dynamicContentDebounceId: number | null = null;
+  private dynamicContentTranslating = false;
+  private dynamicContentPendingRescan = false;
+  private dynamicContentSessionId: string | null = null;
+  private lastCompletedSettings: ResolvedSettings | null = null;
+  private lastCompletedContext: TranslationContext | null = null;
+  private lastCompletedScope: DefaultTranslationScope | null = null;
   private pendingSnippetTranslation: {
     text: string;
     range: Range;
@@ -534,6 +545,7 @@ export class TranslationController {
       void chrome.runtime.sendMessage({ type: 'CANCEL_TRANSLATION' }).catch(() => undefined);
     }
     this.cancelLazyPageSession(false);
+    this.teardownDynamicContentObserver();
     this.cancelPrewarm();
     this.pageSignature = nextSignature;
     this.pageKey = window.location.href;
@@ -570,6 +582,7 @@ export class TranslationController {
 
     this.cancelledSessionIds.add(sessionId);
     this.cancelLazyPageSession(false);
+    this.teardownDynamicContentObserver();
     await chrome.runtime.sendMessage({ type: 'CANCEL_TRANSLATION' }).catch(() => undefined);
 
     this.setSnapshot(
@@ -971,6 +984,7 @@ export class TranslationController {
 
     const sessionId = crypto.randomUUID();
     this.cancelledSessionIds.delete(sessionId);
+    this.pageIndexRecorded = false;
     const totalJobs = groups.length;
     this.lastProgressEmitAt = 0;
     this.lastProgressPercent = -1;
@@ -1106,6 +1120,7 @@ export class TranslationController {
       } else {
         this.recordPhaseTiming('lazyVisibleCompletedMs');
         this.overlay.setResting('続きを読み進めると、自動で翻訳していきます。', 1800);
+        this.setupDynamicContentObserver(scope, settings, context);
       }
       return {
         ok: true,
@@ -1122,6 +1137,7 @@ export class TranslationController {
     });
     const completion = this.finishSession(sessionId);
     this.presentCompletionOverlay(statusLabel, completion?.warnings ?? null);
+    this.setupDynamicContentObserver(scope, settings, context);
     return { ok: true, message: statusLabel };
   }
 
@@ -1995,6 +2011,7 @@ export class TranslationController {
 
             this.recordBatchSuccess(batch, options.runtimeState);
             this.refreshDisplayState();
+            this.recordPageIndexIfNeeded(options.settings);
 
             if (cacheEntries.length > 0) {
               this.throwIfSessionCancelled(options.sessionId);
@@ -2312,7 +2329,7 @@ export class TranslationController {
             attempt,
             reason: previousError,
           });
-          await delay(RETRY_BACKOFF_MS * attempt);
+          await delay(retryDelayWithJitter(attempt));
           this.throwIfSessionCancelled(options.sessionId);
           this.setSnapshot(
             {
@@ -3294,6 +3311,7 @@ export class TranslationController {
       const completion = this.finishSession(session.sessionId);
       this.cleanupLazyPageSessionResources(session);
       this.presentCompletionOverlay('ページ全体を訳し終えました。', completion?.warnings ?? null);
+      this.setupDynamicContentObserver(session.settings.resolvedScope, session.settings, session.context);
       this.lazyPageSession = null;
       return;
     }
@@ -3411,6 +3429,161 @@ export class TranslationController {
       window.removeEventListener('resize', session.scrollListener);
       session.scrollListener = null;
     }
+  }
+
+  // --- Dynamic content observation (post-translation) ---
+
+  private setupDynamicContentObserver(
+    scope: DefaultTranslationScope,
+    settings: ResolvedSettings,
+    context: TranslationContext,
+  ): void {
+    this.teardownDynamicContentObserver();
+    this.lastCompletedSettings = settings;
+    this.lastCompletedContext = context;
+    this.lastCompletedScope = scope;
+
+    const root = resolveScopeRoot(this.documentRef, scope);
+    const observerOptions: MutationObserverInit = { childList: true, subtree: true };
+
+    this.dynamicContentObserver = new MutationObserver((mutations) => {
+      let hasNewElements = false;
+
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.removedNodes)) {
+          if (node.nodeType === 1) {
+            const el = node as HTMLElement;
+            this.blocksByElement.delete(el);
+            for (const descendant of el.querySelectorAll('*')) {
+              this.blocksByElement.delete(descendant as HTMLElement);
+            }
+          }
+        }
+        if (!hasNewElements) {
+          for (const node of Array.from(mutation.addedNodes)) {
+            if (node.nodeType === 1) {
+              hasNewElements = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!hasNewElements) return;
+
+      if (this.dynamicContentDebounceId !== null) {
+        window.clearTimeout(this.dynamicContentDebounceId);
+      }
+      this.dynamicContentDebounceId = window.setTimeout(() => {
+        this.dynamicContentDebounceId = null;
+        void this.handleDynamicContentMutation(root, observerOptions);
+      }, 500);
+    });
+
+    this.dynamicContentObserver.observe(root, observerOptions);
+  }
+
+  private async handleDynamicContentMutation(
+    root: HTMLElement,
+    observerOptions: MutationObserverInit,
+  ): Promise<void> {
+    if (this.dynamicContentTranslating) {
+      this.dynamicContentPendingRescan = true;
+      return;
+    }
+    const activeStatus = this.sessionSnapshot.status;
+    if (activeStatus === 'translating' || activeStatus === 'scanning' || activeStatus === 'retrying' || activeStatus === 'queued') {
+      return;
+    }
+    if (!this.lastCompletedSettings || !this.lastCompletedContext || !this.lastCompletedScope) {
+      return;
+    }
+
+    const settings = this.lastCompletedSettings;
+    const context = this.lastCompletedContext;
+
+    const allBlocks = collectTranslatableBlocks(root);
+    const newSeeds = allBlocks.filter((seed) => !this.blocksByElement.has(seed.element));
+    if (newSeeds.length === 0) {
+      return;
+    }
+
+    this.dynamicContentTranslating = true;
+    this.dynamicContentPendingRescan = false;
+
+    try {
+      const newRecords = this.registerBlocks(newSeeds);
+      await this.translateDynamicBlocks(newRecords, settings, context, root, observerOptions);
+      this.pageScans.delete(this.lastCompletedScope);
+    } catch (error) {
+      logWithContext('warn', '[AI Web Translator] Dynamic content translation failed.', {
+        pageKey: this.pageKey,
+        error,
+      });
+    } finally {
+      this.dynamicContentTranslating = false;
+      if (this.dynamicContentPendingRescan) {
+        this.dynamicContentPendingRescan = false;
+        void this.handleDynamicContentMutation(root, observerOptions);
+      }
+    }
+  }
+
+  private async translateDynamicBlocks(
+    records: BlockRecord[],
+    settings: ResolvedSettings,
+    context: TranslationContext,
+    root: HTMLElement,
+    observerOptions: MutationObserverInit,
+  ): Promise<void> {
+    const groups = this.buildDerivedGroups(records, settings, context);
+    if (groups.length === 0) return;
+
+    const calibration = await getEstimateCalibrationSnapshot(settings.provider, settings.model);
+    const runtimeState = this.createRuntimeState(groups, calibration, settings.style);
+    const sessionId = crypto.randomUUID();
+    this.dynamicContentSessionId = sessionId;
+
+    // Disconnect observer to prevent reentrant mutations from DOM writes
+    this.dynamicContentObserver?.disconnect();
+    try {
+      await this.processGroupBatches({
+        groups,
+        settings,
+        context,
+        sessionId,
+        totalJobs: groups.length,
+        processedJobs: 0,
+        runtimeState,
+        showOverlay: false,
+        overlayMessage: '',
+        batchProfile: 'deferred',
+        metricsPhase: 'deferred',
+      });
+      this.refreshDisplayState();
+    } finally {
+      this.dynamicContentSessionId = null;
+      // Reconnect observer
+      this.dynamicContentObserver?.observe(root, observerOptions);
+    }
+  }
+
+  private teardownDynamicContentObserver(): void {
+    if (this.dynamicContentDebounceId !== null) {
+      window.clearTimeout(this.dynamicContentDebounceId);
+      this.dynamicContentDebounceId = null;
+    }
+    if (this.dynamicContentSessionId) {
+      this.cancelledSessionIds.add(this.dynamicContentSessionId);
+      this.dynamicContentSessionId = null;
+    }
+    this.dynamicContentObserver?.disconnect();
+    this.dynamicContentObserver = null;
+    this.lastCompletedSettings = null;
+    this.lastCompletedContext = null;
+    this.lastCompletedScope = null;
+    this.dynamicContentTranslating = false;
+    this.dynamicContentPendingRescan = false;
   }
 
   private refreshDerivedSnapshotVisibility(scan: PageScanSnapshot): void {
@@ -3789,6 +3962,20 @@ export class TranslationController {
     }
   }
 
+  private recordPageIndexIfNeeded(settings: ResolvedSettings): void {
+    if (this.pageIndexRecorded) return;
+    this.pageIndexRecorded = true;
+    this.lastUsedModel = settings.model;
+    void setPageIndexEntry({
+      url: this.pageKey,
+      title: this.documentRef.title,
+      translatedAt: Date.now(),
+      model: settings.model,
+      targetLanguage: settings.targetLanguage,
+      scope: this.sessionSnapshot.scope ?? 'main',
+    }).catch(() => {});
+  }
+
   private finishSession(
     sessionId: string,
   ): { status: TranslationStatus; warnings: SessionWarningSummary | null } | null {
@@ -3802,6 +3989,17 @@ export class TranslationController {
     this.recordPhaseTiming('completedMs');
     const warnings = this.buildWarningSummary();
     const status: TranslationStatus = warnings ? 'completed_with_warnings' : 'completed';
+    // Update final timestamp if batches actually ran (lastUsedModel is set by recordPageIndexIfNeeded)
+    if (this.lastUsedModel) {
+      void setPageIndexEntry({
+        url: this.pageKey,
+        title: this.documentRef.title,
+        translatedAt: Date.now(),
+        model: this.lastUsedModel,
+        targetLanguage: this.sessionSnapshot.targetLanguage,
+        scope: this.sessionSnapshot.scope ?? 'main',
+      }).catch(() => {});
+    }
     this.setSnapshot(
       {
         status,
@@ -4411,6 +4609,12 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function retryDelayWithJitter(attempt: number): number {
+  const base = RETRY_BACKOFF_MS * Math.pow(2, attempt - 1);
+  const jitter = base * 0.2 * (2 * Math.random() - 1);
+  return Math.max(0, base + jitter);
+}
+
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -4919,13 +5123,12 @@ function shouldSplitBatchAfterFailure(error: unknown): boolean {
 }
 
 function shouldFallbackToOriginalBatch(
-  batch: TranslationBatchItem[],
+  _batch: TranslationBatchItem[],
   error: unknown,
 ): boolean {
-  if (batch.length !== 1) {
-    return false;
-  }
-
+  // When splitting recursion in requestTranslationsWithRetry is exhausted,
+  // OutputLimitTranslationError propagates up regardless of original batch size.
+  // Fall back to source for all items rather than crashing the session.
   return (
     error instanceof OutputLimitTranslationError ||
     getErrorMessage(error, '').trim().toLowerCase().includes('output limit')
