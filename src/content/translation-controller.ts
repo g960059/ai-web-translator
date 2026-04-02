@@ -2412,6 +2412,17 @@ export class TranslationController {
           if (!splitResults) {
             const singleItemSplit = splitSingleItemForRetry(options.items[0]);
             if (!singleItemSplit) {
+              // Can't split further — retry once with max tokens before giving up
+              if (!options.maxOutputTokensOverride) {
+                try {
+                  return await this.requestTranslationsWithRetry({
+                    ...options,
+                    maxOutputTokensOverride: 16000,
+                  });
+                } catch {
+                  // Fall through to final error
+                }
+              }
               this.markItemsFinalError(options.items, message);
               throw error;
             }
@@ -5140,12 +5151,16 @@ function shouldSplitBatchAfterFailure(error: unknown): boolean {
 }
 
 function shouldFallbackToOriginalBatch(
-  _batch: TranslationBatchItem[],
+  batch: TranslationBatchItem[],
   error: unknown,
 ): boolean {
-  // When splitting recursion in requestTranslationsWithRetry is exhausted,
-  // OutputLimitTranslationError propagates up regardless of original batch size.
-  // Fall back to source for all items rather than crashing the session.
+  // Only fall back for single-item batches. Multi-item batches are split
+  // by requestTranslationsWithRetry; the 16000-token retry is now handled
+  // inside the split path for individual unsplittable fragments.
+  if (batch.length !== 1) {
+    return false;
+  }
+
   return (
     error instanceof OutputLimitTranslationError ||
     getErrorMessage(error, '').trim().toLowerCase().includes('output limit')
