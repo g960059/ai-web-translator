@@ -9,7 +9,7 @@ describe('PopupApp', () => {
     vi.useRealTimers();
   });
 
-  it('loads stored settings and autosaves changes via settings tab', async () => {
+  it('loads stored settings and autosaves changes via settings view', async () => {
     const chromeMock = getChromeMock();
 
     await chrome.storage.local.set({
@@ -38,11 +38,11 @@ describe('PopupApp', () => {
 
     render(<PopupApp />);
 
-    // Navigate to settings tab
+    // Navigate to settings via gear icon
     await waitFor(() => {
-      expect(screen.getByText('設定')).toBeInTheDocument();
+      expect(screen.getByLabelText('設定')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('設定'));
+    fireEvent.click(screen.getByLabelText('設定'));
 
     await waitFor(() => {
       expect(screen.getAllByText('フランス語').length).toBeGreaterThan(0);
@@ -82,7 +82,7 @@ describe('PopupApp', () => {
     render(<PopupApp />);
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'このページでは使えません' })).toBeInTheDocument();
+      expect(screen.getByText(/通常の Web ページを開くと翻訳できます/)).toBeInTheDocument();
     });
 
     expect(screen.queryByText('このページを翻訳する')).not.toBeInTheDocument();
@@ -110,11 +110,11 @@ describe('PopupApp', () => {
     render(<PopupApp />);
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'このページでは使えません' })).toBeInTheDocument();
+      expect(screen.getByText(/通常の Web ページを開くと翻訳できます/)).toBeInTheDocument();
     });
   });
 
-  it('shows a setup redirect when API key is missing', async () => {
+  it('shows setup with inline API key input when key is missing', async () => {
     const chromeMock = getChromeMock();
 
     await chrome.storage.local.set({
@@ -136,8 +136,9 @@ describe('PopupApp', () => {
     render(<PopupApp />);
 
     await waitFor(() => {
-      expect(screen.getByText('設定へ')).toBeInTheDocument();
+      expect(screen.getAllByText('接続を確認').length).toBeGreaterThan(0);
     });
+    expect(screen.getAllByPlaceholderText('sk-or-v1-...').length).toBeGreaterThan(0);
   });
 
   it('shows a resume primary action after a cancelled partial translation', async () => {

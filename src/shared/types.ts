@@ -38,6 +38,7 @@ export interface ExtensionSettings {
   style: TranslationStyle;
   translateFullPage: boolean;
   cacheEnabled: boolean;
+  showOriginalOnHover: boolean;
 }
 
 export interface ProviderModelInfo {

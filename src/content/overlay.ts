@@ -1,3 +1,4 @@
+import { isBlockedSite } from '../shared/blocked-sites';
 import { localizeRuntimeError } from '../shared/error-messages';
 import { formatLanguageLabel } from '../shared/languages';
 import type { SessionWarningSummary, TranslationStatus, WidgetState } from '../shared/types';
@@ -11,6 +12,7 @@ export class TranslationOverlay {
   private readonly shadowRoot: ShadowRoot;
   private readonly container: HTMLDivElement;
   private readonly mascot: HTMLButtonElement;
+  private readonly ringFill!: SVGCircleElement;
   private readonly bubble: HTMLDivElement;
   private readonly bubbleText: HTMLSpanElement;
   private readonly bubbleAction: HTMLButtonElement;
@@ -170,7 +172,7 @@ export class TranslationOverlay {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-2px); }
         }
-        .mascot[data-state="working"] {
+        .mascot-wrap:has(.mascot[data-state="working"]) {
           animation: widget-bounce 1s ease-in-out infinite;
         }
         @keyframes widget-pulse {
@@ -202,13 +204,49 @@ export class TranslationOverlay {
           opacity: 1;
           transition: opacity 300ms ease;
         }
+        .mascot-wrap {
+          position: relative;
+          width: 44px;
+          height: 44px;
+        }
+        .progress-ring {
+          position: absolute;
+          top: -3px;
+          left: -3px;
+          width: 50px;
+          height: 50px;
+          pointer-events: none;
+          transform: rotate(-90deg);
+        }
+        .ring-bg {
+          fill: none;
+          stroke: rgba(192, 139, 26, 0.15);
+          stroke-width: 2.5;
+        }
+        .ring-fill {
+          fill: none;
+          stroke: #c08b1a;
+          stroke-width: 2.5;
+          stroke-linecap: round;
+          stroke-dasharray: 138.23;
+          stroke-dashoffset: 138.23;
+          transition: stroke-dashoffset 300ms ease, opacity 200ms ease;
+          filter: drop-shadow(0 0 3px rgba(246, 198, 73, 0.6));
+          opacity: 0;
+        }
       </style>
       <div class="widget-container" data-hidden="true" role="status" aria-live="polite">
         <div class="bubble">
           <span class="bubble-text"></span>
           <button class="bubble-action" type="button"></button>
         </div>
-        <button class="mascot" type="button" data-state="off"></button>
+        <div class="mascot-wrap">
+          <svg class="progress-ring" viewBox="0 0 50 50">
+            <circle class="ring-bg" cx="25" cy="25" r="22" />
+            <circle class="ring-fill" cx="25" cy="25" r="22" />
+          </svg>
+          <button class="mascot" type="button" data-state="off"></button>
+        </div>
       </div>
     `;
 
@@ -216,6 +254,7 @@ export class TranslationOverlay {
 
     this.container = wrapper.querySelector('.widget-container') as HTMLDivElement;
     this.mascot = wrapper.querySelector('.mascot') as HTMLButtonElement;
+    this.ringFill = wrapper.querySelector('.ring-fill') as unknown as SVGCircleElement;
     this.bubble = wrapper.querySelector('.bubble') as HTMLDivElement;
     this.bubbleText = wrapper.querySelector('.bubble-text') as HTMLSpanElement;
     this.bubbleAction = wrapper.querySelector('.bubble-action') as HTMLButtonElement;
@@ -357,6 +396,7 @@ export class TranslationOverlay {
   showIdleIcon(): void {
     this.clearDoneTransition();
     this.hideBubble();
+    this.hideProgressRing();
     this.restingAction = 'none';
     this.setVisible(true);
     this.setState('off');
@@ -375,6 +415,7 @@ export class TranslationOverlay {
       const pct = Math.round((options.completed / options.total) * 100);
       const text = `翻訳中 ${options.completed}/${options.total}（${pct}%）`;
       this.showBubble(text, '', 0, 'none');
+      this.updateProgressRing(options.completed, options.total);
     } else {
       this.hideBubble();
     }
@@ -426,6 +467,7 @@ export class TranslationOverlay {
 
   setDone(message = ''): void {
     this.clearDoneTransition();
+    this.hideProgressRing();
     this.restingAction = 'none';
     this.setVisible(true);
     this.setState('done');
@@ -482,24 +524,25 @@ export class TranslationOverlay {
 
   detectAndPrompt(targetLanguage: string): void {
     this.setTargetLanguage(targetLanguage);
-    const lang = this.documentRef.documentElement.lang?.toLowerCase() ?? '';
-    const normalizedTarget = targetLanguage.trim().toLowerCase();
-    const targetPrimary = normalizedTarget.split('-')[0] || normalizedTarget;
-    const isSameAsTarget = targetPrimary ? lang.startsWith(targetPrimary) : false;
 
-    if (isSameAsTarget) {
-      return;
-    }
+    void isBlockedSite(window.location.hostname).then((blocked) => {
+      if (blocked) return;
 
-    const article = this.documentRef.querySelector('article');
-    const bodyText = this.documentRef.body?.innerText ?? '';
-    const hasSubstantialContent = article !== null || bodyText.length > 500;
+      const lang = this.documentRef.documentElement.lang?.toLowerCase() ?? '';
+      const normalizedTarget = targetLanguage.trim().toLowerCase();
+      const targetPrimary = normalizedTarget.split('-')[0] || normalizedTarget;
+      const isSameAsTarget = targetPrimary ? lang.startsWith(targetPrimary) : false;
 
-    if (!hasSubstantialContent) {
-      return;
-    }
+      if (isSameAsTarget) return;
 
-    this.showPromptBubble(targetLanguage, 4000);
+      const article = this.documentRef.querySelector('article');
+      const bodyText = this.documentRef.body?.innerText ?? '';
+      const hasSubstantialContent = article !== null || bodyText.length > 500;
+
+      if (!hasSubstantialContent) return;
+
+      this.showPromptBubble(targetLanguage, 4000);
+    }).catch(() => {});
   }
 
   attachSelectionListener(): void {
@@ -651,6 +694,20 @@ export class TranslationOverlay {
     this.mascot.innerHTML = WIDGET_SVGS[state];
     this.updateMascotAriaLabel();
     this.syncDebugState();
+  }
+
+  private updateProgressRing(completed: number, total: number): void {
+    const circumference = 2 * Math.PI * 22;
+    const progress = total > 0 ? completed / total : 0;
+    const offset = circumference * (1 - progress);
+    this.ringFill.style.strokeDashoffset = `${offset}`;
+    this.ringFill.style.opacity = progress > 0 ? '1' : '0';
+  }
+
+  private hideProgressRing(): void {
+    const circumference = 2 * Math.PI * 22;
+    this.ringFill.style.strokeDashoffset = `${circumference}`;
+    this.ringFill.style.opacity = '0';
   }
 
   private showBubble(

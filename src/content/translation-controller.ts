@@ -77,6 +77,7 @@ import type {
   TranslationStatus,
   TranslationStyle,
 } from '../shared/types';
+import { OriginalTextTooltip } from './original-tooltip';
 import { TranslationOverlay } from './overlay';
 
 type ResolvedSettings = ExtensionSettings & {
@@ -398,6 +399,7 @@ export class TranslationController {
   private readonly blocksByElement = new Map<HTMLElement, BlockRecord>();
   private readonly pageScans = new Map<DefaultTranslationScope, PageScanSnapshot>();
   private readonly overlay: TranslationOverlay;
+  private readonly originalTooltip!: OriginalTextTooltip;
   private lazyPageSession: LazyPageSession | null = null;
   private pageKey = window.location.href;
   private pageSignature = window.location.href;
@@ -465,6 +467,17 @@ export class TranslationController {
       void this.focusNextWarningBlock();
     };
     this.overlay.attachSelectionListener();
+    this.originalTooltip = new OriginalTextTooltip(documentRef, (el) => {
+      const record = this.blocksByElement.get(el);
+      if (!record || record.displayState !== 'translated' || !record.translatedContent) {
+        return null;
+      }
+      return {
+        text: record.originalText,
+        html: record.originalHtml,
+        mode: record.contentMode,
+      };
+    });
   }
 
   detectAndShowPrompt(): void {
@@ -546,6 +559,7 @@ export class TranslationController {
     }
     this.cancelLazyPageSession(false);
     this.teardownDynamicContentObserver();
+    this.originalTooltip.setEnabled(false);
     this.cancelPrewarm();
     this.pageSignature = nextSignature;
     this.pageKey = window.location.href;
@@ -2993,10 +3007,13 @@ export class TranslationController {
         }
         record.displayState = 'translated';
       });
+      void loadSettings().then((s) => this.originalTooltip.setEnabled(s.showOriginalOnHover)).catch(() => {});
     } else if (mode === 'bilingual') {
+      this.originalTooltip.setEnabled(false);
       this.applyBilingualDisplay(records);
     } else {
       // 'original'
+      this.originalTooltip.setEnabled(false);
       records.forEach((record) => {
         setElementHtmlContent(record.element, record.originalHtml);
         record.displayState = 'original';

@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   style: 'auto',
   translateFullPage: false,
   cacheEnabled: true,
+  showOriginalOnHover: true,
 };
 
 const VALID_STYLES = new Set<ExtensionSettings['style']>([
@@ -82,6 +83,10 @@ export function normalizeSettings(
       typeof settings?.cacheEnabled === 'boolean'
         ? settings.cacheEnabled
         : DEFAULT_SETTINGS.cacheEnabled,
+    showOriginalOnHover:
+      typeof settings?.showOriginalOnHover === 'boolean'
+        ? settings.showOriginalOnHover
+        : DEFAULT_SETTINGS.showOriginalOnHover,
   };
 }
 

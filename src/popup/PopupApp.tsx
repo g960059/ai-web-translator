@@ -14,11 +14,13 @@ import {
 } from '../shared/languages';
 import { localizeRuntimeError } from '../shared/error-messages';
 import { getPageIndex, removePageIndexEntry, type PageIndexEntry } from '../shared/cache';
+import { addBlockedSite, getBlockedSites, removeBlockedSite } from '../shared/blocked-sites';
 import { DEFAULT_SETTINGS, MODEL_PRESETS, loadSettings, normalizeSettings, saveSettings } from '../shared/settings';
 import type {
   ExtensionSettings,
   ModelPreset,
   PageAnalysis,
+  PageDisplayState,
   ProviderModelInfo,
   TabSessionState,
   TranslationStyle,
@@ -54,8 +56,14 @@ const STYLE_OPTIONS: Array<{ value: TranslationStyle; label: string; help: strin
   { value: 'source-like', label: '原文寄り', help: '原文の構造や雰囲気を残します。' },
 ];
 
+const DISPLAY_MODES: Array<{ value: PageDisplayState; label: string }> = [
+  { value: 'translated', label: '翻訳' },
+  { value: 'bilingual', label: '両方' },
+  { value: 'original', label: '原文' },
+];
+
 type PopupMode = 'setup' | 'ready' | 'active' | 'translated' | 'unavailable';
-type PopupView = 'translate' | 'cache' | 'settings';
+type SlideView = 'main' | 'history' | 'settings';
 
 export function PopupApp() {
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
@@ -73,8 +81,9 @@ export function PopupApp() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const [apiKeyValidation, setApiKeyValidation] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [apiKeyError, setApiKeyError] = useState('');
-  const [popupView, setPopupView] = useState<PopupView>('translate');
+  const [slideView, setSlideView] = useState<SlideView>('main');
   const [pageIndex, setPageIndex] = useState<Record<string, PageIndexEntry>>({});
+  const [blockedSites, setBlockedSites] = useState<string[]>([]);
   const activeTabIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -96,10 +105,12 @@ export function PopupApp() {
   }, [statusMessage, statusTone]);
 
   useEffect(() => {
-    if (popupView === 'cache') {
+    if (slideView === 'history') {
       void getPageIndex().then(setPageIndex);
+    } else if (slideView === 'settings') {
+      void getBlockedSites().then(setBlockedSites);
     }
-  }, [popupView]);
+  }, [slideView]);
 
   const estimatedCost =
     analysis && models.length > 0
@@ -123,7 +134,11 @@ export function PopupApp() {
     (lang) => !primaryLanguageOptions.some((p) => p.code === lang.code),
   );
 
-  // --- Business Logic (unchanged) ---
+  const currentDisplayState: PageDisplayState = tabState?.displayState === 'mixed' ? 'bilingual' : (tabState?.displayState ?? 'original');
+  // Source language detection not available in tab state — show only target
+  const targetLanguageLabel = languageOptions.find((l) => l.code === settings.targetLanguage)?.nativeLabel ?? settings.targetLanguage;
+
+  // --- Business Logic ---
 
   async function initialize(): Promise<void> {
     setLoading(true);
@@ -200,13 +215,6 @@ export function PopupApp() {
     }
   }
 
-  async function handlePrimaryAction(): Promise<void> {
-    if (missingApiKey) { setPopupView('settings'); return; }
-    if (canResumeCancelledTranslation) { await handleStartPageTranslation(); return; }
-    if (hasPageTranslation) { await handleTogglePageView(); return; }
-    await handleStartPageTranslation();
-  }
-
   async function handleStartPageTranslation(): Promise<void> {
     setWorking(true);
     try {
@@ -219,14 +227,13 @@ export function PopupApp() {
     } finally { setWorking(false); }
   }
 
-  async function handleTogglePageView(): Promise<void> {
+  async function handleSetDisplayMode(mode: PageDisplayState): Promise<void> {
     setWorking(true);
     try {
-      const ns = normalizeSettings(settings);
-      const response = await runContentAction({ type: 'TOGGLE_PAGE', settings: ns, scope: resolveScope(ns) });
+      const response = await runContentAction({ type: 'SET_DISPLAY_MODE', mode });
       if (!response) return;
       showStatus(response.message || '', response.ok === false ? 'error' : 'success');
-      if (activeTabId !== null) await Promise.all([refreshTabState(activeTabId), refreshSelectionState(activeTabId)]);
+      if (activeTabId !== null) await refreshTabState(activeTabId);
     } finally { setWorking(false); }
   }
 
@@ -273,6 +280,21 @@ export function PopupApp() {
     } finally { setWorking(false); }
   }
 
+  async function handleBlockCurrentSite(): Promise<void> {
+    if (!activeTabUrl) return;
+    try {
+      const hostname = new URL(activeTabUrl).hostname;
+      await addBlockedSite(hostname);
+      setBlockedSites((prev) => prev.includes(hostname) ? prev : [...prev, hostname]);
+      showStatus(`${hostname} を翻訳しないサイトに追加しました。`, 'success');
+    } catch { /* invalid URL */ }
+  }
+
+  async function handleUnblockSite(hostname: string): Promise<void> {
+    await removeBlockedSite(hostname);
+    setBlockedSites((prev) => prev.filter((s) => s !== hostname));
+  }
+
   async function handleRemoveFromPageIndex(url: string): Promise<void> {
     await removePageIndexEntry(url);
     setPageIndex((prev) => {
@@ -309,9 +331,8 @@ export function PopupApp() {
   async function handleCancelTranslation(): Promise<void> {
     setWorking(true);
     try {
-      // Send to content script (not background) to properly cancel lazy session
       const response = await runContentAction({ type: 'CANCEL_TRANSLATION' });
-      if (!response) return; // runContentAction already showed error
+      if (!response) return;
       if (activeTabId !== null) await refreshTabState(activeTabId);
       showStatus(response.message || '翻訳を止めました。', response.ok === false ? 'error' : 'info');
     } finally {
@@ -319,240 +340,310 @@ export function PopupApp() {
     }
   }
 
-  const primaryLabel = getPrimaryLabel({ missingApiKey, hasPageTranslation, canResumeCancelledTranslation, isActive, tabState });
-  const currentPreset = MODEL_PRESETS[settings.modelPreset];
-
   // --- Render ---
 
   return (
-    <main className="popup-shell" data-mode={popupMode}>
-      {/* Tab Navigation */}
-      <nav className="tab-nav" role="tablist">
-        <button type="button" className="tab-button" data-active={popupView === 'translate'} onClick={() => setPopupView('translate')}>翻訳</button>
-        <button type="button" className="tab-button" data-active={popupView === 'cache'} onClick={() => setPopupView('cache')}>キャッシュ</button>
-        <button type="button" className="tab-button" data-active={popupView === 'settings'} onClick={() => setPopupView('settings')}>設定</button>
-      </nav>
+    <div className="popup-viewport">
+      <div className="slide-container" data-view={slideView}>
+        {/* Main View */}
+        <main className="slide-panel slide-main" data-mode={popupMode}>
+          {/* Header */}
+          <header className="app-header">
+            <button type="button" className="header-icon" onClick={() => setSlideView('history')} aria-label="履歴" title="履歴">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+              </svg>
+            </button>
+            <button type="button" className="language-indicator" onClick={() => setSlideView('settings')} title="言語設定を変更">
+              {targetLanguageLabel}
+            </button>
+            <button type="button" className="header-icon" onClick={() => setSlideView('settings')} aria-label="設定" title="設定">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+          </header>
 
-      {/* Tab: Translate */}
-      {popupView === 'translate' && (
-        <section className="panel panel-main">
-          {popupMode === 'setup' ? (
-            <div className="setup-card">
-              <h2>翻訳を使う</h2>
-              <p className="helper-copy">OpenRouter の API Key を設定すると翻訳を実行できます。</p>
-              <button type="button" className="button button-primary" onClick={() => setPopupView('settings')}>設定へ</button>
-            </div>
-          ) : popupMode === 'unavailable' ? (
-            <div className="focus-card">
-              <h2>このページでは使えません</h2>
-              <p className="helper-copy">通常の Web ページを開くと使えます。</p>
-            </div>
-          ) : (
-            <>
-              {popupMode !== 'ready' && (
-                <h2 className="panel-title">{popupMode === 'active' ? '翻訳中' : '翻訳しました'}</h2>
-              )}
-
-              {/* Scope: 本文のみ / ページ全体 */}
-              <div className="segment-group">
-                <span className="segment-label">範囲</span>
-                <div className="segment-control">
-                  <button type="button" className="segment-button" data-selected={!settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: false })}>本文のみ</button>
-                  <button type="button" className="segment-button" data-selected={settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: true })}>ページ全体</button>
-                </div>
-                {!settings.translateFullPage && (
-                  <p className="segment-hint">ヘッダー・サイドバー・フッターを除外して翻訳</p>
-                )}
+          {/* Content by mode */}
+          <section className="main-content">
+            {popupMode === 'setup' ? (
+              <div className="setup-card">
+                <h2>数式や技術用語を<br />正確に翻訳するAIアシスタント</h2>
+                <label className="field">
+                  <span>OpenRouter API Key</span>
+                  <input type="password" value={settings.apiKey} onChange={(e) => updateSettings({ apiKey: e.target.value })} placeholder="sk-or-v1-..." />
+                </label>
+                <button type="button" className="button button-primary" onClick={() => void handleValidateApiKey()} disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}>
+                  {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
+                </button>
+                {apiKeyValidation === 'invalid' && apiKeyError && <p className="soft-note soft-note-error">{apiKeyError}</p>}
+                {apiKeyValidation === 'valid' && <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>}
+                <a className="button button-secondary button-link-card" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">OpenRouter で API Key を作る</a>
               </div>
-
-              {/* Model: fast / accurate */}
-              <div className="segment-group">
-                <span className="segment-label">モデル</span>
-                <div className="segment-control">
-                  {(Object.keys(MODEL_PRESETS) as ModelPreset[]).map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      className="segment-button"
-                      data-selected={settings.modelPreset === preset}
-                      onClick={() => updateSettings({ modelPreset: preset })}
-                      title={`${MODEL_PRESETS[preset].description}\n(${MODEL_PRESETS[preset].modelId})`}
-                    >
-                      {MODEL_PRESETS[preset].label}
-                    </button>
-                  ))}
-                </div>
-                <p className="segment-hint segment-hint-model">{currentPreset.modelId}</p>
+            ) : popupMode === 'unavailable' ? (
+              <div className="focus-card">
+                <p className="helper-copy">通常の Web ページを開くと翻訳できます。</p>
               </div>
-
-              {/* Cost */}
-              {(popupMode === 'ready' || popupMode === 'translated') && estimatedCost !== null && (
-                <p className="cost-note">{formatEstimatedCost(estimatedCost)}</p>
-              )}
-
-              {/* Progress (active) */}
-              {popupMode === 'active' && tabState && (
+            ) : popupMode === 'active' ? (
+              <div className="active-card">
                 <div className="progress-section">
                   <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${tabState.progressPercent}%` }} />
+                    <div className="progress-fill" style={{ width: `${tabState?.progressPercent ?? 0}%` }} />
                   </div>
-                  <p className="soft-note">{translateStatus(tabState.status)} {tabState.progressPercent}%</p>
+                  <p className="soft-note">{translateStatus(tabState?.status ?? '')} {tabState?.progressPercent ?? 0}%</p>
                 </div>
-              )}
+                <p className="soft-note" style={{ textAlign: 'center', opacity: 0.7 }}>閉じてもOK</p>
+                <button className="button button-danger" onClick={() => void handleCancelTranslation()} disabled={working || loading}>
+                  翻訳を停止する
+                </button>
+              </div>
+            ) : popupMode === 'translated' ? (
+              <div className="translated-card">
+                {/* 3-way display mode segment */}
+                <div className="display-segment">
+                  <div className="display-segment-track">
+                    <div
+                      className="display-segment-pill"
+                      style={{ transform: `translateX(${DISPLAY_MODES.findIndex((m) => m.value === currentDisplayState) * 100}%)` }}
+                    />
+                    {DISPLAY_MODES.map((mode) => (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        className="display-segment-button"
+                        data-active={currentDisplayState === mode.value}
+                        onClick={() => void handleSetDisplayMode(mode.value)}
+                        disabled={working}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              {/* Primary Action */}
-              <div className="primary-actions">
-                {popupMode === 'active' ? (
-                  <button className="button button-danger" onClick={() => void handleCancelTranslation()} disabled={working || loading}>
-                    翻訳を停止する
-                  </button>
-                ) : (
-                  <button className="button button-primary" onClick={() => void handlePrimaryAction()} disabled={working || loading}>
-                    {primaryLabel}
+                <p className="soft-note" style={{ textAlign: 'center' }}>✓ 翻訳済み</p>
+
+                <label className="checkbox-row" style={{ justifyContent: 'center' }}>
+                  <input type="checkbox" checked={settings.showOriginalOnHover} onChange={(e) => updateSettings({ showOriginalOnHover: e.target.checked })} />
+                  <span>ホバーで原文を表示</span>
+                </label>
+
+                {canResumeCancelledTranslation && (
+                  <button className="button button-primary" onClick={() => void handleStartPageTranslation()} disabled={working || loading}>
+                    続きを再開する
                   </button>
                 )}
-                {hasSelection && !missingApiKey && (
+
+                {hasSelection && (
                   <button className="button button-secondary" onClick={() => void handleSelectionTranslation(false)} disabled={working || loading}>
                     この部分だけ読む
                   </button>
                 )}
-              </div>
-            </>
-          )}
-        </section>
-      )}
 
-      {/* Tab: Cache */}
-      {popupView === 'cache' && (
-        <section className="panel">
-          <h2 className="panel-title">翻訳済みページ</h2>
-
-          <label className="checkbox-row">
-            <input type="checkbox" checked={settings.cacheEnabled} onChange={(e) => updateSettings({ cacheEnabled: e.target.checked })} />
-            <span>キャッシュを使う</span>
-          </label>
-
-          {activeTabUrl && canTranslateCurrentPage && hasPageTranslation && (
-            <div className="cache-page-item cache-page-item-current">
-              <div className="cache-page-info">
-                <a className="cache-page-url" href={activeTabUrl} target="_blank" rel="noreferrer" title={activeTabUrl}>
-                  {formatPageUrl(activeTabUrl)}
-                </a>
-                <span className="cache-current-badge">現在のページ</span>
-              </div>
-              <button className="button button-muted cache-delete-button" onClick={() => void handleClearPageCache()} disabled={working}>
-                キャッシュ削除
-              </button>
-            </div>
-          )}
-
-          {Object.values(pageIndex).length > 0 ? (
-            <div className="cache-page-list">
-              {Object.values(pageIndex)
-                .sort((a, b) => b.translatedAt - a.translatedAt)
-                .map((entry) => (
-                  <div className="cache-page-item" key={entry.url}>
-                    <div className="cache-page-info">
-                      <a className="cache-page-url" href={entry.url} target="_blank" rel="noreferrer" title={entry.url}>
-                        {entry.title || formatPageUrl(entry.url)}
-                      </a>
-                      <span className="cache-meta">
-                        {formatRelativeDate(entry.translatedAt)}
-                      </span>
-                    </div>
-                    <button className="button button-muted cache-delete-button" onClick={() => void handleRemoveFromPageIndex(entry.url)} disabled={working}>
-                      削除
-                    </button>
-                  </div>
-                ))}
-            </div>
-          ) : !hasPageTranslation && (
-            <p className="helper-copy" style={{ textAlign: 'center', padding: '16px 0', opacity: 0.7 }}>
-              翻訳したページがここに表示されます
-            </p>
-          )}
-
-          {(Object.values(pageIndex).length > 0 || hasPageTranslation) && (
-            confirmClearAll ? (
-              <div className="confirm-inline">
-                <p className="helper-copy">保存している翻訳をすべて消します。元に戻せません。</p>
-                <div className="confirm-actions">
-                  <button type="button" className="button button-secondary" onClick={() => setConfirmClearAll(false)} disabled={working}>やめる</button>
-                  <button type="button" className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>本当に消す</button>
-                </div>
+                <button type="button" className="button-link" onClick={() => void handleClearPageCache()} disabled={working}>
+                  キャッシュを削除して再翻訳
+                </button>
               </div>
             ) : (
-              <button className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>
-                すべての保存済み翻訳を消す
-              </button>
-            )
-          )}
-        </section>
-      )}
+              /* ready */
+              <>
+                {/* Scope segment */}
+                <div className="segment-group">
+                  <div className="segment-control">
+                    <button type="button" className="segment-button" data-selected={!settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: false })}>本文のみ</button>
+                    <button type="button" className="segment-button" data-selected={settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: true })}>ページ全体</button>
+                  </div>
+                </div>
 
-      {/* Tab: Settings */}
-      {popupView === 'settings' && (
-        <section className="panel">
-          <div className="settings-section">
-            <h3 className="section-title">接続</h3>
-            <label className="field">
-              <span>OpenRouter API Key</span>
-              <input type="password" value={settings.apiKey} onChange={(e) => updateSettings({ apiKey: e.target.value })} placeholder="sk-or-v1-..." />
-            </label>
-            <button type="button" className="button button-secondary" onClick={() => void handleValidateApiKey()} disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}>
-              {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
-            </button>
-            {apiKeyValidation === 'invalid' && apiKeyError && <p className="soft-note soft-note-error">{apiKeyError}</p>}
-            {apiKeyValidation === 'valid' && <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>}
-            <a className="button button-secondary button-link-card" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">OpenRouter で API Key を作る</a>
-          </div>
+                {/* Model segment */}
+                <div className="segment-group">
+                  <div className="segment-control">
+                    {(Object.keys(MODEL_PRESETS) as ModelPreset[]).map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        className="segment-button"
+                        data-selected={settings.modelPreset === preset}
+                        onClick={() => updateSettings({ modelPreset: preset })}
+                        title={MODEL_PRESETS[preset].description}
+                      >
+                        {MODEL_PRESETS[preset].label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          <div className="settings-section">
-            <h3 className="section-title">翻訳設定</h3>
+                {/* Hero translate button */}
+                <button className="button button-primary button-hero" onClick={() => void handleStartPageTranslation()} disabled={working || loading}>
+                  {canResumeCancelledTranslation ? '続きを再開する' : 'このページを翻訳する'}
+                </button>
 
-            <div className="field">
-              <span>読む言語</span>
-              <div className="language-pills" role="group">
-                {primaryLanguageOptions.map((lang) => (
-                  <button key={lang.code} type="button" className="pill-button" data-selected={settings.targetLanguage === lang.code} onClick={() => updateSettings({ targetLanguage: lang.code })}>
-                    <span>{lang.label}</span>
-                    <small>{lang.nativeLabel}</small>
+                {/* Cost */}
+                {estimatedCost !== null && (
+                  <p className="cost-note">{formatEstimatedCost(estimatedCost)}</p>
+                )}
+
+                {/* Selection translation */}
+                {hasSelection && (
+                  <button className="button button-secondary" onClick={() => void handleSelectionTranslation(false)} disabled={working || loading}>
+                    この部分だけ読む
                   </button>
-                ))}
-              </div>
-              <label className="field field-inline">
-                <span>ほかの言語</span>
-                <select
-                  value={primaryLanguageOptions.some((l) => l.code === settings.targetLanguage) ? '' : settings.targetLanguage}
-                  onChange={(e) => { if (e.target.value) updateSettings({ targetLanguage: e.target.value }); }}
-                >
-                  <option value="">ほかの言語を選ぶ</option>
-                  {additionalLanguageOptions.map((lang) => (
-                    <option key={lang.code} value={lang.code}>{lang.label} / {lang.nativeLabel}</option>
-                  ))}
-                </select>
-              </label>
+                )}
+
+                {/* Quick block */}
+                <button type="button" className="button-link" onClick={() => void handleBlockCurrentSite()}>
+                  このサイトを翻訳しない
+                </button>
+              </>
+            )}
+          </section>
+
+          {/* Status Banner */}
+          {statusMessage && (
+            <div className="status-banner" data-tone={statusTone}>
+              <span>{statusMessage}</span>
+              <button type="button" className="status-dismiss" onClick={clearStatus} aria-label="閉じる">×</button>
             </div>
+          )}
+        </main>
 
-            <label className="field">
-              <span>翻訳スタイル</span>
-              <select aria-label="翻訳スタイル" value={settings.style} onChange={(e) => updateSettings({ style: e.target.value as TranslationStyle })}>
-                {STYLE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
-              <p className="helper-copy">{STYLE_OPTIONS.find((o) => o.value === settings.style)?.help}</p>
-            </label>
-          </div>
-        </section>
-      )}
+        {/* Secondary Panel (conditionally rendered — only one at a time) */}
+        {slideView === 'history' && (
+          <section className="slide-panel slide-secondary">
+            <header className="slide-header">
+              <button type="button" className="back-button" onClick={() => setSlideView('main')}>← 戻る</button>
+              <span className="slide-title">履歴</span>
+            </header>
+            <div className="slide-body">
+              {Object.values(pageIndex).length > 0 ? (
+                <div className="cache-page-list">
+                  {Object.values(pageIndex)
+                    .sort((a, b) => b.translatedAt - a.translatedAt)
+                    .map((entry) => (
+                      <div className="cache-page-item" key={entry.url}>
+                        <div className="cache-page-info">
+                          <a className="cache-page-url" href={entry.url} target="_blank" rel="noreferrer" title={entry.url}>
+                            {entry.title || formatPageUrl(entry.url)}
+                          </a>
+                          <span className="cache-meta">{formatRelativeDate(entry.translatedAt)}</span>
+                        </div>
+                        <button type="button" className="button button-muted cache-delete-button" onClick={() => void handleRemoveFromPageIndex(entry.url)} disabled={working}>
+                          削除
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="helper-copy" style={{ textAlign: 'center', padding: '24px 0', opacity: 0.7 }}>
+                  翻訳したページがここに表示されます
+                </p>
+              )}
 
-      {/* Status Banner */}
-      {statusMessage && (
-        <div className="status-banner" data-tone={statusTone}>
-          <span>{statusMessage}</span>
-          <button type="button" className="status-dismiss" onClick={clearStatus} aria-label="閉じる">×</button>
-        </div>
-      )}
-    </main>
+              <label className="checkbox-row">
+                <input type="checkbox" checked={settings.cacheEnabled} onChange={(e) => updateSettings({ cacheEnabled: e.target.checked })} />
+                <span>キャッシュを使う</span>
+              </label>
+
+              {Object.values(pageIndex).length > 0 && (
+                confirmClearAll ? (
+                  <div className="confirm-inline">
+                    <p className="helper-copy">保存している翻訳をすべて消します。元に戻せません。</p>
+                    <div className="confirm-actions">
+                      <button type="button" className="button button-secondary" onClick={() => setConfirmClearAll(false)} disabled={working}>やめる</button>
+                      <button type="button" className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>本当に消す</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="button button-danger" onClick={() => void handleClearAllCache()} disabled={working}>
+                    すべて削除
+                  </button>
+                )
+              )}
+            </div>
+          </section>
+        )}
+
+        {slideView === 'settings' && (
+          <section className="slide-panel slide-secondary">
+            <header className="slide-header">
+              <button type="button" className="back-button" onClick={() => setSlideView('main')}>← 戻る</button>
+              <span className="slide-title">設定</span>
+            </header>
+            <div className="slide-body">
+              <div className="settings-section">
+                <h3 className="section-title">接続</h3>
+                <label className="field">
+                  <span>OpenRouter API Key</span>
+                  <input type="password" value={settings.apiKey} onChange={(e) => updateSettings({ apiKey: e.target.value })} placeholder="sk-or-v1-..." />
+                </label>
+                <button type="button" className="button button-secondary" onClick={() => void handleValidateApiKey()} disabled={!settings.apiKey.trim() || apiKeyValidation === 'checking'}>
+                  {apiKeyValidation === 'checking' ? '確認中...' : '接続を確認'}
+                </button>
+                {apiKeyValidation === 'invalid' && apiKeyError && <p className="soft-note soft-note-error">{apiKeyError}</p>}
+                {apiKeyValidation === 'valid' && <p className="soft-note" style={{ color: 'var(--green-text)' }}>接続 OK</p>}
+                <a className="button button-secondary button-link-card" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">OpenRouter で API Key を作る</a>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="section-title">読む言語</h3>
+                <div className="language-pills" role="group">
+                  {primaryLanguageOptions.map((lang) => (
+                    <button key={lang.code} type="button" className="pill-button" data-selected={settings.targetLanguage === lang.code} onClick={() => updateSettings({ targetLanguage: lang.code })}>
+                      <span>{lang.label}</span>
+                      <small>{lang.nativeLabel}</small>
+                    </button>
+                  ))}
+                </div>
+                <label className="field field-inline">
+                  <span>ほかの言語</span>
+                  <select
+                    value={primaryLanguageOptions.some((l) => l.code === settings.targetLanguage) ? '' : settings.targetLanguage}
+                    onChange={(e) => { if (e.target.value) updateSettings({ targetLanguage: e.target.value }); }}
+                  >
+                    <option value="">ほかの言語を選ぶ</option>
+                    {additionalLanguageOptions.map((lang) => (
+                      <option key={lang.code} value={lang.code}>{lang.label} / {lang.nativeLabel}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="section-title">翻訳スタイル</h3>
+                <label className="field">
+                  <select aria-label="翻訳スタイル" value={settings.style} onChange={(e) => updateSettings({ style: e.target.value as TranslationStyle })}>
+                    {STYLE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                  <p className="helper-copy">{STYLE_OPTIONS.find((o) => o.value === settings.style)?.help}</p>
+                </label>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="section-title">表示</h3>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={settings.showOriginalOnHover} onChange={(e) => updateSettings({ showOriginalOnHover: e.target.checked })} />
+                  <span>ホバーで原文を表示</span>
+                </label>
+              </div>
+
+              {blockedSites.length > 0 && (
+                <div className="settings-section">
+                  <h3 className="section-title">翻訳しないサイト</h3>
+                  {blockedSites.map((site) => (
+                    <div className="cache-page-item" key={site}>
+                      <span className="cache-page-url" style={{ color: 'var(--text)' }}>{site}</span>
+                      <button type="button" className="button button-muted cache-delete-button" onClick={() => void handleUnblockSite(site)}>
+                        解除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -560,19 +651,6 @@ export function PopupApp() {
 
 function resolveScope(settings: ExtensionSettings): 'main' | 'page' {
   return settings.translateFullPage ? 'page' : 'main';
-}
-
-function getPrimaryLabel(options: { missingApiKey: boolean; hasPageTranslation: boolean; canResumeCancelledTranslation: boolean; isActive: boolean; tabState: TabSessionState | null }): string {
-  if (options.isActive) return '翻訳しています...';
-  if (options.missingApiKey) return '設定へ';
-  if (options.canResumeCancelledTranslation) return '続きを再開する';
-  if (options.hasPageTranslation) {
-    const ds = options.tabState?.displayState;
-    if (ds === 'translated') return '対訳を表示';
-    if (ds === 'bilingual') return '原文に戻す';
-    return '翻訳のみ';
-  }
-  return 'このページを翻訳する';
 }
 
 function translateStatus(status: string): string {

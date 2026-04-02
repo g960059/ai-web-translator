@@ -20,6 +20,7 @@ export function createSettings(overrides: Partial<ExtensionSettings> = {}): Exte
     style: 'auto',
     translateFullPage: false,
     cacheEnabled: true,
+    showOriginalOnHover: true,
     ...overrides,
   };
 }
