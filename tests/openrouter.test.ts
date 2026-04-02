@@ -416,7 +416,8 @@ describe('translateWithOpenRouter', () => {
 
     expect(systemPrompt).toContain('[[t0]]');
     expect(systemPrompt).toContain('[[x0]]');
-    expect(systemPrompt).toContain('must appear exactly once');
+    expect(systemPrompt).toContain('exactly once');
+    expect(systemPrompt).toContain('output is invalid if any marker is missing');
   });
 
   it('includes page register, fragment roles, and continuation context in the request contract', async () => {

@@ -54,10 +54,12 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
         .join(' ') || null
     : null;
   const fragmentObjectInstruction = usesFragmentObjects
-    ? 'Each fragment: t=source text, i=id, r=role, p=preceding context (reference only — do not re-translate p content).'
+    ? request.hasProtectedMarkers
+      ? 'Each fragment: t=source text, i=id, r=role, p=preceding context (reference only — do not re-translate p content), m=list of marker tokens that MUST appear in the translated t.'
+      : 'Each fragment: t=source text, i=id, r=role, p=preceding context (reference only — do not re-translate p content).'
     : null;
   const markerInstruction = request.hasProtectedMarkers
-    ? 'Keep marker tokens like [[t0]], [[/t0]], and [[x0]] exactly unchanged. Every marker from the source fragment must appear exactly once in the translation, in the same order.'
+    ? 'CRITICAL: Every [[…]] marker token (e.g. [[t0]], [[/t0]], [[x0]]) is a protected placeholder. Copy each marker from the source into the translation exactly once, in the same relative order. Never translate, paraphrase, split, or drop any marker. The output is invalid if any marker is missing.'
     : null;
   const roleInstruction = hasFragmentRoles
     ? [
@@ -76,13 +78,13 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
       'Keep tags, URLs, emphasis, and inline math intact.',
       buildStyleInstruction(request),
       hintInstruction,
-      markerInstruction,
       roleInstruction,
       hasFragmentIds
         ? 'Return JSON: {"translations":[{"i":"0","t":"<html>"},{"i":"1","t":"<html>"}]}.'
         : 'Return JSON: {"translations":["<html>","<html>"]}.',
       'Translate every fragment completely. Never leave a source-language sentence or clause untranslated. Never mix source and target languages in the same sentence.',
       hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. No prose.',
+      markerInstruction,
     ]
       .filter(Boolean)
       .join('\n');
@@ -95,13 +97,13 @@ function buildSystemPrompt(request: TranslationBatchRequest): string {
     'Each fragment is plain text.',
     buildStyleInstruction(request),
     hintInstruction,
-    markerInstruction,
     roleInstruction,
     'Translate every fragment completely. Never leave a source-language sentence or clause untranslated. Never mix source and target languages in the same sentence.',
     hasFragmentIds
       ? 'Return JSON: {"translations":[{"i":"0","t":"..."},{"i":"1","t":"..."}]}.'
       : 'Return JSON: {"translations":["...","..."]}.',
     hasFragmentIds ? 'Same ids, same count. No prose.' : 'Same count. Plain text only. No prose.',
+    markerInstruction,
   ]
     .filter(Boolean)
     .join('\n');
@@ -386,6 +388,11 @@ function extractBalancedJsonFrom(content: string, startIndex: number): string | 
   return null;
 }
 
+function extractMarkerTokens(text: string): string[] {
+  const matches = text.match(/\[\[[^\]]+\]\]/g);
+  return matches ? [...new Set(matches)] : [];
+}
+
 function buildUserPayload(request: TranslationBatchRequest): string {
   const hasFragmentIds = request.fragmentIds?.length === request.fragments.length;
   const hasFragmentRoles = request.fragmentRoles?.length === request.fragments.length;
@@ -393,7 +400,7 @@ function buildUserPayload(request: TranslationBatchRequest): string {
   const usesFragmentObjects = Boolean(hasFragmentIds || hasFragmentRoles || hasPrecedingContexts);
   const fragments = usesFragmentObjects
     ? request.fragments.map((text, index) => {
-        const fragment: Record<string, string> = { t: text };
+        const fragment: Record<string, string | string[]> = { t: text };
         const fragmentId = hasFragmentIds ? request.fragmentIds?.[index] : undefined;
         const fragmentRole = hasFragmentRoles ? request.fragmentRoles?.[index] : undefined;
         const precedingContext = hasPrecedingContexts ? request.precedingContexts?.[index] : undefined;
@@ -405,6 +412,12 @@ function buildUserPayload(request: TranslationBatchRequest): string {
         }
         if (precedingContext) {
           fragment.p = precedingContext;
+        }
+        if (request.hasProtectedMarkers) {
+          const markers = extractMarkerTokens(text);
+          if (markers.length > 0) {
+            fragment.m = markers;
+          }
         }
         return fragment;
       })

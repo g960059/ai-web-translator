@@ -411,11 +411,23 @@ export function restoreProtectedHtml(content: string, htmlMap: Record<string, st
 }
 
 /**
- * Recover missing protected markers by appending them to the end of the
- * translated content.  This is a best-effort recovery: the translation is
- * kept intact and any markers the LLM dropped are placed at the end so
- * that the final `restoreProtectedHtml` pass can still substitute the
- * original HTML (math, code, tables, etc.).
+ * Recover missing protected markers by inserting them at contextually
+ * appropriate positions in the translated content.
+ *
+ * When `sourceContent` is provided the function uses marker positions in
+ * the source text to decide *where* in the translation each missing marker
+ * should be placed:
+ *
+ *  1. **Adjacent-marker anchoring** — if the marker has a neighbouring
+ *     marker in the source that is still present in the translation, the
+ *     missing marker is inserted next to that neighbour (before or after,
+ *     matching the source order).
+ *  2. **Relative-position fallback** — map the marker's normalised
+ *     position in the source (0..1) onto the translation length and pick
+ *     the nearest word / token boundary.
+ *
+ * Without `sourceContent` the function falls back to appending missing
+ * markers at the end (the previous behaviour).
  *
  * Returns `{ recovered, missingMarkers }`.  `missingMarkers` is empty when
  * all markers were already present.
@@ -423,6 +435,7 @@ export function restoreProtectedHtml(content: string, htmlMap: Record<string, st
 export function recoverMissingProtectedMarkers(
   canonicalContent: string,
   htmlMap: Record<string, string>,
+  sourceContent?: string,
 ): { recovered: string; missingMarkers: string[] } {
   const missing = Object.keys(htmlMap).filter(
     (marker) => !canonicalContent.includes(marker),
@@ -430,14 +443,355 @@ export function recoverMissingProtectedMarkers(
   if (missing.length === 0) {
     return { recovered: canonicalContent, missingMarkers: [] };
   }
-  // Append missing markers separated by a single space so that
-  // `restoreProtectedHtml` will substitute each one.
-  const suffix = missing.join(' ');
-  const recovered = canonicalContent.endsWith(' ')
-    ? `${canonicalContent}${suffix}`
-    : `${canonicalContent} ${suffix}`;
+
+  // Fast path: no source → append at end (legacy behaviour).
+  if (!sourceContent) {
+    const suffix = missing.join(' ');
+    const recovered = canonicalContent.endsWith(' ')
+      ? `${canonicalContent}${suffix}`
+      : `${canonicalContent} ${suffix}`;
+    return { recovered, missingMarkers: missing };
+  }
+
+  // Build ordered list of all markers present in the source and their
+  // character offsets so we can reason about positional context.
+  const markerPattern = /\[\[x\d+\]\]/gi;
+  const sourcePositions = new Map<string, number>();
+  const sourceOrder: string[] = [];
+  for (const m of sourceContent.matchAll(markerPattern)) {
+    const key = m[0].toLowerCase().replace(/\s/g, '');
+    // Normalise to canonical form [[xN]]
+    const canonical = key;
+    if (!sourcePositions.has(canonical)) {
+      sourcePositions.set(canonical, m.index);
+      sourceOrder.push(canonical);
+    }
+  }
+
+  const translationPositions = new Map<string, number>();
+  for (const m of canonicalContent.matchAll(markerPattern)) {
+    const key = m[0].toLowerCase().replace(/\s/g, '');
+    if (!translationPositions.has(key)) {
+      translationPositions.set(key, m.index);
+    }
+  }
+
+  // Insert missing markers one-by-one into the evolving recovered string.
+  // Process in source order so that successive insertions stay consistent.
+  const sortedMissing = [...missing].sort((a, b) => {
+    const pa = sourcePositions.get(a.toLowerCase()) ?? Infinity;
+    const pb = sourcePositions.get(b.toLowerCase()) ?? Infinity;
+    return pa - pb;
+  });
+
+  let recovered = canonicalContent;
+
+  for (const marker of sortedMissing) {
+    const insertPos = findBestInsertionPoint(
+      recovered,
+      marker,
+      sourceContent,
+      sourceOrder,
+      sourcePositions,
+    );
+
+    if (insertPos === null) {
+      // Fallback: append at end
+      recovered = recovered.endsWith(' ')
+        ? `${recovered}${marker}`
+        : `${recovered} ${marker}`;
+    } else {
+      recovered =
+        recovered.slice(0, insertPos) + marker + recovered.slice(insertPos);
+    }
+
+    // Re-index translation positions after insertion for subsequent markers.
+    translationPositions.clear();
+    for (const m of recovered.matchAll(markerPattern)) {
+      const key = m[0].toLowerCase().replace(/\s/g, '');
+      if (!translationPositions.has(key)) {
+        translationPositions.set(key, m.index);
+      }
+    }
+  }
+
   return { recovered, missingMarkers: missing };
 }
+
+/**
+ * Determine the best character offset in `translation` to insert
+ * `missingMarker`, using positional data from the source text.
+ *
+ * Returns `null` when no good heuristic fires (caller should append at end).
+ */
+function findBestInsertionPoint(
+  translation: string,
+  missingMarker: string,
+  sourceContent: string,
+  sourceOrder: string[],
+  sourcePositions: Map<string, number>,
+): number | null {
+  const markerKey = missingMarker.toLowerCase();
+  const srcIdx = sourceOrder.indexOf(markerKey);
+  if (srcIdx === -1) {
+    // Marker wasn't even in the source — nothing to anchor on.
+    return null;
+  }
+
+  const markerPattern = /\[\[x\d+\]\]/gi;
+
+  // ---- Strategy 1: Adjacent-marker anchoring ----
+  // Look for the closest preceding and following markers (in source order)
+  // that ARE present in the translation.
+  let anchorBefore: { marker: string; translationEnd: number } | null = null;
+  let anchorAfter: { marker: string; translationStart: number } | null = null;
+
+  // Search backwards for nearest present marker
+  for (let i = srcIdx - 1; i >= 0; i--) {
+    const candidate = sourceOrder[i];
+    const tMatch = findMarkerInText(translation, candidate);
+    if (tMatch !== null) {
+      anchorBefore = { marker: candidate, translationEnd: tMatch.end };
+      break;
+    }
+  }
+
+  // Search forwards for nearest present marker
+  for (let i = srcIdx + 1; i < sourceOrder.length; i++) {
+    const candidate = sourceOrder[i];
+    const tMatch = findMarkerInText(translation, candidate);
+    if (tMatch !== null) {
+      anchorAfter = { marker: candidate, translationStart: tMatch.start };
+      break;
+    }
+  }
+
+  // ---- Strategy 2: Relative position mapping ----
+  // Always compute the relative position so we can compare anchor quality
+  // against it.
+  const srcPos = sourcePositions.get(markerKey);
+  const relativePos =
+    srcPos !== undefined && sourceContent.length > 0
+      ? srcPos / sourceContent.length
+      : null;
+
+  // Decide whether an adjacent-marker anchor is "close enough" in the
+  // source to be a reliable insertion guide.  When the source gap between
+  // the anchor and the missing marker is small (< 15% of source text),
+  // we trust the anchor completely.  Otherwise we use relative-position
+  // mapping, but constrain it to respect the ordering implied by anchors
+  // (result must be after anchor-before and before anchor-after).
+  const CLOSE_GAP_THRESHOLD = 0.15;
+
+  const anchorBeforeGap =
+    anchorBefore && srcPos !== undefined
+      ? Math.abs(
+          srcPos - (sourcePositions.get(anchorBefore.marker) ?? 0),
+        ) / sourceContent.length
+      : Infinity;
+  const anchorAfterGap =
+    anchorAfter && srcPos !== undefined
+      ? Math.abs(
+          (sourcePositions.get(anchorAfter.marker) ?? sourceContent.length) - srcPos,
+        ) / sourceContent.length
+      : Infinity;
+
+  // Close anchor — insert directly adjacent
+  const closeAnchorAfter =
+    anchorAfter && anchorAfterGap <= CLOSE_GAP_THRESHOLD;
+  const closeAnchorBefore =
+    anchorBefore && anchorBeforeGap <= CLOSE_GAP_THRESHOLD;
+
+  if (closeAnchorAfter && closeAnchorBefore) {
+    if (anchorAfterGap <= anchorBeforeGap) {
+      return snapToTokenBoundary(translation, anchorAfter!.translationStart, 'before');
+    }
+    return snapToTokenBoundary(translation, anchorBefore!.translationEnd, 'after');
+  }
+  if (closeAnchorAfter) {
+    return snapToTokenBoundary(translation, anchorAfter!.translationStart, 'before');
+  }
+  if (closeAnchorBefore) {
+    return snapToTokenBoundary(translation, anchorBefore!.translationEnd, 'after');
+  }
+
+  if (relativePos === null) {
+    // No positional data at all — use distant anchors as fallback
+    if (anchorAfter) {
+      return snapToTokenBoundary(translation, anchorAfter.translationStart, 'before');
+    }
+    if (anchorBefore) {
+      return snapToTokenBoundary(translation, anchorBefore.translationEnd, 'after');
+    }
+    return null;
+  }
+
+  // Strip existing markers from translation to get "text-only" length,
+  // then map the relative position back.
+  const textOnly = translation.replace(markerPattern, '');
+  const targetCharPos = Math.round(relativePos * textOnly.length);
+
+  // Walk through the actual translation to find the character position that
+  // corresponds to `targetCharPos` text characters.
+  let textChars = 0;
+  let realPos = 0;
+  const existingMarkers = [...translation.matchAll(new RegExp(markerPattern.source, 'gi'))];
+  const markerRanges = existingMarkers.map((m) => ({
+    start: m.index,
+    end: m.index + m[0].length,
+  }));
+
+  while (realPos < translation.length && textChars < targetCharPos) {
+    const inMarker = markerRanges.find(
+      (r) => realPos >= r.start && realPos < r.end,
+    );
+    if (inMarker) {
+      realPos = inMarker.end;
+      continue;
+    }
+    textChars++;
+    realPos++;
+  }
+
+  // Clamp the position to respect ordering constraints from distant anchors.
+  // The missing marker must appear after anchor-before and before anchor-after
+  // in the translation.
+  const minPos = anchorBefore ? anchorBefore.translationEnd : 0;
+  const maxPos = anchorAfter ? anchorAfter.translationStart : translation.length;
+  realPos = Math.max(minPos, Math.min(realPos, maxPos));
+
+  return snapToTokenBoundary(translation, realPos, 'nearest');
+}
+
+/** Find the start/end offsets of a marker in text (case-insensitive). */
+function findMarkerInText(
+  text: string,
+  marker: string,
+): { start: number; end: number } | null {
+  const idx = text.toLowerCase().indexOf(marker.toLowerCase());
+  if (idx === -1) return null;
+  // Find the actual marker length in the text at that position
+  const match = text.slice(idx).match(/\[\[x\d+\]\]/i);
+  if (!match) return null;
+  return { start: idx, end: idx + match[0].length };
+}
+
+/**
+ * Snap a raw character position to the nearest token/word boundary so
+ * that a marker doesn't land in the middle of a word or CJK character
+ * sequence.
+ *
+ * Uses a two-tier boundary system:
+ * - **Strong boundaries** (punctuation, spaces, marker brackets) are
+ *   preferred within a search radius.
+ * - **Weak boundaries** (any CJK character edge) are used as a fallback.
+ *
+ * `direction`:
+ *  - 'before' — move to a position just before the given offset (for
+ *    inserting before an anchor)
+ *  - 'after'  — stay at or just after the offset
+ *  - 'nearest' — pick the closest boundary
+ */
+function snapToTokenBoundary(
+  text: string,
+  pos: number,
+  direction: 'before' | 'after' | 'nearest',
+): number {
+  // Clamp
+  pos = Math.max(0, Math.min(pos, text.length));
+
+  // Already at a strong boundary?
+  if (isStrongBoundary(text, pos)) {
+    return pos;
+  }
+
+  // Search radius for strong boundaries (characters)
+  const STRONG_RADIUS = 8;
+
+  // Scan for nearest strong boundaries in both directions
+  let strongLeft = pos;
+  while (strongLeft > 0 && pos - strongLeft < STRONG_RADIUS && !isStrongBoundary(text, strongLeft)) {
+    strongLeft--;
+  }
+  const foundStrongLeft = isStrongBoundary(text, strongLeft) && pos - strongLeft < STRONG_RADIUS;
+
+  let strongRight = pos;
+  while (strongRight < text.length && strongRight - pos < STRONG_RADIUS && !isStrongBoundary(text, strongRight)) {
+    strongRight++;
+  }
+  const foundStrongRight = isStrongBoundary(text, strongRight) && strongRight - pos < STRONG_RADIUS;
+
+  // Prefer strong boundary if available
+  if (foundStrongLeft || foundStrongRight) {
+    if (direction === 'before') {
+      return foundStrongLeft ? strongLeft : strongRight;
+    }
+    if (direction === 'after') {
+      return foundStrongRight ? strongRight : strongLeft;
+    }
+    // nearest
+    if (foundStrongLeft && foundStrongRight) {
+      return pos - strongLeft <= strongRight - pos ? strongLeft : strongRight;
+    }
+    return foundStrongLeft ? strongLeft : strongRight;
+  }
+
+  // Fallback: scan for any boundary (including weak CJK boundaries)
+  let left = pos;
+  while (left > 0 && !isTokenBoundary(text, left)) left--;
+  let right = pos;
+  while (right < text.length && !isTokenBoundary(text, right)) right++;
+
+  let chosen: number;
+  if (direction === 'before') {
+    chosen = left;
+  } else if (direction === 'after') {
+    chosen = right;
+  } else {
+    chosen = pos - left <= right - pos ? left : right;
+  }
+
+  return chosen;
+}
+
+/** CJK Unified Ideographs + Hiragana + Katakana + CJK punctuation ranges. */
+const CJK_CHAR_PATTERN = /[\u3000-\u9FFF\uF900-\uFAFF]/;
+
+/**
+ * Check if position `pos` in `text` is a **strong** token boundary:
+ * punctuation, spaces, or marker bracket edges.  These are preferred
+ * insertion points because they sit at natural clause/phrase breaks.
+ *
+ * Note: start (0) and end (length) of string are NOT treated as strong
+ * boundaries to avoid biasing short texts toward edge insertions.
+ */
+function isStrongBoundary(text: string, pos: number): boolean {
+  if (pos <= 0 || pos >= text.length) return false;
+  const before = text[pos - 1];
+  const after = text[pos];
+  if (before === ' ' || after === ' ') return true;
+  if (/[。、！？.,!?;:()（）「」『』]/.test(before) || /[。、！？.,!?;:()（）「」『』]/.test(after)) return true;
+  if (before === ']' || after === '[') return true;
+  return false;
+}
+
+/** Check if position `pos` in `text` is a reasonable token boundary. */
+function isTokenBoundary(text: string, pos: number): boolean {
+  if (pos === 0 || pos === text.length) return true;
+  const before = text[pos - 1];
+  const after = text[pos];
+  // Space boundary
+  if (before === ' ' || after === ' ') return true;
+  // Punctuation boundary (Japanese/CJK punctuation included)
+  if (/[。、！？.,!?;:()（）「」『』]/.test(before) || /[。、！？.,!?;:()（）「」『』]/.test(after)) return true;
+  // Marker bracket boundary
+  if (before === ']' || after === '[') return true;
+  // CJK character boundary — every inter-character position is a valid
+  // insertion point since CJK languages don't use inter-word spaces.
+  if (CJK_CHAR_PATTERN.test(before) || CJK_CHAR_PATTERN.test(after)) return true;
+  return false;
+}
+
 
 export function canonicalizeProtectedHtmlMarkers(
   content: string,

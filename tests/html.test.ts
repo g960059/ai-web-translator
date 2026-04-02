@@ -787,4 +787,84 @@ describe('recoverMissingProtectedMarkers', () => {
     const restored = restoreProtectedHtml(recovered, htmlMap);
     expect(restored).toBe('群の表現論について <math><mi>G</mi></math>');
   });
+
+  // --- Positional recovery with sourceContent ---
+
+  it('inserts missing marker inside the sentence using relative positioning (representation space example)', () => {
+    // Source: "The vector space [[x10]] is called a representation space of [[x11]]."
+    // LLM dropped [[x11]] and produced "は、の表現空間と呼ばれる"
+    const htmlMap = {
+      '[[x10]]': '<math><mi>V</mi></math>',
+      '[[x11]]': '<math><mi>G</mi></math>',
+    };
+    const source = 'The vector space [[x10]] is called a representation space of [[x11]].';
+    const content = 'このベクトル空間[[x10]]は、の表現空間と呼ばれる。';
+    const { recovered, missingMarkers } = recoverMissingProtectedMarkers(content, htmlMap, source);
+    expect(missingMarkers).toEqual(['[[x11]]']);
+    // [[x11]] should be placed inside the sentence (after [[x10]]), not
+    // orphaned after the period. The strong boundary snapping should place
+    // it just before the sentence-final "。".
+    const x10Pos = recovered.indexOf('[[x10]]');
+    const x11Pos = recovered.indexOf('[[x11]]');
+    expect(x10Pos).toBeGreaterThanOrEqual(0);
+    expect(x11Pos).toBeGreaterThan(x10Pos);
+    expect(recovered.endsWith('[[x11]]')).toBe(false);
+    // After restoration, G should appear inside the sentence, not dangling
+    const restored = restoreProtectedHtml(recovered, htmlMap);
+    expect(restored).toContain('G</mi></math>。');
+  });
+
+  it('inserts missing marker before its source successor (anchor-before strategy)', () => {
+    // Source: "Let [[x0]] and [[x1]] be groups."
+    // LLM kept [[x1]] but dropped [[x0]].
+    const htmlMap = {
+      '[[x0]]': '<math><mi>G</mi></math>',
+      '[[x1]]': '<math><mi>H</mi></math>',
+    };
+    const source = 'Let [[x0]] and [[x1]] be groups.';
+    const content = 'と[[x1]]を群とする。';
+    const { recovered, missingMarkers } = recoverMissingProtectedMarkers(content, htmlMap, source);
+    expect(missingMarkers).toEqual(['[[x0]]']);
+    // [[x0]] should be inserted before [[x1]]
+    const x0Pos = recovered.indexOf('[[x0]]');
+    const x1Pos = recovered.indexOf('[[x1]]');
+    expect(x0Pos).toBeGreaterThanOrEqual(0);
+    expect(x1Pos).toBeGreaterThan(x0Pos);
+  });
+
+  it('falls back to append when no sourceContent is provided', () => {
+    const htmlMap = { '[[x0]]': '<math>G</math>' };
+    const content = '群の表現論について';
+    const { recovered } = recoverMissingProtectedMarkers(content, htmlMap);
+    expect(recovered).toBe('群の表現論について [[x0]]');
+  });
+
+  it('uses relative position when no adjacent markers are present in translation', () => {
+    // Source has one marker at roughly the midpoint. Translation has none.
+    const htmlMap = { '[[x5]]': '<math><mi>x</mi></math>' };
+    const source = 'The value of [[x5]] is important.';
+    const content = 'の値は重要です。';
+    const { recovered, missingMarkers } = recoverMissingProtectedMarkers(content, htmlMap, source);
+    expect(missingMarkers).toEqual(['[[x5]]']);
+    // Marker should be inserted roughly in the middle, not at the very end
+    const markerPos = recovered.indexOf('[[x5]]');
+    expect(markerPos).toBeGreaterThan(0);
+    expect(markerPos).toBeLessThan(content.length);
+  });
+
+  it('preserves all markers after positional recovery and restoreProtectedHtml', () => {
+    const htmlMap = {
+      '[[x10]]': '<math><mi>V</mi></math>',
+      '[[x11]]': '<math><mi>G</mi></math>',
+    };
+    const source = 'The vector space [[x10]] is called a representation space of [[x11]].';
+    const content = 'このベクトル空間[[x10]]は、の表現空間と呼ばれる。';
+    const { recovered } = recoverMissingProtectedMarkers(content, htmlMap, source);
+    const restored = restoreProtectedHtml(recovered, htmlMap);
+    expect(restored).toContain('<math><mi>V</mi></math>');
+    expect(restored).toContain('<math><mi>G</mi></math>');
+    // Neither marker token should remain
+    expect(restored).not.toContain('[[x10]]');
+    expect(restored).not.toContain('[[x11]]');
+  });
 });

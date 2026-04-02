@@ -1895,6 +1895,7 @@ export class TranslationController {
                 const { recovered, missingMarkers } = recoverMissingProtectedMarkers(
                   canonicalProtectedFragment,
                   item.protectedHtmlMap,
+                  item.preparedContent,
                 );
                 protectedSafeFragment = recovered;
                 if (missingMarkers.length > 0) {
@@ -2151,6 +2152,7 @@ export class TranslationController {
             const { recovered, missingMarkers } = recoverMissingProtectedMarkers(
               canonicalProtectedFragment,
               item.protectedHtmlMap,
+              item.preparedContent,
             );
             protectedSafeFragment = recovered;
             if (missingMarkers.length > 0) {
