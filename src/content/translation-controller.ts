@@ -1866,8 +1866,6 @@ export class TranslationController {
               lookup: TranslationCacheLookup;
               translation: string;
             }> = [];
-            const fallbackGroupKeys = new Set<string>();
-
             batch.forEach((item, index) => {
               const translatedFragment = normalizeTranslatedFragmentForQuality(
                 result.translations[index],
@@ -1906,7 +1904,6 @@ export class TranslationController {
                 protectedSafeFragment !== canonicalProtectedFragment
               ) {
                 this.recordQualitySignal('protectedMarkerFallbackFragments');
-                fallbackGroupKeys.add(item.group.groupKey);
                 pendingFallbackWarnings.set(item.group.groupKey, undefined);
               }
               const placeholderRestoredFragment = item.placeholderTagMap
@@ -1940,7 +1937,6 @@ export class TranslationController {
               const restored = joinTranslatedGroupOutput(item.group, bucket);
               const hasFallbackWarning =
                 usedSourceFallback ||
-                fallbackGroupKeys.has(item.group.groupKey) ||
                 pendingFallbackWarnings.has(item.group.groupKey);
               const isHeadingOrLabel =
                 item.fragmentRole === 'heading' || item.fragmentRole === 'label';
@@ -1984,18 +1980,25 @@ export class TranslationController {
               if (dictTranslation && looksUntranslatedShortText(restored, originalText)) {
                 finalRestored = dictTranslation;
               }
-              this.applyGroupTranslation(item.group, finalRestored, false, {
-                clearWarnings: !hasFallbackWarning,
-              });
               if (hasFallbackWarning) {
+                // Restore original HTML instead of applying mixed JP/EN content
+                item.group.records.forEach((record) => {
+                  setElementHtmlContent(record.element, record.originalHtml);
+                  record.translatedContent = null;
+                  record.displayState = 'original';
+                });
                 const fallbackMessage = pendingFallbackWarnings.get(item.group.groupKey);
                 this.markItemsFallback(
                   batch.filter((candidate) => candidate.group.groupKey === item.group.groupKey),
                   fallbackMessage ?? sourceFallbackMessage ?? undefined,
                 );
                 pendingFallbackWarnings.delete(item.group.groupKey);
+              } else {
+                this.applyGroupTranslation(item.group, finalRestored, false);
               }
-              this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
+              if (!hasFallbackWarning) {
+                this.captureGlossaryTranslation(item.group, restored, options.runtimeState);
+              }
               processedJobs += 1;
               if (options.settings.cacheEnabled && !hasFallbackWarning && !detectedMixed) {
                 cacheEntries.push({
@@ -2126,7 +2129,6 @@ export class TranslationController {
         }
 
         const fragments: string[] = [];
-        let unresolved = false;
 
         for (const [index, item] of items.entries()) {
           const translatedFragment = normalizeTranslatedFragmentForQuality(
@@ -2152,17 +2154,17 @@ export class TranslationController {
             : normalizedProtectedFragment;
           const protectedSafeFragment =
             item.protectedHtmlMap &&
-            !hasAllProtectedMarkers(canonicalProtectedFragment, item.protectedHtmlMap)
+            !hasAllProtectedMarkers(
+              canonicalProtectedFragment,
+              item.protectedHtmlMap,
+            )
               ? restoreProtectedHtml(item.preparedContent, item.protectedHtmlMap)
               : canonicalProtectedFragment;
           if (
             item.protectedHtmlMap &&
-            protectedSafeFragment !== canonicalProtectedFragment &&
-            canonicalProtectedFragment !== item.preparedContent
+            protectedSafeFragment !== canonicalProtectedFragment
           ) {
             this.recordQualitySignal('protectedMarkerFallbackFragments');
-            unresolved = true;
-            break;
           }
           const placeholderRestoredFragment = item.placeholderTagMap
             ? restorePlaceholderRichText(protectedSafeFragment, item.placeholderTagMap)
@@ -2179,7 +2181,7 @@ export class TranslationController {
           fragments.push(restoredFragment);
         }
 
-        if (unresolved || fragments.length !== items.length) {
+        if (fragments.length !== items.length) {
           this.applyOriginalGroupContent(group);
           this.markItemsFallback(items);
           continue;

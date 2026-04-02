@@ -410,6 +410,35 @@ export function restoreProtectedHtml(content: string, htmlMap: Record<string, st
   );
 }
 
+/**
+ * Recover missing protected markers by appending them to the end of the
+ * translated content.  This is a best-effort recovery: the translation is
+ * kept intact and any markers the LLM dropped are placed at the end so
+ * that the final `restoreProtectedHtml` pass can still substitute the
+ * original HTML (math, code, tables, etc.).
+ *
+ * Returns `{ recovered, missingMarkers }`.  `missingMarkers` is empty when
+ * all markers were already present.
+ */
+export function recoverMissingProtectedMarkers(
+  canonicalContent: string,
+  htmlMap: Record<string, string>,
+): { recovered: string; missingMarkers: string[] } {
+  const missing = Object.keys(htmlMap).filter(
+    (marker) => !canonicalContent.includes(marker),
+  );
+  if (missing.length === 0) {
+    return { recovered: canonicalContent, missingMarkers: [] };
+  }
+  // Append missing markers separated by a single space so that
+  // `restoreProtectedHtml` will substitute each one.
+  const suffix = missing.join(' ');
+  const recovered = canonicalContent.endsWith(' ')
+    ? `${canonicalContent}${suffix}`
+    : `${canonicalContent} ${suffix}`;
+  return { recovered, missingMarkers: missing };
+}
+
 export function canonicalizeProtectedHtmlMarkers(
   content: string,
   htmlMap: Record<string, string>,

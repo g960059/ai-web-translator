@@ -5,6 +5,7 @@ import {
   prepareContentForTranslation,
   preparePlaceholderRichTextForTranslation,
   protectAtomicHtmlForTranslation,
+  recoverMissingProtectedMarkers,
   restorePreparedContent,
   restoreProtectedHtml,
   restorePlaceholderRichText,
@@ -739,5 +740,51 @@ describe('core html and block extraction', () => {
     expect(
       blocks.some((block) => block.originalText.includes('Retrieved 2026. ISBN 123-4. doi example.')),
     ).toBe(false);
+  });
+});
+
+describe('recoverMissingProtectedMarkers', () => {
+  it('returns the content unchanged when all markers are present', () => {
+    const htmlMap = { '[[x0]]': '<math>G</math>', '[[x1]]': '<math>H</math>' };
+    const content = '群 [[x0]] と [[x1]] の関係';
+    const { recovered, missingMarkers } = recoverMissingProtectedMarkers(content, htmlMap);
+    expect(recovered).toBe(content);
+    expect(missingMarkers).toEqual([]);
+  });
+
+  it('appends a single missing marker at the end', () => {
+    const htmlMap = { '[[x0]]': '<math>G</math>' };
+    const content = '群の表現論について';
+    const { recovered, missingMarkers } = recoverMissingProtectedMarkers(content, htmlMap);
+    expect(recovered).toBe('群の表現論について [[x0]]');
+    expect(missingMarkers).toEqual(['[[x0]]']);
+  });
+
+  it('appends multiple missing markers at the end', () => {
+    const htmlMap = {
+      '[[x0]]': '<math>G</math>',
+      '[[x1]]': '<math>H</math>',
+      '[[x2]]': '<math>K</math>',
+    };
+    const content = '群 [[x1]] の表現論について';
+    const { recovered, missingMarkers } = recoverMissingProtectedMarkers(content, htmlMap);
+    expect(recovered).toBe('群 [[x1]] の表現論について [[x0]] [[x2]]');
+    expect(missingMarkers).toEqual(['[[x0]]', '[[x2]]']);
+  });
+
+  it('does not add a double space when content already ends with a space', () => {
+    const htmlMap = { '[[x0]]': '<math>G</math>' };
+    const content = '群の表現論について ';
+    const { recovered, missingMarkers } = recoverMissingProtectedMarkers(content, htmlMap);
+    expect(recovered).toBe('群の表現論について [[x0]]');
+    expect(missingMarkers).toEqual(['[[x0]]']);
+  });
+
+  it('integrates with restoreProtectedHtml to produce valid output', () => {
+    const htmlMap = { '[[x0]]': '<math><mi>G</mi></math>' };
+    const content = '群の表現論について';
+    const { recovered } = recoverMissingProtectedMarkers(content, htmlMap);
+    const restored = restoreProtectedHtml(recovered, htmlMap);
+    expect(restored).toBe('群の表現論について <math><mi>G</mi></math>');
   });
 });
