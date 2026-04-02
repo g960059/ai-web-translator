@@ -25,6 +25,7 @@ import {
   protectAtomicHtmlForTranslation,
   restorePreparedContent,
   canonicalizeProtectedHtmlMarkers,
+  recoverMissingProtectedMarkers,
   restoreProtectedHtml,
   restorePlaceholderRichText,
   setElementHtmlContent,
@@ -1810,7 +1811,6 @@ export class TranslationController {
           const batch = plan.batches[nextBatchIndex++];
           try {
             let result: TranslationRequestResult;
-            let usedSourceFallback = false;
             let sourceFallbackMessage: string | null = null;
             try {
               result = await this.requestTranslationsWithRetry({
@@ -1841,7 +1841,6 @@ export class TranslationController {
                     maxOutputTokensOverride: 16000,
                   });
                 } catch {
-                  usedSourceFallback = true;
                   sourceFallbackMessage = getErrorMessage(error, 'Translation request failed.');
                   logWithContext('warn', '[AI Web Translator] Falling back to source fragment after output-limit failure.', {
                     pageKey: this.pageKey,
@@ -1891,20 +1890,16 @@ export class TranslationController {
                     item.protectedHtmlMap,
                   )
                 : normalizedProtectedFragment;
-              const protectedSafeFragment =
-                item.protectedHtmlMap &&
-                !hasAllProtectedMarkers(
+              let protectedSafeFragment = canonicalProtectedFragment;
+              if (item.protectedHtmlMap) {
+                const { recovered, missingMarkers } = recoverMissingProtectedMarkers(
                   canonicalProtectedFragment,
                   item.protectedHtmlMap,
-                )
-                  ? restoreProtectedHtml(item.preparedContent, item.protectedHtmlMap)
-                  : canonicalProtectedFragment;
-              if (
-                item.protectedHtmlMap &&
-                protectedSafeFragment !== canonicalProtectedFragment
-              ) {
-                this.recordQualitySignal('protectedMarkerFallbackFragments');
-                pendingFallbackWarnings.set(item.group.groupKey, undefined);
+                );
+                protectedSafeFragment = recovered;
+                if (missingMarkers.length > 0) {
+                  this.recordQualitySignal('protectedMarkerFallbackFragments');
+                }
               }
               const placeholderRestoredFragment = item.placeholderTagMap
                 ? restorePlaceholderRichText(
@@ -1936,7 +1931,6 @@ export class TranslationController {
 
               const restored = joinTranslatedGroupOutput(item.group, bucket);
               const hasFallbackWarning =
-                usedSourceFallback ||
                 pendingFallbackWarnings.has(item.group.groupKey);
               const isHeadingOrLabel =
                 item.fragmentRole === 'heading' || item.fragmentRole === 'label';
@@ -2152,19 +2146,16 @@ export class TranslationController {
                 item.protectedHtmlMap,
               )
             : normalizedProtectedFragment;
-          const protectedSafeFragment =
-            item.protectedHtmlMap &&
-            !hasAllProtectedMarkers(
+          let protectedSafeFragment = canonicalProtectedFragment;
+          if (item.protectedHtmlMap) {
+            const { recovered, missingMarkers } = recoverMissingProtectedMarkers(
               canonicalProtectedFragment,
               item.protectedHtmlMap,
-            )
-              ? restoreProtectedHtml(item.preparedContent, item.protectedHtmlMap)
-              : canonicalProtectedFragment;
-          if (
-            item.protectedHtmlMap &&
-            protectedSafeFragment !== canonicalProtectedFragment
-          ) {
-            this.recordQualitySignal('protectedMarkerFallbackFragments');
+            );
+            protectedSafeFragment = recovered;
+            if (missingMarkers.length > 0) {
+              this.recordQualitySignal('protectedMarkerFallbackFragments');
+            }
           }
           const placeholderRestoredFragment = item.placeholderTagMap
             ? restorePlaceholderRichText(protectedSafeFragment, item.placeholderTagMap)
@@ -4882,12 +4873,6 @@ function tightenProtectedMarkerSpacing(content: string, targetLanguage: string):
   return result;
 }
 
-function hasAllProtectedMarkers(
-  content: string,
-  htmlMap: Record<string, string>,
-): boolean {
-  return Object.keys(htmlMap).every((marker) => content.includes(marker));
-}
 
 function pickProtectedHtmlMarkersForContent(
   content: string,
