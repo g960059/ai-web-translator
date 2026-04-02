@@ -2230,7 +2230,6 @@ export class TranslationController {
     const fragmentIds = useFragmentIds
       ? requestFragments.map((_, index) => index.toString(36))
       : undefined;
-    const batchEstimate = toEstimateBatchShape(items);
     const fragmentRoles = items.map((item) => item.fragmentRole);
     const precedingContexts = items.map((item) => item.precedingContext ?? null);
     const hasPrecedingContexts = precedingContexts.some((context) => typeof context === 'string' && context.length > 0);
@@ -2257,10 +2256,7 @@ export class TranslationController {
       sectionContext: resolveBatchSectionContext(items),
       glossary: buildGlossaryHints(runtimeState, items),
       hasProtectedMarkers,
-      maxOutputTokens: overrides?.maxOutputTokens ?? estimateCompletionTokensForBatch(
-        batchEstimate,
-        runtimeState.calibration,
-      ),
+      maxOutputTokens: overrides?.maxOutputTokens,
     };
 
     const response = (await chrome.runtime.sendMessage({
