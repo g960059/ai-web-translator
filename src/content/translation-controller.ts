@@ -59,7 +59,7 @@ import {
 } from '../shared/estimate-calibration';
 import { logWithContext } from '../shared/debug-log';
 import { isRetryableRuntimeError, localizeRuntimeError } from '../shared/error-messages';
-import { loadSettings, normalizeSettings } from '../shared/settings';
+import { loadSettings, normalizeSettings, SETTINGS_STORAGE_KEY } from '../shared/settings';
 import type {
   BlockWarningState,
   BlockDisplayState,
@@ -479,6 +479,19 @@ export class TranslationController {
         mode: record.contentMode,
       };
     });
+
+    // React to showOriginalOnHover setting changes from popup
+    if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+      chrome.storage.onChanged.addListener((changes) => {
+        const settingsChange = changes[SETTINGS_STORAGE_KEY];
+        if (settingsChange?.newValue) {
+          const show = settingsChange.newValue.showOriginalOnHover;
+          if (typeof show === 'boolean') {
+            this.originalTooltip.setEnabled(show);
+          }
+        }
+      });
+    }
   }
 
   detectAndShowPrompt(): void {
