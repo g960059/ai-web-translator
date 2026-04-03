@@ -1,0 +1,1103 @@
+{
+  "modelId": "google/gemma-4-31b-it",
+  "page": "rep-theory",
+  "translations": [
+    {
+      "source": "Representation theory studies how algebraic structures \"act\" on objects. A simple example is the way a polygon is transformed by its symmetries under reflections and rotations, which are all linear transformations about the center of the polygon.",
+      "translation": "表現論は、代数構造がオブジェクトにどのように「作用」するかを研究する。単純な例としては、多角形がその対称性（鏡映や回転）によって変換される様子が挙げられる。これらはすべて、多角形の中心に関する線形変換である。",
+      "role": "caption"
+    },
+    {
+      "source": "Representation theory is a branch of mathematics that studies abstract algebraic structures by representing their elements as linear transformations of vector spaces, and studies modules over these abstract algebraic structures. In essence, a representation makes an abstract algebraic object more concrete by describing its elements by matrices and their algebraic operations (for example, matrix addition, matrix multiplication).",
+      "translation": "表現論は、抽象的な代数構造の要素をベクトル空間の線形変換として表現することで、それらを研究する数学の一分野であり、またこれらの抽象的な代数構造上の加群を研究する。本質的に、表現とは、抽象的な代数オブジェクトの要素を行列によって、その代数演算を（例えば行列の加算や乗算によって）記述することで、そのオブジェクトをより具体的なものにするものである。"
+    },
+    {
+      "source": "The algebraic objects amenable to such a description include groups, associative algebras and Lie algebras. The most prominent of these (and historically the first) is the representation theory of groups, in which elements of a group are represented by invertible matrices such that the group operation is matrix multiplication.",
+      "translation": "このような記述が可能な代数オブジェクトには、群、結合代数、リー代数などが含まれる。これらの中で最も著名なもの（かつ歴史的に最初のものである）は群の表現論であり、そこでは群の要素が可逆行列によって表現され、群演算が行列乗算となる。"
+    },
+    {
+      "source": "Representation theory is a useful method because it reduces problems in abstract algebra to problems in linear algebra, a subject that is well understood. Representations of more abstract objects in terms of familiar linear algebra can elucidate properties and simplify calculations within more abstract theories. For instance, representing a group by an infinite-dimensional Hilbert space allows methods of analysis to be applied to the theory of groups. Furthermore, representation theory is important in physics because it can describe how the symmetry group of a physical system affects the solutions of equations describing that system.",
+      "translation": "表現論が有用な手法である理由は、抽象代数の問題を、十分に理解されている分野である線形代数の問題へと還元できるからである。馴染みのある線形代数を用いてより抽象的なオブジェクトを表現することで、より抽象的な理論における性質を解明し、計算を簡略化することができる。例えば、群を無限次元ヒルベルト空間で表現すれば、群論に解析学の手法を適用することが可能になる。さらに、表現論は物理学においても重要であり、物理系の対称性群が、その系を記述する方程式の解にどのような影響を与えるかを記述できるためである。"
+    },
+    {
+      "source": "Representation theory is pervasive across fields of mathematics. The applications of representation theory are diverse. In addition to its impact on algebra, representation theory",
+      "translation": "表現論は数学のあらゆる分野に浸透している。表現論の応用は多岐にわたる。代数への影響に加えて、表現論は"
+    },
+    {
+      "source": "generalizes Fourier analysis via harmonic analysis,",
+      "translation": "調和解析を通じてフーリエ解析を一般化し、",
+      "role": "list-item"
+    },
+    {
+      "source": "is connected to geometry via invariant theory and the Erlangen program,",
+      "translation": "不変量論やエルランゲン計画を通じて幾何学と結びつき、",
+      "role": "list-item"
+    },
+    {
+      "source": "has an impact in number theory via automorphic forms and the Langlands program.",
+      "translation": "保型形式やラングランズ計画を通じて数論に影響を与えている。",
+      "role": "list-item"
+    },
+    {
+      "source": "There are many approaches to representation theory: the same objects can be studied using methods from algebraic geometry, module theory, analytic number theory, differential geometry, operator theory, algebraic combinatorics and topology.",
+      "translation": "表現論へのアプローチは数多く存在する。同一のオブジェクトを、代数幾何学、加群論、解析的数論、微分幾何学、作用素論、代数的組合せ論、およびトポロジーの手法を用いて研究することができる。"
+    },
+    {
+      "source": "The success of representation theory has led to numerous generalizations. One of the most general is in category theory. The algebraic objects to which representation theory applies can be viewed as particular kinds of categories, and the representations as functors from the object category to the category of vector spaces. This description points to two natural generalizations: first, the algebraic objects can be replaced by more general categories; second, the target category of vector spaces can be replaced by other well-understood categories.",
+      "translation": "表現論の成功は、数多くの一般化をもたらした。最も一般的なものの一つが圏論における一般化である。表現論が適用される代数オブジェクトは特定の種類の圏と見なすことができ、表現はオブジェクトの圏からベクトル空間の圏への関手と見なすことができる。この記述は、2つの自然な一般化を示唆している。第一に、代数オブジェクトをより一般的な圏に置き換えることができること。第二に、ターゲットとなるベクトル空間の圏を、他の十分に理解された圏に置き換えることができることである。"
+    },
+    {
+      "source": "Definitions and concepts",
+      "translation": "定義と概念",
+      "role": "heading"
+    },
+    {
+      "source": "Let be a vector space over a field . For instance, suppose is or , the standard n-dimensional space of column vectors over the real or complex numbers, respectively. In this case, the idea of representation theory is to do abstract algebra concretely by using matrices of real or complex numbers.",
+      "translation": "体 [[K]] 上のベクトル空間 [[V]] を考える。例えば、[[V]] が [[R^n]] または [[C^n]]、すなわち実数または複素数上の標準的なn次元列ベクトル空間であるとする。この場合、表現論の考え方は、実数または複素数の行列を用いることで、抽象代数を具体的に扱うことにある。"
+    },
+    {
+      "source": "There are three main sorts of algebraic objects for which this can be done: groups, associative algebras and Lie algebras.",
+      "translation": "これが可能な代数オブジェクトには、主に群、結合代数、リー代数の3種類がある。"
+    },
+    {
+      "source": "The set of all invertible matrices is a group under matrix multiplication, and the representation theory of groups analyzes a group by describing (\"representing\") its elements in terms of invertible matrices.",
+      "translation": "すべての可逆行列の集合は行列乗算に関して群をなし、群の表現論は、群の要素を可逆行列を用いて記述（「表現」）することで群を分析する。",
+      "role": "list-item"
+    },
+    {
+      "source": "Matrix addition and multiplication make the set of all matrices into an associative algebra, and hence there is a corresponding representation theory of associative algebras.",
+      "translation": "行列の加算と乗算により、すべての行列の集合は結合代数となる。したがって、それに対応する結合代数の表現論が存在する。",
+      "role": "list-item"
+    },
+    {
+      "source": "If we replace matrix multiplication by the matrix commutator , then the matrices become instead a Lie algebra, leading to a representation theory of Lie algebras.",
+      "translation": "行列の積を行列交換子に置き換えると、行列は代わりにリー代数となり、リー代数の表現論へと導かれる。",
+      "role": "list-item"
+    },
+    {
+      "source": "This generalizes to any field and any vector space over , with linear maps replacing matrices and composition replacing matrix multiplication: there is a group of automorphisms of , an associative algebra of all endomorphisms of , and a corresponding Lie algebra .",
+      "translation": "これは任意の体およびその上の任意のベクトル空間へと一般化でき、行列を線形写像に、行列の積を合成に置き換えることができる。すなわち、[[V]] の自己同型群、[[V]] のすべての自己準同型からなる結合代数、および対応するリー代数 [[gl(V)]] が存在する。"
+    },
+    {
+      "source": "Definition",
+      "translation": "定義",
+      "role": "heading"
+    },
+    {
+      "source": "Action",
+      "translation": "作用",
+      "role": "heading"
+    },
+    {
+      "source": "There are two ways to define a representation. The first uses the idea of an action, generalizing the way that matrices act on column vectors by matrix multiplication.",
+      "translation": "表現を定義する方法は2通りある。1つ目は「作用」という概念を用いるもので、行列が行列積によって列ベクトルに作用する方法を一般化したものである。"
+    },
+    {
+      "source": "A representation of a group or (associative or Lie) algebra on a vector space is a map with two properties.",
+      "translation": "ベクトル空間上の群または（結合代数またはリー）代数の表現とは、2つの性質を持つ写像のことである。"
+    },
+    {
+      "source": "For any in (or in ), the map is linear (over ).",
+      "translation": "[[G]]（または [[A]]）の任意の要素に対して、写像は（[[F]] 上で）線形である。",
+      "role": "list-item"
+    },
+    {
+      "source": "If we introduce the notation g · v for (g, v), then for any g1, g2 in G and v in V: where e is the identity element of G and g1g2 is the group product in G.",
+      "translation": "[[ρ(g, v)]] を [[g · v]] と表記すると、[[G]] の任意の [[g1, g2]] および [[V]] の任意の [[v]] に対して、[[ρ(e, v) = v]] かつ [[ρ(g1, ρ(g2, v)) = ρ(g1g2, v)]] が成り立つ。ここで [[e]] は [[G]] の単位元であり、[[g1g2]] は [[G]] における群積である。",
+      "role": "list-item"
+    },
+    {
+      "source": "The definition for associative algebras is analogous, except that associative algebras do not always have an identity element, in which case equation (2.1) is omitted. Equation (2.2) is an abstract expression of the associativity of matrix multiplication. This doesn't hold for the matrix commutator and also there is no identity element for the commutator. Hence for Lie algebras, the only requirement is that for any x1, x2 in A and v in V: where [x1, x2] is the Lie bracket, which generalizes the matrix commutator MN − NM.",
+      "translation": "結合代数の定義も同様であるが、結合代数は常に単位元を持つとは限らず、その場合は式(2.1)は省略される。式(2.2)は行列積の結合性を抽象的に表現したものである。これは行列交換子には当てはまらず、また交換子には単位元も存在しない。したがって、リー代数の場合、唯一の要件は [[A]] の任意の [[x1, x2]] および [[V]] の任意の [[v]] に対して [[ρ([x1, x2], v) = ρ(x1, ρ(x2, v)) - ρ(x2, ρ(x1, v))]] となることである。ここで [[[x1, x2]]]) はリー括弧であり、行列交換子 [[MN − NM]] を一般化したものである。"
+    },
+    {
+      "source": "Mapping",
+      "translation": "写像",
+      "role": "heading"
+    },
+    {
+      "source": "The second way to define a representation focuses on the map φ sending g in G to a linear map φ(g): V → V, which satisfies",
+      "translation": "表現を定義する2つ目の方法は、[[G]] の [[g]] を線形写像 [[φ(g): V → V]] に送る写像 [[φ]] に注目するものであり、これは以下の条件を満たす。"
+    },
+    {
+      "source": "and similarly in the other cases. This approach is both more concise and more abstract. From this point of view:",
+      "translation": "他の場合についても同様である。このアプローチはより簡潔であり、かつ抽象的である。この視点からは次のように言える。"
+    },
+    {
+      "source": "a representation of a group G on a vector space V is a group homomorphism φ: G → GL(V,F);",
+      "translation": "ベクトル空間 [[V]] 上の群 [[G]] の表現とは、群準同型 [[φ: G → GL(V,F)]] のことである。",
+      "role": "list-item"
+    },
+    {
+      "source": "a representation of an associative algebra A on a vector space V is an algebra homomorphism φ: A → EndF(V);",
+      "translation": "ベクトル空間 [[V]] 上の結合代数 [[A]] の表現とは、代数準同型 [[φ: A → EndF(V)]] のことである。",
+      "role": "list-item"
+    },
+    {
+      "source": "a representation of a Lie algebra on a vector space is a Lie algebra homomorphism .",
+      "translation": "ベクトル空間上のリー代数の表現とは、リー代数準同型 [[φ: L → gl(V)]] のことである。",
+      "role": "list-item"
+    },
+    {
+      "source": "Terminology",
+      "translation": "用語",
+      "role": "heading"
+    },
+    {
+      "source": "The vector space V is called the representation space of φ and its dimension (if finite) is called the dimension of the representation (sometimes degree, as in ). It is also common practice to refer to V itself as the representation when the homomorphism φ is clear from the context; otherwise the notation (V,φ) can be used to denote a representation.",
+      "translation": "ベクトル空間 $V$ は $\\phi$ の表現空間と呼ばれ、その次元（有限である場合）は表現の次元（あるいは次数）と呼ばれる。文脈から準同型 $\\phi$ が明らかな場合は、$V$ 自体を表現と呼ぶことも一般的である。それ以外の場合は、表現を表すために記号 $(V, \\phi)$ が用いられる。"
+    },
+    {
+      "source": "When V is of finite dimension n, one can choose a basis for V to identify V with Fn, and hence recover a matrix representation with entries in the field F.",
+      "translation": " $V$ が有限次元 $n$ であるとき、$V$ の基底を選択して $V$ を $F^n$ と同一視することができ、したがって体 $F$ の元を成分とする行列表現を得ることができる。"
+    },
+    {
+      "source": "An effective or faithful representation is a representation (V,φ), for which the homomorphism φ is injective.",
+      "translation": "有効な表現または忠実な表現とは、準同型 $\\phi$ が単射であるような表現 $(V, \\phi)$ のことである。"
+    },
+    {
+      "source": "Equivariant maps and isomorphisms",
+      "translation": "同変写像と同型",
+      "role": "heading"
+    },
+    {
+      "source": "If and are vector spaces over , equipped with representations and of a group , then an equivariant map from to is a linear map such that for all in and in . In terms of and , this means for all in , that is, the following diagram commutes:",
+      "translation": " $V$ と $W$ が体 $F$ 上のベクトル空間であり、群 $G$ の表現 $\\phi$ と $\\psi$ を備えているとする。このとき、$V$ から $W$ への同変写像とは、すべての $g \\in G$ および $v \\in V$ に対して $\\psi(g)(f(v)) = f(\\phi(g)(v))$ を満たす線形写像 $f$ のことである。 $\\phi$ と $\\psi$ を用いて言えば、これはすべての $g \\in G$ に対して $f \\circ \\phi(g) = \\psi(g) \\circ f$ であることを意味し、すなわち次の可換図式が成立することを意味する。"
+    },
+    {
+      "source": "Equivariant maps for representations of an associative or Lie algebra are defined similarly. If is invertible, then it is said to be an isomorphism, in which case and (or, more precisely, and ) are isomorphic representations, also phrased as equivalent representations. An equivariant map is often called an intertwining map of representations. Also, in the case of a group , it is on occasion called a -map or -linear map.",
+      "translation": "結合代数またはリー代数の表現に対する同変写像も同様に定義される。 $f$ が可逆であれば、それは同型であると言われ、このとき $(V, \\phi)$ と $(W, \\psi)$（より正確には $\\phi$ と $\\psi$）は同型な表現、あるいは等価な表現であると言われる。同変写像はしばしば表現のインタートワイン写像（絡み合い写像）と呼ばれる。また、群 $G$ の場合は、時として $G$-写像または $G$-線形写像と呼ばれる。"
+    },
+    {
+      "source": "Isomorphic representations are, for practical purposes, \"the same\"; they provide the same information about the group or algebra being represented. Representation theory therefore seeks to classify representations up to isomorphism.",
+      "translation": "同型な表現は、実用上の目的においては「同一」である。すなわち、表現される群や代数について同じ情報を提供する。したがって、表現論は同型を除いて表現を分類することを目的とする。"
+    },
+    {
+      "source": "Subrepresentations, quotients, and irreducible representations",
+      "translation": "部分表現、商表現、および既約表現",
+      "role": "heading"
+    },
+    {
+      "source": "If is a representation of (say) a group , and is a linear subspace of that is preserved by the action of in the sense that for all and , (Serre calls these stable under ), then is called a subrepresentation: by defining where is the restriction of to , is a representation of and the inclusion of is an equivariant map. The quotient space can also be made into a representation of . If has exactly two subrepresentations, namely the trivial subspace {0} and itself, then the representation is said to be irreducible; if has a proper nontrivial subrepresentation, the representation is said to be reducible.",
+      "translation": " $(V, \\phi)$ が（例えば）群 $G$ の表現であり、$W$ が $V$ の線形部分空間で、すべての $g \\in G$ および $w \\in W$ に対して $\\phi(g)(w) \\in W$ となる意味で $G$ の作用によって保存される（セールはこれを $G$ の下で安定であると呼ぶ）とき、$W$ は部分表現と呼ばれる。 $\\phi|_W$ を $\\phi$ の $W$ への制限として $\\phi|_W$ を定義すれば、$(W, \\phi|_W)$ は $G$ の表現となり、$W$ から $V$ への包含写像は同変写像となる。商空間もまた $G$ の表現とすることができる。 $V$ がちょうど2つの部分表現、すなわち自明な部分空間 $\\{0\\}$ と自分自身のみを持つとき、その表現は既約であると言われる。 $V$ が適切で非自明な部分表現を持つとき、その表現は可約であると言われる。"
+    },
+    {
+      "source": "The definition of an irreducible representation implies Schur's lemma: an equivariant map between irreducible representations is either the zero map or an isomorphism, since its kernel and image are subrepresentations. In particular, when , this shows that the equivariant endomorphisms of form an associative division algebra over the underlying field F. If F is algebraically closed, the only equivariant endomorphisms of an irreducible representation are the scalar multiples of the identity.",
+      "translation": "既約表現の定義はシューアの補題を導く。すなわち、既約表現間の同変写像は、その核と像が部分表現となるため、零写像であるか同型であるかのいずれかである。特に $(V, \\phi) = (W, \\psi)$ のとき、これは $\\phi$ の同変自己準同型が基礎体 $F$ 上の結合除法代数を形成することを示す。 $F$ が代数的に閉じていれば、既約表現の同変自己準同型は恒等写像のスカラー倍のみである。"
+    },
+    {
+      "source": "Irreducible representations are the building blocks of representation theory for many groups: if a representation is not irreducible then it is built from a subrepresentation and a quotient that are both \"simpler\" in some sense; for instance, if is finite-dimensional, then both the subrepresentation and the quotient have smaller dimension. There are counterexamples where a representation has a subrepresentation, but only has one non-trivial irreducible component. For example, the additive group has a two dimensional representation This group has the vector fixed by this homomorphism, but the complement subspace maps to giving only one irreducible subrepresentation. This is true for all unipotent groups.",
+      "translation": "既約表現は、多くの群の表現論における構成要素である。表現が既約でないならば、それはある意味でより「単純な」部分表現と商表現から構築される。例えば、$V$ が有限次元であれば、部分表現と商表現はともに元の次元より小さい次元を持つ。表現が部分表現を持つが、非自明な既約成分を1つしか持たない反例も存在する。例えば、加法群 $\\mathbb{R}$ は2次元表現 $\\phi(r) = \\begin{pmatrix} 1 & r \\\\ 0 & 1 \\end{pmatrix}$ を持つ。この群はこの準同型によってベクトル $\\begin{pmatrix} 1 \\\\ 0 \\end{pmatrix}$ を固定するが、補空間は $\\begin{pmatrix} 0 \\\\ 1 \\end{pmatrix}$ へ写されるため、既約部分表現は1つしか得られない。これはすべてのユニポテント群について成り立つ。"
+    },
+    {
+      "source": "Direct sums and indecomposable representations",
+      "translation": "直和と不可分表現",
+      "role": "heading"
+    },
+    {
+      "source": "If (V,φ) and (W,ψ) are representations of (say) a group G, then the direct sum of V and W is a representation, in a canonical way, via the equation",
+      "translation": " $(V, \\phi)$ と $(W, \\psi)$ が（例えば）群 $G$ の表現であるとき、$V$ と $W$ の直和は、次の方程式を通じて標準的な方法で表現となる。"
+    },
+    {
+      "source": "The direct sum of two representations carries no more information about the group G than the two representations do individually. If a representation is the direct sum of two proper nontrivial subrepresentations, it is said to be decomposable. Otherwise, it is said to be indecomposable.",
+      "translation": "2つの表現の直和は、それら2つの表現が個別に持つ以上の情報を群 $G$ については持たない。表現が2つの適切で非自明な部分表現の直和であるとき、それは可分であると言われる。そうでなければ、それは不可分であると言われる。"
+    },
+    {
+      "source": "Complete reducibility",
+      "translation": "完全可約性",
+      "role": "heading"
+    },
+    {
+      "source": "In favorable circumstances, every finite-dimensional representation is a direct sum of irreducible representations: such representations are said to be semisimple. In this case, it suffices to understand only the irreducible representations. Examples where this \"complete reducibility\" phenomenon occurs (at least over fields of characteristic zero) include finite groups (see Maschke's theorem), compact groups, and semisimple Lie algebras.",
+      "translation": "好都合な状況下では、あらゆる有限次元表現は既約表現の直和として表される。このような表現は半単純であるという。この場合、既約表現のみを理解すれば十分である。この「完全可約性」という現象が起こる例（少なくとも標数0の体上で）としては、有限群（マシュケの定理を参照）、コンパクト群、および半単純リー代数が挙げられる。"
+    },
+    {
+      "source": "In cases where complete reducibility does not hold, one must understand how indecomposable representations can be built from irreducible representations by using extensions of quotients by subrepresentations.",
+      "translation": "完全可約性が成り立たない場合、部分表現による商の拡大を用いることで、既約表現からどのように分解不能表現を構築できるかを理解しなければならない。"
+    },
+    {
+      "source": "Tensor products of representations",
+      "translation": "表現のテンソル積",
+      "role": "heading"
+    },
+    {
+      "source": "Suppose and are representations of a group . Then we can form a representation of G acting on the tensor product vector space as follows:",
+      "translation": "Gの表現を2つ、VとWとする。このとき、テンソル積ベクトル空間 V ⊗ W に作用するGの表現を次のように構成できる。"
+    },
+    {
+      "source": "If and are representations of a Lie algebra, then the correct formula to use is",
+      "translation": "VとWがリー代数の表現である場合、用いるべき正しい公式は次の通りである。"
+    },
+    {
+      "source": "This product can be recognized as the coproduct on a coalgebra. In general, the tensor product of irreducible representations is not irreducible; the process of decomposing a tensor product as a direct sum of irreducible representations is known as Clebsch–Gordan theory.",
+      "translation": "この積は、余代数上の余積として認識できる。一般に、既約表現のテンソル積は必ずしも既約ではない。テンソル積を既約表現の直和として分解するプロセスは、クレブシュ・ゴルダン理論として知られている。"
+    },
+    {
+      "source": "In the case of the representation theory of the group SU(2) (or equivalently, of its complexified Lie algebra ), the decomposition is easy to work out. The irreducible representations are labeled by a parameter that is a non-negative integer or half integer; the representation then has dimension . Suppose we take the tensor product of the representation of two representations, with labels and where we assume . Then the tensor product decomposes as a direct sum of one copy of each representation with label , where ranges from to in increments of 1. If, for example, , then the values of that occur are 0, 1, and 2. Thus, the tensor product representation of dimension decomposes as a direct sum of a 1-dimensional representation a 3-dimensional representation and a 5-dimensional representation .",
+      "translation": "群SU(2)（またはそれと同等な複素化リー代数 sl(2, C)）の表現論の場合、この分解は容易に導き出せる。既約表現は、非負の整数または半整数であるパラメータ j によってラベル付けされ、その表現の次元は 2j + 1 となる。ラベル j1 と j2 を持つ2つの表現のテンソル積を考え、j1 ≥ j2 と仮定する。このとき、テンソル積は、j = |j1 - j2| から j1 + j2 まで1刻みで変化する各ラベル j の表現を1つずつ含む直和として分解される。例えば、j1 = 1 かつ j2 = 1 の場合、現れる j の値は 0, 1, 2 である。したがって、次元 2 × 2 = 4 のテンソル積表現は、1次元表現 (j=0)、3次元表現 (j=1)、および5次元表現 (j=2) の直和として分解される。"
+    },
+    {
+      "source": "Branches and topics",
+      "translation": "分枝とトピック",
+      "role": "heading"
+    },
+    {
+      "source": "Representation theory is notable for the number of branches it has, and the diversity of the approaches to studying representations of groups and algebras. Although, all the theories have in common the basic concepts discussed already, they differ considerably in detail. The differences are at least 3-fold:",
+      "translation": "表現論は、その分枝の多さと、群や代数の表現を研究するためのアプローチの多様性で知られている。すべての理論に共通する基本概念はあるが、詳細はかなり異なる。その相違点は、大きく分けて以下の3点である。"
+    },
+    {
+      "source": "Representation theory depends upon the type of algebraic object being represented. There are several different classes of groups, associative algebras and Lie algebras, and their representation theories all have an individual flavour.",
+      "translation": "表現論は、表現される代数的対象の種類に依存する。群、結合代数、リー代数など、いくつかの異なるクラスが存在し、それぞれの表現論は独自の特色を持っている。",
+      "role": "list-item"
+    },
+    {
+      "source": "Representation theory depends upon the nature of the vector space on which the algebraic object is represented. The most important distinction is between finite-dimensional representations and infinite-dimensional ones. In the infinite-dimensional case, additional structures are important (for example, whether or not the space is a Hilbert space, Banach space, etc.). Additional algebraic structures can also be imposed in the finite-dimensional case.",
+      "translation": "表現論は、代数的対象が表現されるベクトル空間の性質に依存する。最も重要な区別は、有限次元表現と無限次元表現の間にある。無限次元の場合、追加の構造（例えば、空間がヒルベルト空間であるか、バナッハ空間であるかなど）が重要となる。また、有限次元の場合であっても、追加の代数的構造を課すことができる。",
+      "role": "list-item"
+    },
+    {
+      "source": "Representation theory depends upon the type of field over which the vector space is defined. The most important cases are the field of complex numbers, the field of real numbers, finite fields, and fields of p-adic numbers. Additional difficulties arise for fields of positive characteristic and for fields that are not algebraically closed.",
+      "translation": "表現論は、ベクトル空間が定義される体の種類に依存する。最も重要なケースは、複素数体、実数体、有限体、およびp進数体である。正標数の体や、代数的に閉じていない体については、さらなる困難が生じる。",
+      "role": "list-item"
+    },
+    {
+      "source": "Finite groups",
+      "translation": "有限群",
+      "role": "heading"
+    },
+    {
+      "source": "Group representations are a very important tool in the study of finite groups. They also arise in the applications of finite group theory to geometry and crystallography. Representations of finite groups exhibit many of the features of the general theory and point the way to other branches and topics in representation theory.",
+      "translation": "群表現は、有限群の研究において非常に重要な道具である。また、有限群論の幾何学や結晶学への応用においても現れる。有限群の表現は、一般論の特徴の多くを備えており、表現論における他の分枝やトピックへの道しるべとなる。"
+    },
+    {
+      "source": "Over a field of characteristic zero, the representation of a finite group G has a number of convenient properties. First, the representations of G are semisimple (completely reducible). This is a consequence of Maschke's theorem, which states that any subrepresentation V of a G-representation W has a G-invariant complement. One proof is to choose any projection π from W to V and replace it by its average πG defined by",
+      "translation": "標数0の体上で、有限群Gの表現はいくつかの便利な性質を持つ。第一に、Gの表現は半単純（完全可約）である。これは、G表現Wの任意の部分表現Vに対してG不変な補空間が存在するというマシュケの定理の結果である。一つの証明方法は、WからVへの任意の射影πを選び、それを次のように定義される平均πGで置き換えることである。"
+    },
+    {
+      "source": "πG is equivariant, and its kernel is the required complement.",
+      "translation": "πGは同変であり、その核が求める補空間となる。"
+    },
+    {
+      "source": "The finite-dimensional G-representations can be understood using character theory: the character of a representation φ: G → GL(V) is the class function χφ: G → F defined by",
+      "translation": "有限次元のG表現は指標論を用いて理解できる。表現φ: G → GL(V)の指標とは、次のように定義される類関数χφ: G → Fのことである。"
+    },
+    {
+      "source": "where is the trace. An irreducible representation of G is completely determined by its character.",
+      "translation": "ここでtrはトレースである。Gの既約表現は、その指標によって完全に決定される。"
+    },
+    {
+      "source": "Maschke's theorem holds more generally for fields of positive characteristic p, such as the finite fields, as long as the prime p is coprime to the order of G. When p and |G| have a common factor, there are G-representations that are not semisimple, which are studied in a subbranch called modular representation theory.",
+      "translation": "マシュケの定理は、有限体などの正標数pの体に対しても、素数pがGの位数と互いに素である限り、より一般に成立する。pと|G|が共通因子を持つ場合、半単純ではないG表現が存在し、これらはモジュラー表現論と呼ばれる分科で研究されている。"
+    },
+    {
+      "source": "Averaging techniques also show that if F is the real or complex numbers, then any G-representation preserves an inner product on V in the sense that",
+      "translation": "平均化の手法はまた、Fが実数または複素数である場合、任意のG表現が次のような意味でV上の内積を保存することを示す。"
+    },
+    {
+      "source": "for all g in G and v, w in W. Hence any G-representation is unitary.",
+      "translation": "これはすべてのg ∈ Gおよびv, w ∈ Wに対して成り立つ。したがって、任意のG表現はユニタリである。"
+    },
+    {
+      "source": "Unitary representations are automatically semisimple, since Maschke's result can be proven by taking the orthogonal complement of a subrepresentation. When studying representations of groups that are not finite, the unitary representations provide a good generalization of the real and complex representations of a finite group.",
+      "translation": "ユニタリ表現は自動的に半単純である。なぜなら、部分表現の直交補空間を取ることでマシュケの結果を証明できるからである。有限ではない群の表現を研究する場合、ユニタリ表現は有限群の実表現および複素表現の優れた一般化となる。"
+    },
+    {
+      "source": "Results such as Maschke's theorem and the unitary property that rely on averaging can be generalized to more general groups by replacing the average with an integral, provided that a suitable notion of integral can be defined. This can be done for compact topological groups (including compact Lie groups), using Haar measure, and the resulting theory is known as abstract harmonic analysis.",
+      "translation": "マシュケの定理やユニタリ性のように平均化に依存する結果は、適切な積分の概念が定義できれば、平均を積分に置き換えることでより一般的な群へと一般化できる。これは、ハール測度を用いることでコンパクト位相群（コンパクトリー群を含む）に対して可能であり、得られる理論は抽象調和解析として知られている。"
+    },
+    {
+      "source": "Over arbitrary fields, another class of finite groups that have a good representation theory are the finite groups of Lie type. Important examples are linear algebraic groups over finite fields. The representation theory of linear algebraic groups and Lie groups extends these examples to infinite-dimensional groups, the latter being intimately related to Lie algebra representations. The importance of character theory for finite groups has an analogue in the theory of weights for representations of Lie groups and Lie algebras.",
+      "translation": "任意の体において、良好な表現論を持つ有限群のもう一つのクラスはリー型の有限群である。重要な例として、有限体上の線形代数群が挙げられる。線形代数群とリー群の表現論は、これらの例を無限次元群へと拡張するものであり、後者はリー代数の表現と密接に関連している。有限群における指標論の重要性は、リー群およびリー代数の表現におけるウェイト理論に類似したものがある。"
+    },
+    {
+      "source": "Representations of a finite group G are also linked directly to algebra representations via the group algebra F[G], which is a vector space over F with the elements of G as a basis, equipped with the multiplication operation defined by the group operation, linearity, and the requirement that the group operation and scalar multiplication commute.",
+      "translation": "有限群Gの表現は、群環F[G]を介して代数の表現とも直接的に結びついている。群環F[G]とは、Gの元を基底とするF上のベクトル空間であり、群演算、線形性、および群演算とスカラー倍が可換であるという要求によって定義される乗法演算を備えたものである。"
+    },
+    {
+      "source": "Modular representations",
+      "translation": "モジュラー表現",
+      "role": "heading"
+    },
+    {
+      "source": "Modular representations of a finite group G are representations over a field whose characteristic is not coprime to |G|, so that Maschke's theorem no longer holds (because |G| is not invertible in F and so one cannot divide by it). Nevertheless, Richard Brauer extended much of character theory to modular representations, and this theory played an important role in early progress towards the classification of finite simple groups, especially for simple groups whose characterization was not amenable to purely group-theoretic methods because their Sylow 2-subgroups were \"too small\".",
+      "translation": "有限群Gのモジュラー表現とは、標数が|G|と互いに素ではない体上の表現であり、そこではマシュケの定理がもはや成立しない（|G|がFにおいて可逆ではなく、それによる除算ができないため）。それにもかかわらず、リチャード・ブラウアーは指標論の多くをモジュラー表現へと拡張した。この理論は、有限単純群の分類に向けた初期の進展において、特にシロー2部分群が「小さすぎる」ために純粋な群論的手法による特徴付けが困難であった単純群において重要な役割を果たした。"
+    },
+    {
+      "source": "As well as having applications to group theory, modular representations arise naturally in other branches of mathematics, such as algebraic geometry, coding theory, combinatorics and number theory.",
+      "translation": "モジュラー表現は、群論への応用だけでなく、代数幾何学、符号理論、組合せ論、数論などの数学の他の分野でも自然に現れる。"
+    },
+    {
+      "source": "Unitary representations",
+      "translation": "ユニタリ表現",
+      "role": "heading"
+    },
+    {
+      "source": "A unitary representation of a group G is a linear representation φ of G on a real or (usually) complex Hilbert space V such that φ(g) is a unitary operator for every g ∈ G. Such representations have been widely applied in quantum mechanics since the 1920s, thanks in particular to the influence of Hermann Weyl, and this has inspired the development of the theory, most notably through the analysis of representations of the Poincaré group by Eugene Wigner. One of the pioneers in constructing a general theory of unitary representations (for any group G rather than just for particular groups useful in applications) was George Mackey, and an extensive theory was developed by Harish-Chandra and others in the 1950s and 1960s.",
+      "translation": "群Gのユニタリ表現とは、実または（通常は）複素ヒルベルト空間V上のGの線形表現φであって、すべてのg ∈ Gに対してφ(g)がユニタリ演算子となるものである。このような表現は、特にヘルマン・ワイルの影響により、1920年代以降、量子力学に広く応用されてきた。これが理論の発展を促し、とりわけユージン・ウィグナーによるポアンカレ群の表現の解析を通じて顕著となった。特定の応用上の有用な群だけでなく、任意の群Gに対するユニタリ表現の一般理論を構築した先駆者の一人がジョージ・マッキーであり、1950年代から60年代にかけて、ハリシュ・チャンドラらによって広範な理論が展開された。"
+    },
+    {
+      "source": "A major goal is to describe the \"unitary dual\", the space of irreducible unitary representations of G. The theory is most well-developed in the case that G is a locally compact (Hausdorff) topological group and the representations are strongly continuous. For G abelian, the unitary dual is just the space of characters, while for G compact, the Peter–Weyl theorem shows that the irreducible unitary representations are finite-dimensional and the unitary dual is discrete. For example, if G is the circle group S1, then the characters are given by integers, and the unitary dual is Z.",
+      "translation": "主要な目標は、「ユニタリ双対」、すなわちGの既約ユニタリ表現の空間を記述することである。この理論は、Gが局所コンパクト（ハウスドルフ）位相群であり、表現が強連続である場合に最も発展している。Gがアーベル群であるとき、ユニタリ双対は単に指標の空間となる。一方、Gがコンパクトであるとき、ピーター・ワイルの定理により、既約ユニタリ表現は有限次元であり、ユニタリ双対は離散的であることが示される。例えば、Gが円群S1であれば、指標は整数によって与えられ、ユニタリ双対はZとなる。"
+    },
+    {
+      "source": "For non-compact G, the question of which representations are unitary is a subtle one. Although irreducible unitary representations must be \"admissible\" (as Harish-Chandra modules) and it is easy to detect which admissible representations have a nondegenerate invariant sesquilinear form, it is hard to determine when this form is positive definite. An effective description of the unitary dual, even for relatively well-behaved groups such as real reductive Lie groups (discussed below), remains an important open problem in representation theory. It has been solved for many particular groups, such as SL(2,R) and the Lorentz group.",
+      "translation": "非コンパクトなGの場合、どの表現がユニタリであるかという問題は微妙である。既約ユニタリ表現は（ハリシュ・チャンドラ加群として）「許容的」でなければならず、どの許容的表現が非退化な不変半線形形式を持つかを検出することは容易だが、この形式が正定値であるかを判断することは困難である。実還元的リー群（後述）のような比較的性質の良い群であっても、ユニタリ双対を効果的に記述することは、表現論における重要な未解決問題として残っている。SL(2,R)やローレンツ群など、多くの特定の群については解決済みである。"
+    },
+    {
+      "source": "Harmonic analysis",
+      "translation": "調和解析",
+      "role": "heading"
+    },
+    {
+      "source": "The duality between the circle group S1 and the integers Z, or more generally, between a torus Tn and Zn is well known in analysis as the theory of Fourier series, and the Fourier transform similarly expresses the fact that the space of characters on a real vector space is the dual vector space. Thus unitary representation theory and harmonic analysis are intimately related, and abstract harmonic analysis exploits this relationship, by developing the analysis of functions on locally compact topological groups and related spaces.",
+      "translation": "円群S1と整数Zの双対性、あるいはより一般にトーラスTnとZnの双対性は、解析学においてフーリエ級数の理論としてよく知られている。同様に、フーリエ変換は、実ベクトル空間上の指標の空間が双対ベクトル空間であるという事実を表現している。したがって、ユニタリ表現論と調和解析は密接に関連しており、抽象調和解析はこの関係を利用して、局所コンパクト位相群および関連する空間上の関数の解析を展開している。"
+    },
+    {
+      "source": "A major goal is to provide a general form of the Fourier transform and the Plancherel theorem. This is done by constructing a measure on the unitary dual and an isomorphism between the regular representation of G on the space L2(G) of square integrable functions on G and its representation on the space of L2 functions on the unitary dual. Pontrjagin duality and the Peter–Weyl theorem achieve this for abelian and compact G respectively.",
+      "translation": "主要な目標は、フーリエ変換とプランシュレル定理の一般形式を提供することである。これは、ユニタリ双対上の測度を構築し、G上の二乗可積分関数の空間L2(G)上のGの正則表現と、ユニタリ双対上のL2関数空間上の表現との間の同型写像を構築することによって行われる。アーベル群についてはポントリャーギン双対性が、コンパクト群についてはピーター・ワイルの定理がこれを達成している。"
+    },
+    {
+      "source": "Another approach involves considering all unitary representations, not just the irreducible ones. These form a category, and Tannaka–Krein duality provides a way to recover a compact group from its category of unitary representations.",
+      "translation": "別のアプローチとして、既約なものだけでなく、すべてのユニタリ表現を考慮する方法がある。これらは圏を形成し、タンナカ・クラインの双対性は、ユニタリ表現の圏からコンパクト群を復元する方法を提供する。"
+    },
+    {
+      "source": "If the group is neither abelian nor compact, no general theory is known with an analogue of the Plancherel theorem or Fourier inversion, although Alexander Grothendieck extended Tannaka–Krein duality to a relationship between linear algebraic groups and tannakian categories.",
+      "translation": "群がアーベル群でもコンパクト群でもない場合、プランシュレル定理やフーリエ反転の類似を持つ一般理論は知られていない。ただし、アレクサンダー・グロタンディークは、タンナカ・クラインの双対性を線形代数群とタンナキアン圏との関係へと拡張した。"
+    },
+    {
+      "source": "Harmonic analysis has also been extended from the analysis of functions on a group G to functions on homogeneous spaces for G. The theory is particularly well developed for symmetric spaces and provides a theory of automorphic forms (discussed below).",
+      "translation": "調和解析はまた、群G上の関数の解析から、Gの同次空間上の関数へと拡張されてきた。この理論は特に対称空間において高度に発展しており、保型形式の理論（後述）を提供している。"
+    },
+    {
+      "source": "Lie groups",
+      "translation": "リー群",
+      "role": "heading"
+    },
+    {
+      "source": "A Lie group is a group that is also a smooth manifold. Many classical groups of matrices over the real or complex numbers are Lie groups. Many of the groups important in physics and chemistry are Lie groups, and their representation theory is crucial to the application of group theory in those fields.",
+      "translation": "リー群とは、滑らかな多様体でもある群のことである。実数または複素数上の行列の多くの古典群はリー群である。物理学や化学において重要な群の多くがリー群であり、それらの表現論は、これらの分野における群論の応用に不可欠である。"
+    },
+    {
+      "source": "The representation theory of Lie groups can be developed first by considering the compact groups, to which results of compact representation theory apply. This theory can be extended to finite-dimensional representations of semisimple Lie groups using Weyl's unitary trick: each semisimple real Lie group G has a complexification, which is a complex Lie group Gc, and this complex Lie group has a maximal compact subgroup K. The finite-dimensional representations of G closely correspond to those of K.",
+      "translation": "リー群の表現論は、まずコンパクト群を検討することから展開でき、そこにはコンパクト表現論の結果が適用される。この理論は、ワイルのユニタリ・トリックを用いることで、半単純リー群の有限次元表現へと拡張できる。すなわち、各半単純実リー群Gは複素化を持ち、それは複素リー群Gcとなる。この複素リー群は極大コンパクト部分群Kを持つ。Gの有限次元表現は、Kの表現と密接に対応している。"
+    },
+    {
+      "source": "A general Lie group is a semidirect product of a solvable Lie group and a semisimple Lie group (the Levi decomposition). The classification of representations of solvable Lie groups is intractable in general, but often easy in practical cases. Representations of semidirect products can then be analysed by means of general results called Mackey theory, which is a generalization of the methods used in Wigner's classification of representations of the Poincaré group.",
+      "translation": "一般的なリー群は、可解リー群と半単純リー群の半直積である（レヴィ分解）。可解リー群の表現の分類は一般には困難だが、実際的なケースでは容易なことが多い。半直積の表現は、マッキー理論と呼ばれる一般論を用いて解析できる。これは、ウィグナーによるポアンカレ群の表現の分類に用いられた手法を一般化したものである。"
+    },
+    {
+      "source": "Lie algebras",
+      "translation": "リー代数",
+      "role": "heading"
+    },
+    {
+      "source": "A Lie algebra over a field F is a vector space over F equipped with a skew-symmetric bilinear operation called the Lie bracket, which satisfies the Jacobi identity. Lie algebras arise in particular as tangent spaces to Lie groups at the identity element, leading to their interpretation as \"infinitesimal symmetries\". An important approach to the representation theory of Lie groups is to study the corresponding representation theory of Lie algebras, but representations of Lie algebras also have an intrinsic interest.",
+      "translation": "体F上のリー代数とは、ヤコビ恒等式を満たすリー括弧と呼ばれる交代的な双線形演算を備えたF上のベクトル空間である。リー代数は特に、リー群の単位元における接空間として現れ、それゆえ「無限小対称性」として解釈される。リー群の表現論への重要なアプローチは、対応するリー代数の表現論を研究することであるが、リー代数の表現それ自体も本質的な関心事となっている。"
+    },
+    {
+      "source": "Lie algebras, like Lie groups, have a Levi decomposition into semisimple and solvable parts, with the representation theory of solvable Lie algebras being intractable in general. In contrast, the finite-dimensional representations of semisimple Lie algebras are completely understood, after work of Élie Cartan. A representation of a semisimple Lie algebra 𝖌 is analysed by choosing a Cartan subalgebra, which is essentially a generic maximal subalgebra 𝖍 of 𝖌 on which the Lie bracket is zero (\"abelian\"). The representation of 𝖌 can be decomposed into weight spaces that are eigenspaces for the action of 𝖍 and the infinitesimal analogue of characters. The structure of semisimple Lie algebras then reduces the analysis of representations to easily understood combinatorics of the possible weights that can occur.",
+      "translation": "リー代数はリー群と同様に、半単純部分と可解部分へのレヴィ分解を持つが、可解リー代数の表現論は一般に手に負えない。対照的に、半単純リー代数の有限次元表現は、エリー・カルタンの研究を経て完全に解明されている。半単純リー代数 $\\mathfrak{g}$ の表現は、カルタン部分代数を選択することで解析される。これは本質的に、リー括弧がゼロ（「可換」）となる $\\mathfrak{g}$ の汎用的な極大部分代数 $\\mathfrak{h}$ である。$\\mathfrak{g}$ の表現は、$\\mathfrak{h}$ の作用に対する固有空間であり、指標の無限小版であるウェイト空間へと分解できる。これにより、半単純リー代数の構造は、表現の解析を、起こりうるウェイトの容易に理解可能な組合せ論へと還元させる。"
+    },
+    {
+      "source": "Infinite-dimensional Lie algebras",
+      "translation": "無限次元リー代数",
+      "role": "heading"
+    },
+    {
+      "source": "There are many classes of infinite-dimensional Lie algebras whose representations have been studied. Among these, an important class are the Kac–Moody algebras. They are named after Victor Kac and Robert Moody, who independently discovered them. These algebras form a generalization of finite-dimensional semisimple Lie algebras, and share many of their combinatorial properties. This means that they have a class of representations that can be understood in the same way as representations of semisimple Lie algebras.",
+      "translation": "表現が研究されてきた無限次元リー代数には多くの類がある。その中でも重要な類がカッツ・ムーディ代数である。これは、独立にこれを発見したヴィクトル・カッツとロバート・ムーディにちなんで名付けられた。これらの代数は有限次元半単純リー代数の一般化であり、その組合せ論的な性質の多くを共有している。つまり、半単純リー代数の表現と同様の方法で理解できる表現の類を持っているということである。"
+    },
+    {
+      "source": "Affine Lie algebras are a special case of Kac–Moody algebras, which have particular importance in mathematics and theoretical physics, especially conformal field theory and the theory of exactly solvable models. Kac discovered an elegant proof of certain combinatorial identities, Macdonald identities, which is based on the representation theory of affine Kac–Moody algebras.",
+      "translation": "アフィンリー代数はカッツ・ムーディ代数の特殊なケースであり、数学および理論物理学、特に共形場理論や厳密に可解なモデルの理論において特に重要である。カッツは、アフィン・カッツ・ムーディ代数の表現論に基づいた、ある種の組合せ論的な恒等式（マクドナルド恒等式）のエレガントな証明を発見した。"
+    },
+    {
+      "source": "Lie superalgebras",
+      "translation": "リー超代数",
+      "role": "heading"
+    },
+    {
+      "source": "Lie superalgebras are generalizations of Lie algebras in which the underlying vector space has a Z2-grading, and skew-symmetry and Jacobi identity properties of the Lie bracket are modified by signs. Their representation theory is similar to the representation theory of Lie algebras.",
+      "translation": "リー超代数はリー代数の一般化であり、基礎となるベクトル空間が $\\mathbb{Z}_2$-次数付きであり、リー括弧の反対称性とヤコビ恒等式の性質が符号によって修正されている。その表現論はリー代数の表現論と類似している。"
+    },
+    {
+      "source": "Linear algebraic groups",
+      "translation": "線形代数群",
+      "role": "heading"
+    },
+    {
+      "source": "Linear algebraic groups (or more generally, affine group schemes) are analogues in algebraic geometry of Lie groups, but over more general fields than just R or C. In particular, over finite fields, they give rise to finite groups of Lie type. Although linear algebraic groups have a classification that is very similar to that of Lie groups, their representation theory is rather different (and much less well understood) and requires different techniques, since the Zariski topology is relatively weak, and techniques from analysis are no longer available.",
+      "translation": "線形代数群（またはより一般にアフィン群スキーム）は、代数幾何学におけるリー群の類似物であるが、$\\mathbb{R}$ や $\\mathbb{C}$ よりも一般的な体上のものである。特に有限体上では、これらはリー型の有限群を生じさせる。線形代数群はリー群と非常に似た分類を持つが、その表現論はかなり異なり（そしてはるかに理解が進んでおらず）、ザリスキ位相が比較的弱く解析学の手法が利用できないため、異なる手法を必要とする。"
+    },
+    {
+      "source": "Invariant theory",
+      "translation": "不変量論",
+      "role": "heading"
+    },
+    {
+      "source": "Invariant theory studies actions on algebraic varieties from the point of view of their effect on functions, which form representations of the group. Classically, the theory dealt with the question of explicit description of polynomial functions that do not change, or are invariant, under the transformations from a given linear group. The modern approach analyses the decomposition of these representations into irreducibles.",
+      "translation": "不変量論は、代数多様体上の作用を、群の表現を形成する関数への影響という観点から研究する。古典的にこの理論は、与えられた線形群による変換の下で変化しない、すなわち不変である多項式関数の明示的な記述という問題を扱っていた。現代的なアプローチでは、これらの表現の既約表現への分解を解析する。"
+    },
+    {
+      "source": "Invariant theory of infinite groups is inextricably linked with the development of linear algebra, especially, the theories of quadratic forms and determinants. Another subject with strong mutual influence is projective geometry, where invariant theory can be used to organize the subject, and during the 1960s, new life was breathed into the subject by David Mumford in the form of his geometric invariant theory.",
+      "translation": "無限群の不変量論は、線形代数、特に二次形式と行列式の理論の発展と密接に結びついている。もう一つの強い相互影響を持つ主題は射影幾何学であり、そこでは不変量論を用いて主題を整理することができる。また1960年代には、デヴィッド・マンフォードが幾何学的不変量論という形でこの主題に新しい命を吹き込んだ。"
+    },
+    {
+      "source": "The representation theory of semisimple Lie groups has its roots in invariant theory and the strong links between representation theory and algebraic geometry have many parallels in differential geometry, beginning with Felix Klein's Erlangen program and Élie Cartan's connections, which place groups and symmetry at the heart of geometry. Modern developments link representation theory and invariant theory to areas as diverse as holonomy, differential operators and the theory of several complex variables.",
+      "translation": "半単純リー群の表現論は不変量論に根ざしており、表現論と代数幾何学の強い結びつきは、フェリックス・クラインのエルランゲン計画やエリー・カルタンの接続に始まる微分幾何学において多くの類似点を持つ。これらは群と対称性を幾何学の中核に据えるものである。現代的な展開では、表現論と不変量論が、ホロノミー、微分作用素、多変数複素関数論といった多様な領域へと結びついている。"
+    },
+    {
+      "source": "Automorphic forms and number theory",
+      "translation": "保型形式と数論",
+      "role": "heading"
+    },
+    {
+      "source": "Automorphic forms are a generalization of modular forms to more general analytic functions, perhaps of several complex variables, with similar transformation properties. The generalization involves replacing the modular group PSL2 (R) and a chosen congruence subgroup by a semisimple Lie group G and a discrete subgroup Γ. Just as modular forms can be viewed as differential forms on a quotient of the upper half space H = PSL2 (R)/SO(2), automorphic forms can be viewed as differential forms (or similar objects) on Γ\\G/K, where K is (typically) a maximal compact subgroup of G. Some care is required, however, as the quotient typically has singularities. The quotient of a semisimple Lie group by a compact subgroup is a symmetric space and so the theory of automorphic forms is intimately related to harmonic analysis on symmetric spaces.",
+      "translation": "保型形式は、同様の変換性質を持つ、より一般的な解析関数（おそらく多変数複素関数）へのモジュラー形式の一般化である。この一般化では、モジュラー群 $\\text{PSL}_2(\\mathbb{R})$ と選択された合同部分群を、半単純リー群 $G$ と離散部分群 $\\Gamma$ に置き換える。モジュラー形式が上半平面 $\\mathbb{H} = \\text{PSL}_2(\\mathbb{R}) / \\text{SO}(2)$ の商上の微分形式と見なせるのと同様に、保型形式は $\\Gamma \\backslash G / K$ 上の微分形式（または同様の対象）と見なすことができる。ここで $K$ は（通常）$G$ の極大コンパクト部分群である。ただし、商空間は通常特異点を持つため、注意が必要である。半単純リー群をコンパクト部分群で割ったものは対称空間であり、したがって保型形式の理論は対称空間上の調和解析と密接に関連している。"
+    },
+    {
+      "source": "Before the development of the general theory, many important special cases were worked out in detail, including the Hilbert modular forms and Siegel modular forms. Important results in the theory include the Selberg trace formula and the realization by Robert Langlands that the Riemann–Roch theorem could be applied to calculate the dimension of the space of automorphic forms. The subsequent notion of \"automorphic representation\" has proved of great technical value for dealing with the case that G is an algebraic group, treated as an adelic algebraic group. As a result, an entire philosophy, the Langlands program has developed around the relation between representation and number theoretic properties of automorphic forms.",
+      "translation": "一般理論の発展以前に、ヒルベルト・モジュラー形式やジーゲル・モジュラー形式を含む多くの重要な特殊例が詳細に検討された。この理論における重要な結果には、セルバーグ跡公式や、リーマン・ロッホの定理を用いて保型形式の空間の次元を計算できるというロバート・ラングランズによる気づきがある。その後の「保型表現」という概念は、$G$ が代数群であり、アデール代数群として扱われる場合に対処する上で、大きな技術的価値を持つことが証明された。その結果、表現と保型形式の数論的性質との関係を中心に、ラングランズ・プログラムという一つの哲学全体が発展した。"
+    },
+    {
+      "source": "Associative algebras",
+      "translation": "結合代数",
+      "role": "heading"
+    },
+    {
+      "source": "In one sense, associative algebra representations generalize both representations of groups and Lie algebras. A representation of a group induces a representation of a corresponding group ring or group algebra, while representations of a Lie algebra correspond bijectively to representations of its universal enveloping algebra. However, the representation theory of general associative algebras does not have all of the nice properties of the representation theory of groups and Lie algebras.",
+      "translation": "ある意味で、結合代数の表現は、群の表現とリー代数の表現の両方を一般化したものである。群の表現は、対応する群環または群代数の表現を誘導し、一方でリー代数の表現は、その普遍包絡代数の表現と一対一に対応する。しかし、一般的な結合代数の表現論は、群やリー代数の表現論が持つ優れた性質をすべて備えているわけではない。"
+    },
+    {
+      "source": "Module theory",
+      "translation": "加群論",
+      "role": "heading"
+    },
+    {
+      "source": "When considering representations of an associative algebra, one can forget the underlying field, and simply regard the associative algebra as a ring, and its representations as modules. This approach is surprisingly fruitful: many results in representation theory can be interpreted as special cases of results about modules over a ring.",
+      "translation": "結合代数の表現を考える際、基礎となる体という視点を捨て、結合代数を単に環として、その表現を加群として見なすことができる。このアプローチは驚くほど実り多いものであり、表現論における多くの結果が、環上の加群に関する結果の特殊なケースとして解釈できる。"
+    },
+    {
+      "source": "Hopf algebras and quantum groups",
+      "translation": "ホップ代数と量子群",
+      "role": "heading"
+    },
+    {
+      "source": "Hopf algebras provide a way to improve the representation theory of associative algebras, while retaining the representation theory of groups and Lie algebras as special cases. In particular, the tensor product of two representations is a representation, as is the dual vector space.",
+      "translation": "ホップ代数は、群やリー代数の表現論を特殊なケースとして保持しつつ、結合代数の表現論を改善する方法を提供する。特に、2つの表現のテンソル積は表現となり、双対ベクトル空間も同様に表現となる。"
+    },
+    {
+      "source": "The Hopf algebras associated to groups have a commutative algebra structure, and so general Hopf algebras are known as quantum groups, although this term is often restricted to certain Hopf algebras arising as deformations of groups or their universal enveloping algebras. The representation theory of quantum groups has added surprising insights to the representation theory of Lie groups and Lie algebras, for instance through the crystal basis of Kashiwara.",
+      "translation": "群に関連付けられたホップ代数は可換代数構造を持つため、一般的なホップ代数は量子群として知られている。ただし、この用語は、群やその普遍包絡代数の変形として現れる特定のホップ代数に限定して用いられることが多い。量子群の表現論は、例えば柏原の結晶基底などを通じて、リー群やリー代数の表現論に驚くべき洞察をもたらした。"
+    },
+    {
+      "source": "History",
+      "translation": "歴史",
+      "role": "heading"
+    },
+    {
+      "source": "Generalizations",
+      "translation": "一般化",
+      "role": "heading"
+    },
+    {
+      "source": "Set-theoretic representations",
+      "translation": "集合論的表現",
+      "role": "heading"
+    },
+    {
+      "source": "A set-theoretic representation (also known as a group action or permutation representation) of a group G on a set X is given by a function ρ from G to XX, the set of functions from X to X, such that for all g1, g2 in G and all x in X:",
+      "translation": "集合 $X$ 上の群 $G$ の集合論的表現（群作用または置換表現としても知られる）は、$G$ から $X$ から $X$ への関数全体の集合 $X^X$ への関数 $\rho$ によって与えられ、すべての $g_1, g_2 \text{ in } G$ およびすべての $x \text{ in } X$ に対して次を満たす。"
+    },
+    {
+      "source": "This condition and the axioms for a group imply that ρ(g) is a bijection (or permutation) for all g in G. Thus we may equivalently define a permutation representation to be a group homomorphism from G to the symmetric group SX of X.",
+      "translation": "この条件と群の公理から、すべての $g \text{ in } G$ に対して $\rho(g)$ が全単射（または置換）であることが導かれる。したがって、置換表現を $G$ から $X$ の対称群 $S_X$ への群準同型として同等に定義することができる。"
+    },
+    {
+      "source": "Representations in other categories",
+      "translation": "他の圏における表現",
+      "role": "heading"
+    },
+    {
+      "source": "Every group G can be viewed as a category with a single object; morphisms in this category are just the elements of G. Given an arbitrary category C, a representation of G in C is a functor from G to C. Such a functor selects an object X in C and a group homomorphism from G to Aut(X), the automorphism group of X.",
+      "translation": "すべての群 $G$ は、単一の対象を持つ圏と見なすことができる。この圏における射は、単に $G$ の元である。任意の圏 $\\mathcal{C}$ が与えられたとき、$\\mathcal{C}$ における $G$ の表現とは、$G$ から $\\mathcal{C}$ への関手のことである。このような関手は、$\\mathcal{C}$ 内の対象 $X$ と、$G$ から $X$ の自己同型群 $\\text{Aut}(X)$ への群準同型を選択する。"
+    },
+    {
+      "source": "In the case where C is VectF, the category of vector spaces over a field F, this definition is equivalent to a linear representation. Likewise, a set-theoretic representation is just a representation of G in the category of sets.",
+      "translation": "$\\mathcal{C}$ が体 $F$ 上のベクトル空間の圏 $\\text{Vect}_F$ である場合、この定義は線形表現と同等である。同様に、集合論的表現は単に集合の圏における $G$ の表現である。"
+    },
+    {
+      "source": "For another example consider the category of topological spaces, Top. Representations in Top are homomorphisms from G to the homeomorphism group of a topological space X.",
+      "translation": "別の例として、位相空間の圏 $\\text{Top}$ を考える。$\\text{Top}$ における表現とは、群 $G$ から位相空間 $X$ の同相写像群への準同型写像のことである。"
+    },
+    {
+      "source": "Three types of representations closely related to linear representations are:",
+      "translation": "線形表現と密接に関連する3種類の表現を挙げる。"
+    },
+    {
+      "source": "projective representations: in the category of projective spaces. These can be described as \"linear representations up to scalar transformations\".",
+      "translation": "射影表現：射影空間の圏における表現である。これは「スカラー変換を除いた線形表現」として記述できる。",
+      "role": "list-item"
+    },
+    {
+      "source": "affine representations: in the category of affine spaces. For example, the Euclidean group acts affinely upon Euclidean space.",
+      "translation": "アフィン表現：アフィン空間の圏における表現である。例えば、ユークリッド群はユークリッド空間にアフィン的に作用する。",
+      "role": "list-item"
+    },
+    {
+      "source": "corepresentations of unitary and antiunitary groups: in the category of complex vector spaces with morphisms being linear or antilinear transformations.",
+      "translation": "ユニタリ群および反ユニタリ群の共表現：射形が線形または反線形変換である複素ベクトル空間の圏における表現である。",
+      "role": "list-item"
+    },
+    {
+      "source": "Representations of categories",
+      "translation": "圏の表現",
+      "role": "heading"
+    },
+    {
+      "source": "Since groups are categories, one can also consider representation of other categories. The simplest generalization is to monoids, which are categories with one object. Groups are monoids for which every morphism is invertible. General monoids have representations in any category. In the category of sets, these are monoid actions, but monoid representations on vector spaces and other objects can be studied.",
+      "translation": "群は圏であるため、他の圏の表現を考えることもできる。最も単純な一般化は、唯一の対象を持つ圏であるモノイドへの拡張である。群は、すべての射が可逆であるようなモノイドである。一般のモノイドは、任意の圏における表現を持つ。集合の圏においては、これらはモノイド作用となるが、ベクトル空間やその他の対象上のモノイド表現についても研究されている。"
+    },
+    {
+      "source": "More generally, one can relax the assumption that the category being represented has only one object. In full generality, this is simply the theory of functors between categories, and little can be said.",
+      "translation": "より一般的に、表現される圏が唯一の対象のみを持つという仮定を緩めることができる。完全に一般化すれば、これは単に圏の間の関手の理論となり、特筆すべき点は少なくなってしまう。"
+    },
+    {
+      "source": "One special case has had a significant impact on representation theory, namely the representation theory of quivers. A quiver is simply a directed graph (with loops and multiple arrows allowed), but it can be made into a category (and also an algebra) by considering paths in the graph. Representations of such categories/algebras have illuminated several aspects of representation theory, for instance by allowing non-semisimple representation theory questions about a group to be reduced in some cases to semisimple representation theory questions about a quiver.",
+      "translation": "一つの特殊なケースが表現論に大きな影響を与えており、それが quiver（矢筒）の表現論である。quiver とは単に有向グラフ（ループや多重辺を許容する）のことであるが、グラフ内のパスを考えることで、これを圏（および代数）と見なすことができる。このような圏や代数の表現は、表現論のいくつかの側面を明らかにした。例えば、群に関する非半単純な表現論の問題を、場合によっては quiver に関する半単純な表現論の問題に帰着させることが可能になった。"
+    },
+    {
+      "source": "Asymptotic representation theory",
+      "translation": "漸近的表現論",
+      "role": "heading"
+    },
+    {
+      "source": "For now, see the following.",
+      "translation": "現時点では、以下を参照されたい。"
+    },
+    {
+      "source": "Vershik, Anatoly. \"Between \"very large\" and \"infinite\": the asymptotic representation theory\". Probability and Mathematical Statistics. 33 (2): 467–476. Retrieved 21 October 2022.",
+      "translation": "Vershik, Anatoly. \"Between \"very large\" and \"infinite\": the asymptotic representation theory\". Probability and Mathematical Statistics. 33 (2): 467–476. Retrieved 21 October 2022.",
+      "role": "list-item"
+    },
+    {
+      "source": "Anatoly Vershik, Two lectures on the asymptotic representation theory and statistics of Young diagrams, In: Vershik A.M., Yakubovich Y. (eds) Asymptotic Combinatorics with Applications to Mathematical Physics Lecture Notes in Mathematics, vol 1815. Springer 2003",
+      "translation": "Anatoly Vershik, Two lectures on the asymptotic representation theory and statistics of Young diagrams, In: Vershik A.M., Yakubovich Y. (eds) Asymptotic Combinatorics with Applications to Mathematical Physics Lecture Notes in Mathematics, vol 1815. Springer 2003",
+      "role": "list-item"
+    },
+    {
+      "source": "G. Olshanski, Asymptotic representation theory, Lecture notes 2009–2010",
+      "translation": "G. Olshanski, Asymptotic representation theory, Lecture notes 2009–2010",
+      "role": "list-item"
+    },
+    {
+      "source": "https://ncatlab.org/nlab/show/asymptotic+representation+theory",
+      "translation": "https://ncatlab.org/nlab/show/asymptotic+representation+theory",
+      "role": "list-item"
+    },
+    {
+      "source": "See also",
+      "translation": "関連項目",
+      "role": "heading"
+    },
+    {
+      "source": "Galois representation",
+      "translation": "ガロア表現",
+      "role": "list-item"
+    },
+    {
+      "source": "Glossary of representation theory",
+      "translation": "表現論用語集",
+      "role": "list-item"
+    },
+    {
+      "source": "Group representation",
+      "translation": "群表現",
+      "role": "list-item"
+    },
+    {
+      "source": "Itô's theorem",
+      "translation": "伊藤の定理",
+      "role": "list-item"
+    },
+    {
+      "source": "List of representation theory topics",
+      "translation": "表現論のトピック一覧",
+      "role": "list-item"
+    },
+    {
+      "source": "List of harmonic analysis topics",
+      "translation": "調和解析のトピック一覧",
+      "role": "list-item"
+    },
+    {
+      "source": "Numerical analysis",
+      "translation": "数値解析",
+      "role": "list-item"
+    },
+    {
+      "source": "Philosophy of cusp forms",
+      "translation": "カスプ形式の哲学",
+      "role": "list-item"
+    },
+    {
+      "source": "Representation (mathematics)",
+      "translation": "表現 (数学)",
+      "role": "list-item"
+    },
+    {
+      "source": "Representation theorem",
+      "translation": "表現定理",
+      "role": "list-item"
+    },
+    {
+      "source": "Universal algebra",
+      "translation": "普遍代数",
+      "role": "list-item"
+    },
+    {
+      "source": "Notes",
+      "translation": "注釈",
+      "role": "heading"
+    },
+    {
+      "source": "^ Classic texts on representation theory include Curtis & Reiner (1962) and Serre (1977). Other excellent sources are Fulton & Harris (1991) and Goodman & Wallach (1998).",
+      "translation": "^ 表現論の古典的なテキストには、Curtis & Reiner (1962) や Serre (1977) がある。その他の優れた資料としては、Fulton & Harris (1991) や Goodman & Wallach (1998) が挙げられる。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ \"representation theory in nLab\". ncatlab.org. Retrieved 2019-12-09.",
+      "translation": "^ \"representation theory in nLab\". ncatlab.org. 2019-12-09閲覧。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ For the history of the representation theory of finite groups, see Lam (1998). For algebraic and Lie groups, see Borel (2001).",
+      "translation": "^ 有限群の表現論の歴史については、Lam (1998) を参照せよ。代数群およびリー群については、Borel (2001) を参照せよ。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b c Etingof, Pavel; Golberg, Oleg; Hensel, Sebastian; Liu, Tiankai; Schwendner, Alex; Vaintrob, Dmitry; Yudovina, Elena (January 10, 2011). \"Introduction to representation theory\" (PDF). www-math.mit.edu. Retrieved 2019-12-09.",
+      "translation": "^ a b c Etingof, Pavel; Golberg, Oleg; Hensel, Sebastian; Liu, Tiankai; Schwendner, Alex; Vaintrob, Dmitry; Yudovina, Elena (2011年1月10日). \"Introduction to representation theory\" (PDF). www-math.mit.edu. 2019年12月9日閲覧。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Ronan, Mark Andrew. \"linear algebra\". Encyclopedia Britannica. Retrieved 8 July 2024. linear algebra is very well understood",
+      "translation": "^ Ronan, Mark Andrew. \"linear algebra\". Encyclopedia Britannica. 2024年7月8日閲覧。線形代数は非常に十分に理解されている。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b There are many textbooks on vector spaces and linear algebra. For an advanced treatment, see Kostrikin & Manin (1997).",
+      "translation": "^ a b ベクトル空間と線形代数に関する教科書は数多く存在する。高度な扱いについては、Kostrikin & Manin (1997) を参照せよ。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Sally & Vogan 1989.",
+      "translation": "^ Sally & Vogan 1989.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b c Teleman, Constantin (2005). \"Representation Theory\" (PDF). math.berkeley.edu. Retrieved 2019-12-09.",
+      "translation": "^ a b c Teleman, Constantin (2005). \"Representation Theory\" (PDF). math.berkeley.edu. 2019年12月9日閲覧。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b Sternberg 1994.",
+      "translation": "^ a b Sternberg 1994.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Lam 1998, p. 372.",
+      "translation": "^ Lam 1998, p. 372.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b c Folland 1995.",
+      "translation": "^ a b c Folland 1995.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Goodman & Wallach 1998, Olver 1999, Sharpe 1997.",
+      "translation": "^ Goodman & Wallach 1998, Olver 1999, Sharpe 1997.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Borel & Casselman 1979, Gelbart 1984.",
+      "translation": "^ Borel & Casselman 1979, Gelbart 1984.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ See the previous footnotes.",
+      "translation": "^ 前述の脚注を参照せよ。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b Simson, Skowronski & Assem 2007.",
+      "translation": "^ a b Simson, Skowronski & Assem 2007.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Fulton & Harris 1991, Simson, Skowronski & Assem 2007, Humphreys 1972a.",
+      "translation": "^ Fulton & Harris 1991, Simson, Skowronski & Assem 2007, Humphreys 1972a.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ This material can be found in standard textbooks, such as Curtis & Reiner (1962), Fulton & Harris (1991), Goodman & Wallach (1998), James & Liebeck (1993), Humphreys (1972a), Jantzen (2003), Knapp (2001) and Serre (1977).",
+      "translation": "^ これらの内容は、Curtis & Reiner (1962), Fulton & Harris (1991), Goodman & Wallach (1998), James & Liebeck (1993), Humphreys (1972a), Jantzen (2003), Knapp (2001), Serre (1977) などの標準的な教科書に見出すことができる。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b Serre 1977.",
+      "translation": "^ Serre 1977, a b.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Fulton & Harris 1991, p. 4.",
+      "translation": "^ Fulton & Harris 1991, p. 4.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ The representation {0} of dimension zero is considered to be neither reducible nor irreducible, just like the number 1 is considered to be neither composite nor prime.",
+      "translation": "^ 次元0の表現 {0} は、数値の1が合成数でも素数でもないと見なされるのと同様に、可約でも既約でもないと見なされる。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Humphreys, James E. (1975). Linear Algebraic Groups. New York, NY: Springer New York. ISBN 978-1-4684-9443-3. OCLC 853255426.",
+      "translation": "^ Humphreys, James E. (1975). Linear Algebraic Groups. New York, NY: Springer New York. ISBN 978-1-4684-9443-3. OCLC 853255426.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Hall 2015 Section 4.3.2",
+      "translation": "^ Hall 2015, 第4.3.2節",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Hall 2015 Proposition 4.18 and Definition 4.19",
+      "translation": "^ Hall 2015, 命題4.18および定義4.19",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Hall 2015 Appendix C",
+      "translation": "^ Hall 2015, 付録C",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Alperin 1986, Lam 1998, Serre 1977.",
+      "translation": "^ Alperin 1986, Lam 1998, Serre 1977.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Kim 1999.",
+      "translation": "^ Kim 1999.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Serre 1977, Part III.",
+      "translation": "^ Serre 1977, 第III部.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Alperin 1986.",
+      "translation": "^ Alperin 1986.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ See Weyl 1928.",
+      "translation": "^ Weyl 1928を参照。",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Wigner 1939.",
+      "translation": "^ Wigner 1939.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Borel 2001.",
+      "translation": "^ Borel 2001.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b Knapp 2001.",
+      "translation": "^ Knapp 2001, a b.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b Peter & Weyl 1927.",
+      "translation": "^ a b Peter & Weyl 1927.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Bargmann 1947.",
+      "translation": "^ Bargmann 1947.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Pontrjagin 1934.",
+      "translation": "^ Pontrjagin 1934.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b Weyl 1946.",
+      "translation": "^ a b Weyl 1946.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ a b c Fulton & Harris 1991.",
+      "translation": "^ a b c Fulton & Harris 1991.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Humphreys 1972a.",
+      "translation": "^ Humphreys 1972a.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Kac 1990.",
+      "translation": "^ Kac 1990.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Kac 1977.",
+      "translation": "^ Kac 1977.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Humphreys 1972b, Jantzen 2003.",
+      "translation": "^ Humphreys 1972b, Jantzen 2003.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Olver 1999.",
+      "translation": "^ Olver 1999.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Mumford, Fogarty & Kirwan 1994.",
+      "translation": "^ Mumford, Fogarty & Kirwan 1994.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Sharpe 1997.",
+      "translation": "^ Sharpe 1997.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Borel & Casselman 1979.",
+      "translation": "^ Borel & Casselman 1979.",
+      "role": "list-item"
+    },
+    {
+      "source": "^ Gelbart 1984.",
+      "translation": "^ Gelbart 1984.",
+      "role": "list-item"
+    },
+    {
+      "source": "References",
+      "translation": "参考文献",
+      "role": "heading"
+    },
+    {
+      "source": "Alperin, J. L. (1986), Local Representation Theory: Modular Representations as an Introduction to the Local Representation Theory of Finite Groups, Cambridge University Press, ISBN 978-0-521-44926-7.",
+      "translation": "Alperin, J. L. (1986), Local Representation Theory: Modular Representations as an Introduction to the Local Representation Theory of Finite Groups, Cambridge University Press, ISBN 978-0-521-44926-7.",
+      "role": "list-item"
+    },
+    {
+      "source": "Bargmann, V. (1947), \"Irreducible unitary representations of the Lorenz group\", Annals of Mathematics, 48 (3): 568–640, doi:10.2307/1969129, JSTOR 1969129.",
+      "translation": "Bargmann, V. (1947), \"Irreducible unitary representations of the Lorenz group\", Annals of Mathematics, 48 (3): 568–640, doi:10.2307/1969129, JSTOR 1969129.",
+      "role": "list-item"
+    },
+    {
+      "source": "Borel, Armand (2001), Essays in the History of Lie Groups and Algebraic Groups, American Mathematical Society, ISBN 978-0-8218-0288-5.",
+      "translation": "Borel, Armand (2001), Essays in the History of Lie Groups and Algebraic Groups, American Mathematical Society, ISBN 978-0-8218-0288-5.",
+      "role": "list-item"
+    },
+    {
+      "source": "Borel, Armand; Casselman, W. (1979), Automorphic Forms, Representations, and L-functions, American Mathematical Society, ISBN 978-0-8218-1435-2.",
+      "translation": "Borel, Armand; Casselman, W. (1979), Automorphic Forms, Representations, and L-functions, American Mathematical Society, ISBN 978-0-8218-1435-2.",
+      "role": "list-item"
+    },
+    {
+      "source": "Curtis, Charles W.; Reiner, Irving (1962), Representation Theory of Finite Groups and Associative Algebras, John Wiley & Sons (Reedition 2006 by AMS Bookstore), ISBN 978-0-470-18975-7 {{citation}}: ISBN / Date incompatibility (help).",
+      "translation": "Curtis, Charles W.; Reiner, Irving (1962), Representation Theory of Finite Groups and Associative Algebras, John Wiley & Sons (2006年にAMS Bookstoreより再版), ISBN 978-0-470-18975-7 {{citation}}: ISBN / 日付の不整合 (ヘルプ).",
+      "role": "list-item"
+    },
+    {
+      "source": "Folland, Gerald B. (1995), A Course in Abstract Harmonic Analysis, CRC Press, ISBN 978-0-8493-8490-5.",
+      "translation": "Folland, Gerald B. (1995), A Course in Abstract Harmonic Analysis, CRC Press, ISBN 978-0-8493-8490-5.",
+      "role": "list-item"
+    },
+    {
+      "source": "Fulton, William; Harris, Joe (1991). Representation theory. A first course. Graduate Texts in Mathematics, Readings in Mathematics. Vol. 129. New York: Springer-Verlag. doi:10.1007/978-1-4612-0979-9. ISBN 978-0-387-97495-8. MR 1153249. OCLC 246650103..",
+      "translation": "Fulton, William; Harris, Joe (1991). Representation theory. A first course. Graduate Texts in Mathematics, Readings in Mathematics. Vol. 129. New York: Springer-Verlag. doi:10.1007/978-1-4612-0979-9. ISBN 978-0-387-97495-8. MR 1153249. OCLC 246650103..",
+      "role": "list-item"
+    },
+    {
+      "source": "Gelbart, Stephen (1984), \"An Elementary Introduction to the Langlands Program\", Bulletin of the American Mathematical Society, 10 (2): 177–219, doi:10.1090/S0273-0979-1984-15237-6.",
+      "translation": "Gelbart, Stephen (1984), \"An Elementary Introduction to the Langlands Program\", Bulletin of the American Mathematical Society, 10 (2): 177–219, doi:10.1090/S0273-0979-1984-15237-6.",
+      "role": "list-item"
+    },
+    {
+      "source": "Goodman, Roe; Wallach, Nolan R. (1998), Representations and Invariants of the Classical Groups, Cambridge University Press, ISBN 978-0-521-66348-9.",
+      "translation": "Goodman, Roe; Wallach, Nolan R. (1998), Representations and Invariants of the Classical Groups, Cambridge University Press, ISBN 978-0-521-66348-9.",
+      "role": "list-item"
+    },
+    {
+      "source": "Hall, Brian C. (2015), Lie Groups, Lie Algebras, and Representations: An Elementary Introduction, Graduate Texts in Mathematics, vol. 222 (2nd ed.), Springer, ISBN 978-3319134666",
+      "translation": "Hall, Brian C. (2015), Lie Groups, Lie Algebras, and Representations: An Elementary Introduction, Graduate Texts in Mathematics, vol. 222 (第2版), Springer, ISBN 978-3319134666",
+      "role": "list-item"
+    },
+    {
+      "source": "Helgason, Sigurdur (1978), Differential Geometry, Lie groups and Symmetric Spaces, Academic Press, ISBN 978-0-12-338460-7",
+      "translation": "Helgason, Sigurdur (1978), Differential Geometry, Lie groups and Symmetric Spaces, Academic Press, ISBN 978-0-12-338460-7",
+      "role": "list-item"
+    },
+    {
+      "source": "Humphreys, James E. (1972a), Introduction to Lie Algebras and Representation Theory, Birkhäuser, ISBN 978-0-387-90053-7.",
+      "translation": "Humphreys, James E. (1972a), Introduction to Lie Algebras and Representation Theory, Birkhäuser, ISBN 978-0-387-90053-7.",
+      "role": "list-item"
+    },
+    {
+      "source": "Humphreys, James E. (1972b), Linear Algebraic Groups, Graduate Texts in Mathematics, vol. 21, Berlin, New York: Springer-Verlag, ISBN 978-0-387-90108-4, MR 0396773",
+      "translation": "Humphreys, James E. (1972b), Linear Algebraic Groups, Graduate Texts in Mathematics, vol. 21, Berlin, New York: Springer-Verlag, ISBN 978-0-387-90108-4, MR 0396773",
+      "role": "list-item"
+    },
+    {
+      "source": "James, Gordon; Liebeck, Martin (1993), Representations and Characters of Groups, Cambridge: Cambridge University Press, ISBN 978-0-521-44590-0.",
+      "translation": "James, Gordon; Liebeck, Martin (1993), Representations and Characters of Groups, Cambridge: Cambridge University Press, ISBN 978-0-521-44590-0.",
+      "role": "list-item"
+    },
+    {
+      "source": "Jantzen, Jens Carsten (2003), Representations of Algebraic Groups, American Mathematical Society, ISBN 978-0-8218-3527-2.",
+      "translation": "Jantzen, Jens Carsten (2003), Representations of Algebraic Groups, American Mathematical Society, ISBN 978-0-8218-3527-2.",
+      "role": "list-item"
+    },
+    {
+      "source": "Kac, Victor G. (1977), \"Lie superalgebras\", Advances in Mathematics, 26 (1): 8–96, doi:10.1016/0001-8708(77)90017-2.",
+      "translation": "Kac, Victor G. (1977), \"Lie superalgebras\", Advances in Mathematics, 26 (1): 8–96, doi:10.1016/0001-8708(77)90017-2.",
+      "role": "list-item"
+    },
+    {
+      "source": "Kac, Victor G. (1990), Infinite Dimensional Lie Algebras (3rd ed.), Cambridge University Press, ISBN 978-0-521-46693-6.",
+      "translation": "Kac, Victor G. (1990), Infinite Dimensional Lie Algebras (3rd ed.), Cambridge University Press, ISBN 978-0-521-46693-6.",
+      "role": "list-item"
+    },
+    {
+      "source": "Kim, Shoon Kyung (1999), Group Theoretical Methods and Applications to Molecules and Crystals: And Applications to Molecules and Crystals, Cambridge University Press, ISBN 978-0-521-64062-6.",
+      "translation": "Kim, Shoon Kyung (1999), Group Theoretical Methods and Applications to Molecules and Crystals: And Applications to Molecules and Crystals, Cambridge University Press, ISBN 978-0-521-64062-6.",
+      "role": "list-item"
+    },
+    {
+      "source": "Knapp, Anthony W. (2001), Representation Theory of Semisimple Groups: An Overview Based on Examples, Princeton University Press, ISBN 978-0-691-09089-4.",
+      "translation": "Knapp, Anthony W. (2001), Representation Theory of Semisimple Groups: An Overview Based on Examples, Princeton University Press, ISBN 978-0-691-09089-4.",
+      "role": "list-item"
+    },
+    {
+      "source": "Kostrikin, A. I.; Manin, Yuri I. (1997), Linear Algebra and Geometry, Taylor & Francis, ISBN 978-90-5699-049-7.",
+      "translation": "Kostrikin, A. I.; Manin, Yuri I. (1997), Linear Algebra and Geometry, Taylor & Francis, ISBN 978-90-5699-049-7.",
+      "role": "list-item"
+    },
+    {
+      "source": "Lam, T. Y. (1998), \"Representations of finite groups: a hundred years\", Notices of the AMS, 45 (3, 4): 361–372 (Part I), 465–474 (Part II).",
+      "translation": "Lam, T. Y. (1998), \"Representations of finite groups: a hundred years\", Notices of the AMS, 45 (3, 4): 361–372 (Part I), 465–474 (Part II).",
+      "role": "list-item"
+    },
+    {
+      "source": "Lyubich, Yurii I. (1988). Introduction to the Theory of Banach Representations of Groups. Operator Theory: Advances and Applications. Vol. 30. Basel: Birkhauser. ISBN 978-3-7643-2207-6.",
+      "translation": "Lyubich, Yurii I. (1988). Introduction to the Theory of Banach Representations of Groups. Operator Theory: Advances and Applications. Vol. 30. Basel: Birkhauser. ISBN 978-3-7643-2207-6.",
+      "role": "list-item"
+    },
+    {
+      "source": "Mumford, David; Fogarty, J.; Kirwan, F. (1994), Geometric invariant theory, Ergebnisse der Mathematik und ihrer Grenzgebiete (2) [Results in Mathematics and Related Areas (2)], vol. 34 (3rd ed.), Berlin, New York: Springer-Verlag, ISBN 978-3-540-56963-3, MR 0214602; MR 0719371 (2nd ed.); MR 1304906(3rd ed.)",
+      "translation": "Mumford, David; Fogarty, J.; Kirwan, F. (1994), Geometric invariant theory, Ergebnisse der Mathematik und ihrer Grenzgebiete (2) [Results in Mathematics and Related Areas (2)], vol. 34 (3rd ed.), Berlin, New York: Springer-Verlag, ISBN 978-3-540-56963-3, MR 0214602; MR 0719371 (2nd ed.); MR 1304906(3rd ed.)",
+      "role": "list-item"
+    },
+    {
+      "source": "Olver, Peter J. (1999), Classical invariant theory, Cambridge: Cambridge University Press, ISBN 978-0-521-55821-1.",
+      "translation": "Olver, Peter J. (1999), Classical invariant theory, Cambridge: Cambridge University Press, ISBN 978-0-521-55821-1.",
+      "role": "list-item"
+    },
+    {
+      "source": "Peter, F.; Weyl, Hermann (1927), \"Die Vollständigkeit der primitiven Darstellungen einer geschlossenen kontinuierlichen Gruppe\", Mathematische Annalen, 97 (1): 737–755, doi:10.1007/BF01447892, S2CID 120013521.",
+      "translation": "Peter, F.; Weyl, Hermann (1927), \"Die Vollständigkeit der primitiven Darstellungen einer geschlossenen kontinuierlichen Gruppe\", Mathematische Annalen, 97 (1): 737–755, doi:10.1007/BF01447892, S2CID 120013521.",
+      "role": "list-item"
+    },
+    {
+      "source": "Pontrjagin, Lev S. (1934), \"The theory of topological commutative groups\", Annals of Mathematics, 35 (2): 361–388, doi:10.2307/1968438, JSTOR 1968438.",
+      "translation": "Pontrjagin, Lev S. (1934), \"The theory of topological commutative groups\", Annals of Mathematics, 35 (2): 361–388, doi:10.2307/1968438, JSTOR 1968438.",
+      "role": "list-item"
+    },
+    {
+      "source": "Sally, Paul; Vogan, David A. (1989), Representation Theory and Harmonic Analysis on Semisimple Lie Groups, American Mathematical Society, ISBN 978-0-8218-1526-7.",
+      "translation": "Sally, Paul; Vogan, David A. (1989), Representation Theory and Harmonic Analysis on Semisimple Lie Groups, American Mathematical Society, ISBN 978-0-8218-1526-7.",
+      "role": "list-item"
+    },
+    {
+      "source": "Serre, Jean-Pierre (1977), Linear Representations of Finite Groups, Springer-Verlag, ISBN 978-0387901909.",
+      "translation": "Serre, Jean-Pierre (1977), Linear Representations of Finite Groups, Springer-Verlag, ISBN 978-0387901909.",
+      "role": "list-item"
+    },
+    {
+      "source": "Sharpe, Richard W. (1997), Differential Geometry: Cartan's Generalization of Klein's Erlangen Program, Springer, ISBN 978-0-387-94732-7.",
+      "translation": "Sharpe, Richard W. (1997), Differential Geometry: Cartan's Generalization of Klein's Erlangen Program, Springer, ISBN 978-0-387-94732-7.",
+      "role": "list-item"
+    },
+    {
+      "source": "Simson, Daniel; Skowronski, Andrzej; Assem, Ibrahim (2007), Elements of the Representation Theory of Associative Algebras, Cambridge University Press, ISBN 978-0-521-88218-7.",
+      "translation": "Simson, Daniel; Skowronski, Andrzej; Assem, Ibrahim (2007), Elements of the Representation Theory of Associative Algebras, Cambridge University Press, ISBN 978-0-521-88218-7.",
+      "role": "list-item"
+    },
+    {
+      "source": "Sternberg, Shlomo (1994), Group Theory and Physics, Cambridge University Press, ISBN 978-0-521-55885-3.",
+      "translation": "Sternberg, Shlomo (1994), Group Theory and Physics, Cambridge University Press, ISBN 978-0-521-55885-3.",
+      "role": "list-item"
+    },
+    {
+      "source": "Tung, Wu-Ki (1985). Group Theory in Physics (1st ed.). New Jersey·London·Singapore·Hong Kong: World Scientific. ISBN 978-9971966577.",
+      "translation": "Tung, Wu-Ki (1985). Group Theory in Physics (第1版). New Jersey·London·Singapore·Hong Kong: World Scientific. ISBN 978-9971966577.",
+      "role": "list-item"
+    },
+    {
+      "source": "Weyl, Hermann (1928), Gruppentheorie und Quantenmechanik (The Theory of Groups and Quantum Mechanics, translated H.P. Robertson, 1931 ed.), S. Hirzel, Leipzig (reprinted 1950, Dover), ISBN 978-0-486-60269-1 {{citation}}: ISBN / Date incompatibility (help).",
+      "translation": "Weyl, Hermann (1928), Gruppentheorie und Quantenmechanik (The Theory of Groups and Quantum Mechanics, H.P. Robertson訳, 1931年版), S. Hirzel, Leipzig (1950年 Dover社より再版), ISBN 978-0-486-60269-1 {{citation}}: ISBN / 日付の不整合 (ヘルプ).",
+      "role": "list-item"
+    },
+    {
+      "source": "Weyl, Hermann (1946), The Classical Groups: Their Invariants and Representations (2nd ed.), Princeton University Press (reprinted 1997), ISBN 978-0-691-05756-9 {{citation}}: ISBN / Date incompatibility (help).",
+      "translation": "Weyl, Hermann (1946), The Classical Groups: Their Invariants and Representations (第2版), Princeton University Press (1997年再版), ISBN 978-0-691-05756-9 {{citation}}: ISBN / 日付の不整合 (ヘルプ).",
+      "role": "list-item"
+    },
+    {
+      "source": "Wigner, Eugene P. (1939), \"On unitary representations of the inhomogeneous Lorentz group\", Annals of Mathematics, 40 (1): 149–204, Bibcode:1939AnMat..40..149W, doi:10.2307/1968551, JSTOR 1968551, S2CID 121773411.",
+      "translation": "Wigner, Eugene P. (1939), \"On unitary representations of the inhomogeneous Lorentz group\", Annals of Mathematics, 40 (1): 149–204, Bibcode:1939AnMat..40..149W, doi:10.2307/1968551, JSTOR 1968551, S2CID 121773411.",
+      "role": "list-item"
+    },
+    {
+      "source": "External links",
+      "translation": "外部リンク",
+      "role": "heading"
+    },
+    {
+      "source": "\"Representation theory\", Encyclopedia of Mathematics, EMS Press, 2001 [1994]",
+      "translation": "\"Representation theory\", Encyclopedia of Mathematics, EMS Press, 2001 [1994]",
+      "role": "list-item"
+    },
+    {
+      "source": "Alexander Kirillov Jr., An introduction to Lie groups and Lie algebras (2008). Textbook, preliminary version pdf downloadable from author's home page.",
+      "translation": "Alexander Kirillov Jr., An introduction to Lie groups and Lie algebras (2008). 教科書。予備版のPDFは著者のホームページからダウンロード可能。",
+      "role": "list-item"
+    },
+    {
+      "source": "Kevin Hartnett, (2020), article on representation theory in Quanta magazine",
+      "translation": "Kevin Hartnett, (2020), Quanta magazine掲載の表現論に関する記事",
+      "role": "list-item"
+    },
+    {
+      "source": "Grabowski, Jan (2025). Representation Theory: A Categorical Approach. Open Book Publishers. ISBN 978-1-80511-716-2.",
+      "translation": "Grabowski, Jan (2025). Representation Theory: A Categorical Approach. Open Book Publishers. ISBN 978-1-80511-716-2.",
+      "role": "list-item"
+    }
+  ],
+  "totalPromptTokens": 13978,
+  "totalCompletionTokens": 11513,
+  "requestCount": 16,
+  "elapsedMs": 302908
+}
