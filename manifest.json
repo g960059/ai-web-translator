@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AI Web Translator",
-  "version": "2.0.0",
-  "description": "Translate web pages with AI and manage translation sessions from a focused popup.",
+  "name": "Fibo",
+  "version": "1.0.0",
+  "description": "数式もコードも壊さないAI翻訳",
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",

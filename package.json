@@ -1,6 +1,6 @@
 {
-  "name": "ai-web-translator",
-  "version": "2.0.0",
+  "name": "fibo",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Translate web pages using OpenRouter AI",
