@@ -112,6 +112,13 @@ export function PopupApp() {
     }
   }, [slideView]);
 
+  // Refresh analysis when model, scope, or target language changes
+  useEffect(() => {
+    if (hasHydrated && activeTabId !== null && canTranslateCurrentPage) {
+      void refreshAnalysis(activeTabId, settings);
+    }
+  }, [settings.model, settings.translateFullPage, settings.targetLanguage, settings.style]);
+
   const estimatedCost =
     analysis && models.length > 0
       ? estimateCostUsd(settings.model, models, analysis.estimatedInputTokens, analysis.estimatedOutputTokens)
