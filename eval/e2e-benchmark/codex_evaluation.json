@@ -1,0 +1,70 @@
+{
+  "evaluations": [
+    {
+      "file": "eval/e2e-benchmark/sample_Representation_theory_google_gemini-3.1-flash-lite-preview.txt",
+      "model": "google/gemini-3.1-flash-lite-preview",
+      "page": "Representation_theory",
+      "score": 8,
+      "comment": "数式欠落箇所を除けば、学術文体としてかなり自然で読みやすい。定義説明や一般論の運びは安定しているが、一部に文の切れややや硬い直訳調が残る。",
+      "issues": [
+        "4番の「代数学への影響に加え、表現論は」で文が未完のまま終わっている",
+        "10〜12番に読点不足や説明のつながりの弱い箇所があり、定義文がやや引っかかる"
+      ]
+    },
+    {
+      "file": "eval/e2e-benchmark/sample_Representation_theory_google_gemma-4-31b-it.txt",
+      "model": "google/gemma-4-31b-it",
+      "page": "Representation_theory",
+      "score": 7,
+      "comment": "全体としては読めるが、Gemini版より構文の乱れが目立つ。専門文体は保っているものの、括弧処理や言い換えが崩れて不自然になる箇所がある。",
+      "issues": [
+        "15番の「(V,φ という記法… ) を用いて…」は括弧の壊れ方が大きく、文章として不自然",
+        "19番の「等価な表現とも表現される」など、語法がぎこちない箇所がある"
+      ]
+    },
+    {
+      "file": "eval/e2e-benchmark/sample_Representation_theory_of_finite_groups_google_gemini-3.1-flash-lite-preview.txt",
+      "model": "google/gemini-3.1-flash-lite-preview",
+      "page": "Representation_theory_of_finite_groups",
+      "score": 9,
+      "comment": "6本の中では最も自然で、説明文の流れも安定している。数式周辺を除けば日本語の学術文章としてかなり良く、直訳臭さも比較的弱い。",
+      "issues": [
+        "一部の定義文はやや説明過多で重く、簡潔さに欠ける",
+        "5番付近に孤立断片があり、数式近傍では文のまとまりが少し崩れる"
+      ]
+    },
+    {
+      "file": "eval/e2e-benchmark/sample_Representation_theory_of_finite_groups_google_gemma-4-31b-it.txt",
+      "model": "google/gemma-4-31b-it",
+      "page": "Representation_theory_of_finite_groups",
+      "score": 7,
+      "comment": "基礎的な可読性はあるが、ところどころ機械訳らしい綻びが見える。全体の説明は通る一方で、英語の取り残しや不自然な定義文が減点要因。",
+      "issues": [
+        "7番の「表現ofをと書く。」は英語の取り残しが明確",
+        "5番と13番で定義文のつながりが弱く、説明が断片的に見える"
+      ]
+    },
+    {
+      "file": "eval/e2e-benchmark/sample_Representation_theory_of_finite_groups_qwen_qwen3.5-35b-a3b.txt",
+      "model": "qwen/qwen3.5-35b-a3b",
+      "page": "Representation_theory_of_finite_groups",
+      "score": 7,
+      "comment": "全体としては理解可能で、文体も大きくは崩れていない。ただし literal な運びが強く、英語残りや定義文のこなれなさが継続的に見える。",
+      "issues": [
+        "7番の「表現ofをと書く。」は明確な未翻訳混入",
+        "5番の「線形表現がという写像であり」など、数式を除いても文の骨格がやや不自然"
+      ]
+    },
+    {
+      "file": "eval/e2e-benchmark/sample_Representation_theory_qwen_qwen3.5-35b-a3b.txt",
+      "model": "qwen/qwen3.5-35b-a3b",
+      "page": "Representation_theory",
+      "score": 8,
+      "comment": "学術的な説明文として概ね自然で、Qwen系ではこのページの出来が良い。細部には機械訳らしさが残るが、通読のしやすさは高い。",
+      "issues": [
+        "3番の「[7]。[8]」のように引用記号まわりの処理が少し不自然",
+        "11番と19番で定義文がやや直訳調で、語のつながりが滑らかではない"
+      ]
+    }
+  ]
+}
