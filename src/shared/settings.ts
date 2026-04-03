@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   modelPreset: 'standard',
   targetLanguage: resolveDefaultTargetLanguage(),
   style: 'auto',
-  translateFullPage: false,
+  translateFullPage: true,
   cacheEnabled: true,
   showOriginalOnHover: true,
   customModelId: '',

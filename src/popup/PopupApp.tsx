@@ -454,14 +454,6 @@ export function PopupApp() {
             ) : (
               /* ready */
               <>
-                {/* Scope segment */}
-                <div className="segment-group">
-                  <div className="segment-control">
-                    <button type="button" className="segment-button" data-selected={!settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: false })}>本文のみ</button>
-                    <button type="button" className="segment-button" data-selected={settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: true })}>ページ全体</button>
-                  </div>
-                </div>
-
                 {/* Model segment or custom indicator */}
                 {settings.modelPreset === 'custom' ? (
                   <div className="custom-model-indicator">
@@ -635,8 +627,8 @@ export function PopupApp() {
               <div className="settings-section">
                 <h3 className="section-title">翻訳範囲</h3>
                 <label className="checkbox-row">
-                  <input type="checkbox" checked={settings.translateFullPage} onChange={(e) => updateSettings({ translateFullPage: e.target.checked })} />
-                  <span>ページ全体を翻訳（ヘッダー・サイドバー含む）</span>
+                  <input type="checkbox" checked={!settings.translateFullPage} onChange={(e) => updateSettings({ translateFullPage: !e.target.checked })} />
+                  <span>本文のみに限定する（ヘッダー・サイドバーを除外）</span>
                 </label>
               </div>
 

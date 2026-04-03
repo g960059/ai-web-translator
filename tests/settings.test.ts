@@ -32,6 +32,38 @@ describe('settings normalization', () => {
     expect(settings.model).toBe(DEFAULT_SETTINGS.model);
   });
 
+  it('preserves stored translateFullPage:false when default is true', async () => {
+    await chrome.storage.local.set({
+      [SETTINGS_STORAGE_KEY]: {
+        ...DEFAULT_SETTINGS,
+        translateFullPage: false,
+      },
+    });
+
+    const settings = await loadSettings();
+    expect(settings.translateFullPage).toBe(false);
+  });
+
+  it('migrates old "fast" preset to "standard"', () => {
+    const settings = normalizeSettings({ ...DEFAULT_SETTINGS, modelPreset: 'fast' as any });
+    expect(settings.modelPreset).toBe('standard');
+  });
+
+  it('migrates old "accurate" preset to "premium"', () => {
+    const settings = normalizeSettings({ ...DEFAULT_SETTINGS, modelPreset: 'accurate' as any });
+    expect(settings.modelPreset).toBe('premium');
+  });
+
+  it('resolves custom model ID when preset is custom', () => {
+    const settings = normalizeSettings({ ...DEFAULT_SETTINGS, modelPreset: 'custom', customModelId: 'foo/bar' });
+    expect(settings.model).toBe('foo/bar');
+  });
+
+  it('falls back to standard when custom model ID is empty', () => {
+    const settings = normalizeSettings({ ...DEFAULT_SETTINGS, modelPreset: 'custom', customModelId: '' });
+    expect(settings.model).toBe('google/gemini-3.1-flash-lite-preview');
+  });
+
   it('persists normalized settings', async () => {
     await saveSettings({
       ...DEFAULT_SETTINGS,
