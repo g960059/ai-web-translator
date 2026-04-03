@@ -5,7 +5,8 @@ export type TranslationScope = 'page' | 'main' | 'selection';
 export type DefaultTranslationScope = Exclude<TranslationScope, 'selection'>;
 
 export type TranslationStyle = 'auto' | 'readable' | 'precise' | 'source-like';
-export type ModelPreset = 'fast' | 'accurate';
+export type BuiltinModelPreset = 'lite' | 'standard' | 'premium';
+export type ModelPreset = BuiltinModelPreset | 'custom';
 export type TranslationContentMode = 'html' | 'text';
 export type TranslationRegister = 'dearu' | 'desumasu';
 export type TranslationFragmentRole = 'prose' | 'heading' | 'label' | 'list-item' | 'caption';
@@ -39,6 +40,7 @@ export interface ExtensionSettings {
   translateFullPage: boolean;
   cacheEnabled: boolean;
   showOriginalOnHover: boolean;
+  customModelId: string;
 }
 
 export interface ProviderModelInfo {

@@ -1,35 +1,56 @@
-import type { ExtensionSettings, ModelPreset } from './types';
+import type { BuiltinModelPreset, ExtensionSettings, ModelPreset } from './types';
 
 export const SETTINGS_STORAGE_KEY = 'settings_v2';
 
 export const MODEL_PRESETS: Record<
-  ModelPreset,
-  { modelId: string; label: string; description: string }
+  BuiltinModelPreset,
+  { modelId: string; label: string; description: string; badge?: string }
 > = {
-  fast: {
-    modelId: 'google/gemini-3.1-flash-lite-preview',
-    label: '⚡ 速い',
-    description: '速度優先 — 軽量な処理で素早く翻訳',
+  lite: {
+    modelId: 'google/gemma-4-31b-it',
+    label: '💰 お手軽',
+    description: '低コスト — 軽い読み物に',
   },
-  accurate: {
+  standard: {
+    modelId: 'google/gemini-3.1-flash-lite-preview',
+    label: '⚡ 標準',
+    description: '品質と速度のベストバランス',
+    badge: 'おすすめ',
+  },
+  premium: {
     modelId: 'google/gemini-3-flash-preview',
-    label: '◎ 正確',
-    description: '精度優先 — 技術文書や数式を正確に翻訳',
+    label: '✦ プレミアム',
+    description: '技術文書や数式を正確に翻訳',
   },
 };
 
-const VALID_PRESETS = new Set<ModelPreset>(['fast', 'accurate']);
+const VALID_PRESETS = new Set<ModelPreset>(['lite', 'standard', 'premium', 'custom']);
+const BUILTIN_PRESETS = new Set<BuiltinModelPreset>(['lite', 'standard', 'premium']);
+
+// Migration from old preset names
+const PRESET_MIGRATION: Record<string, ModelPreset> = {
+  fast: 'standard',
+  accurate: 'premium',
+};
+
+export const VERIFIED_MODELS = new Set([
+  'google/gemini-3.1-flash-lite-preview',
+  'google/gemini-3-flash-preview',
+  'google/gemma-4-31b-it',
+  'qwen/qwen3.5-35b-a3b',
+]);
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   provider: 'openrouter',
   apiKey: '',
-  model: MODEL_PRESETS.fast.modelId,
-  modelPreset: 'fast',
+  model: MODEL_PRESETS.standard.modelId,
+  modelPreset: 'standard',
   targetLanguage: resolveDefaultTargetLanguage(),
   style: 'auto',
   translateFullPage: false,
   cacheEnabled: true,
   showOriginalOnHover: true,
+  customModelId: '',
 };
 
 const VALID_STYLES = new Set<ExtensionSettings['style']>([
@@ -56,11 +77,27 @@ export function normalizeSettings(
 ): ExtensionSettings {
   const provider = settings?.provider === 'openrouter' ? 'openrouter' : DEFAULT_SETTINGS.provider;
   const apiKey = typeof settings?.apiKey === 'string' ? settings.apiKey.trim() : DEFAULT_SETTINGS.apiKey;
+
+  // Migrate old preset names
+  let rawPreset = settings?.modelPreset ?? '';
+  if (PRESET_MIGRATION[rawPreset]) {
+    rawPreset = PRESET_MIGRATION[rawPreset];
+  }
   const modelPreset: ModelPreset =
-    settings?.modelPreset && VALID_PRESETS.has(settings.modelPreset)
-      ? settings.modelPreset
+    rawPreset && VALID_PRESETS.has(rawPreset as ModelPreset)
+      ? (rawPreset as ModelPreset)
       : DEFAULT_SETTINGS.modelPreset;
-  const model = MODEL_PRESETS[modelPreset].modelId;
+
+  const customModelId =
+    typeof settings?.customModelId === 'string' ? settings.customModelId.trim() : '';
+
+  // Resolve model ID from preset or custom
+  const model = modelPreset === 'custom'
+    ? (customModelId || MODEL_PRESETS.standard.modelId)
+    : (BUILTIN_PRESETS.has(modelPreset as BuiltinModelPreset)
+        ? MODEL_PRESETS[modelPreset as BuiltinModelPreset].modelId
+        : MODEL_PRESETS.standard.modelId);
+
   const targetLanguage =
     typeof settings?.targetLanguage === 'string' && settings.targetLanguage.trim().length > 0
       ? settings.targetLanguage.trim()
@@ -87,6 +124,7 @@ export function normalizeSettings(
       typeof settings?.showOriginalOnHover === 'boolean'
         ? settings.showOriginalOnHover
         : DEFAULT_SETTINGS.showOriginalOnHover,
+    customModelId,
   };
 }
 

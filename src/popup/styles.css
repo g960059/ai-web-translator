@@ -259,7 +259,7 @@ body {
 
 .segment-control {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(var(--cols, 2), 1fr);
   gap: 0;
   border-radius: 14px;
   overflow: hidden;
@@ -287,6 +287,54 @@ body {
 
 .segment-button:hover:not([data-selected='true']) {
   background: rgba(255, 255, 255, 0.85);
+}
+
+.preset-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(192, 139, 26, 0.15);
+  color: var(--accent-strong);
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+.custom-model-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--surface-border);
+  font-size: 13px;
+}
+
+.custom-model-name {
+  font-weight: 600;
+  color: var(--accent-strong);
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.custom-model-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.custom-model-input {
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12px;
+  font-family: monospace;
 }
 
 /* === Buttons === */

@@ -15,10 +15,10 @@ import {
 import { localizeRuntimeError } from '../shared/error-messages';
 import { getPageIndex, removePageIndexEntry, type PageIndexEntry } from '../shared/cache';
 import { addBlockedSite, getBlockedSites, removeBlockedSite } from '../shared/blocked-sites';
-import { DEFAULT_SETTINGS, MODEL_PRESETS, loadSettings, normalizeSettings, saveSettings } from '../shared/settings';
+import { DEFAULT_SETTINGS, MODEL_PRESETS, VERIFIED_MODELS, loadSettings, normalizeSettings, saveSettings } from '../shared/settings';
 import type {
+  BuiltinModelPreset,
   ExtensionSettings,
-  ModelPreset,
   PageAnalysis,
   PageDisplayState,
   ProviderModelInfo,
@@ -447,34 +447,36 @@ export function PopupApp() {
             ) : (
               /* ready */
               <>
-                {/* Scope segment */}
-                <div className="segment-group">
-                  <div className="segment-control">
-                    <button type="button" className="segment-button" data-selected={!settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: false })}>本文のみ</button>
-                    <button type="button" className="segment-button" data-selected={settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: true })}>ページ全体</button>
+                {/* Model segment or custom indicator */}
+                {settings.modelPreset === 'custom' ? (
+                  <div className="custom-model-indicator">
+                    <span className="custom-model-label">カスタム: <span className="custom-model-name">{settings.customModelId || '未設定'}</span></span>
+                    <button type="button" className="button-link" onClick={() => setSlideView('settings')}>変更</button>
                   </div>
-                </div>
-
-                {/* Model segment */}
-                <div className="segment-group">
-                  <div className="segment-control">
-                    {(Object.keys(MODEL_PRESETS) as ModelPreset[]).map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        className="segment-button"
-                        data-selected={settings.modelPreset === preset}
-                        onClick={() => updateSettings({ modelPreset: preset })}
-                        title={MODEL_PRESETS[preset].description}
-                      >
-                        {MODEL_PRESETS[preset].label}
-                      </button>
-                    ))}
+                ) : (
+                  <div className="segment-group">
+                    <div className="segment-control" style={{ '--cols': 3 } as React.CSSProperties}>
+                      {(Object.keys(MODEL_PRESETS) as BuiltinModelPreset[]).map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className="segment-button"
+                          data-selected={settings.modelPreset === preset}
+                          onClick={() => updateSettings({ modelPreset: preset })}
+                          title={MODEL_PRESETS[preset].description}
+                        >
+                          {MODEL_PRESETS[preset].label}
+                          {MODEL_PRESETS[preset].badge && (
+                            <span className="preset-badge">{MODEL_PRESETS[preset].badge}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Hero translate button */}
-                <button className="button button-primary button-hero" onClick={() => void handleStartPageTranslation()} disabled={working || loading}>
+                <button className="button button-primary button-hero" onClick={() => void handleStartPageTranslation()} disabled={working || loading || (settings.modelPreset === 'custom' && !settings.customModelId.trim())}>
                   {canResumeCancelledTranslation ? '続きを再開する' : 'このページを翻訳する'}
                 </button>
 
@@ -606,6 +608,48 @@ export function PopupApp() {
                     ))}
                   </select>
                 </label>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="section-title">翻訳範囲</h3>
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={settings.translateFullPage} onChange={(e) => updateSettings({ translateFullPage: e.target.checked })} />
+                  <span>ページ全体を翻訳（ヘッダー・サイドバー含む）</span>
+                </label>
+              </div>
+
+              <div className="settings-section">
+                <h3 className="section-title">モデル</h3>
+                <div className="segment-control" style={{ '--cols': 4 } as React.CSSProperties}>
+                  {(Object.keys(MODEL_PRESETS) as BuiltinModelPreset[]).map((preset) => (
+                    <button key={preset} type="button" className="segment-button" data-selected={settings.modelPreset === preset} onClick={() => updateSettings({ modelPreset: preset, customModelId: '' })}>
+                      {MODEL_PRESETS[preset].label.replace(/^[^\s]+\s/, '')}
+                    </button>
+                  ))}
+                  <button type="button" className="segment-button" data-selected={settings.modelPreset === 'custom'} onClick={() => updateSettings({ modelPreset: 'custom' })}>
+                    カスタム
+                  </button>
+                </div>
+                {settings.modelPreset === 'custom' && (
+                  <div className="custom-model-input-group">
+                    <input
+                      type="text"
+                      className="custom-model-input"
+                      value={settings.customModelId}
+                      onChange={(e) => updateSettings({ customModelId: e.target.value, modelPreset: 'custom' })}
+                      placeholder="モデルIDを入力 (例: deepseek/deepseek-chat)"
+                      list="model-suggestions"
+                    />
+                    <datalist id="model-suggestions">
+                      {models.slice(0, 50).map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </datalist>
+                    {settings.customModelId && !VERIFIED_MODELS.has(settings.customModelId) && (
+                      <p className="soft-note" style={{ color: 'var(--accent-text)' }}>⚠️ 未検証モデルです。翻訳品質に問題が出る場合があります。</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="settings-section">
