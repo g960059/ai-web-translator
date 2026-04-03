@@ -447,6 +447,14 @@ export function PopupApp() {
             ) : (
               /* ready */
               <>
+                {/* Scope segment */}
+                <div className="segment-group">
+                  <div className="segment-control">
+                    <button type="button" className="segment-button" data-selected={!settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: false })}>本文のみ</button>
+                    <button type="button" className="segment-button" data-selected={settings.translateFullPage} onClick={() => updateSettings({ translateFullPage: true })}>ページ全体</button>
+                  </div>
+                </div>
+
                 {/* Model segment or custom indicator */}
                 {settings.modelPreset === 'custom' ? (
                   <div className="custom-model-indicator">
@@ -480,9 +488,16 @@ export function PopupApp() {
                   {canResumeCancelledTranslation ? '続きを再開する' : 'このページを翻訳する'}
                 </button>
 
-                {/* Cost */}
+                {/* Cost + cache status */}
                 {estimatedCost !== null && (
-                  <p className="cost-note">{formatEstimatedCost(estimatedCost)}</p>
+                  <p className="cost-note">
+                    {formatEstimatedCost(estimatedCost)}
+                    {analysis && analysis.estimatedCacheHitRatio > 0.9
+                      ? '（キャッシュあり）'
+                      : analysis && analysis.estimatedCacheHitRatio > 0.3
+                        ? `（${Math.round(analysis.estimatedCacheHitRatio * 100)}% キャッシュ済み）`
+                        : ''}
+                  </p>
                 )}
 
                 {/* Selection translation */}
