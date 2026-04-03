@@ -1177,7 +1177,7 @@ export class TranslationController {
     }
 
     const root = resolveScopeRoot(this.documentRef, scope);
-    const records = this.registerBlocks(collectTranslatableBlocks(root));
+    const records = this.registerBlocks(collectTranslatableBlocks(root, { fullPage: scope === 'page' }));
     const snapshot: PageScanSnapshot = {
       pageSignature: this.pageSignature,
       scope,

@@ -225,7 +225,7 @@ function hasBlockChild(element: HTMLElement): boolean {
 function isBoilerplateBlock(
   element: HTMLElement,
   text: string,
-  options?: { selectionMode?: boolean },
+  options?: { selectionMode?: boolean; fullPage?: boolean },
 ): boolean {
   // Heading elements (h1-h6) are always translatable — they serve as
   // navigation labels that readers need in the target language.
@@ -259,7 +259,7 @@ function isBoilerplateBlock(
     return true;
   }
 
-  if (element.closest('header, nav, footer, aside, form')) {
+  if (!options?.fullPage && element.closest('header, nav, footer, aside, form')) {
     return true;
   }
 
@@ -375,7 +375,7 @@ function getMergeableTextChildren(element: HTMLElement): HTMLElement[] | null {
 
 function resolveStructuredContainerBlock(
   element: HTMLElement,
-  options?: { selectionMode?: boolean },
+  options?: { selectionMode?: boolean; fullPage?: boolean },
 ): BlockSeed | null {
   if (!isXmlLikeDocument(element.ownerDocument)) {
     return null;
@@ -479,14 +479,14 @@ function isVisibleInViewport(element: HTMLElement): boolean {
 
 function isEligibleBlock(
   element: HTMLElement,
-  options?: { selectionMode?: boolean },
+  options?: { selectionMode?: boolean; fullPage?: boolean },
 ): boolean {
   return resolveBlockIneligibilityReason(element, options) === null;
 }
 
 function resolveBlockIneligibilityReason(
   element: HTMLElement,
-  options?: { selectionMode?: boolean },
+  options?: { selectionMode?: boolean; fullPage?: boolean },
 ): string | null {
   const tagName = getNormalizedTagName(element);
   if (element.matches(EXCLUDED_SELECTOR)) {
@@ -549,6 +549,7 @@ function collectBlocks(
     range?: Range;
     allowMergedParents?: boolean;
     selectionMode?: boolean;
+    fullPage?: boolean;
   },
 ): BlockSeed[] {
   const results: BlockSeed[] = [];
@@ -564,6 +565,7 @@ function collectBlocks(
 
     const structuredContainerBlock = resolveStructuredContainerBlock(element, {
       selectionMode: options?.selectionMode,
+      fullPage: options?.fullPage,
     });
     if (structuredContainerBlock) {
       results.push(structuredContainerBlock);
@@ -575,7 +577,7 @@ function collectBlocks(
       return;
     }
 
-    if (isEligibleBlock(element, { selectionMode: options?.selectionMode })) {
+    if (isEligibleBlock(element, { selectionMode: options?.selectionMode, fullPage: options?.fullPage })) {
       results.push(toBlockSeed(element));
       return;
     }
@@ -825,8 +827,8 @@ function isXmlLikeDocument(documentRef: Document): boolean {
   return contentType.includes('xml') && contentType !== 'text/html';
 }
 
-export function collectTranslatableBlocks(root: HTMLElement): BlockSeed[] {
-  return collectBlocks(root);
+export function collectTranslatableBlocks(root: HTMLElement, options?: { fullPage?: boolean }): BlockSeed[] {
+  return collectBlocks(root, { fullPage: options?.fullPage });
 }
 
 export function collectSelectionBlocks(selection: Selection): BlockSeed[] {
