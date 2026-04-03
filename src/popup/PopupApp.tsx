@@ -483,8 +483,9 @@ export function PopupApp() {
                 </p>
 
                 {/* Slot 4: Hover toggle — always visible, always enabled */}
-                <label className="checkbox-row" style={{ justifyContent: 'center' }}>
+                <label className="toggle-row" style={{ justifyContent: 'center' }}>
                   <input type="checkbox" checked={settings.showOriginalOnHover} onChange={(e) => updateSettings({ showOriginalOnHover: e.target.checked })} />
+                  <span className="toggle-track" />
                   <span>ホバーで原文を表示</span>
                 </label>
 
@@ -559,8 +560,9 @@ export function PopupApp() {
                 </p>
               )}
 
-              <label className="checkbox-row">
+              <label className="toggle-row">
                 <input type="checkbox" checked={settings.cacheEnabled} onChange={(e) => updateSettings({ cacheEnabled: e.target.checked })} />
+                <span className="toggle-track" />
                 <span>キャッシュを使う</span>
               </label>
 
@@ -630,9 +632,10 @@ export function PopupApp() {
 
               <div className="settings-section">
                 <h3 className="section-title">翻訳範囲</h3>
-                <label className="checkbox-row">
+                <label className="toggle-row">
                   <input type="checkbox" checked={!settings.translateFullPage} onChange={(e) => updateSettings({ translateFullPage: !e.target.checked })} />
-                  <span>本文のみに限定する（ヘッダー・サイドバーを除外）</span>
+                  <span className="toggle-track" />
+                  <span>本文のみに限定する</span>
                 </label>
               </div>
 
@@ -706,8 +709,9 @@ export function PopupApp() {
 
               <div className="settings-section">
                 <h3 className="section-title">表示</h3>
-                <label className="checkbox-row">
+                <label className="toggle-row">
                   <input type="checkbox" checked={settings.showOriginalOnHover} onChange={(e) => updateSettings({ showOriginalOnHover: e.target.checked })} />
+                  <span className="toggle-track" />
                   <span>ホバーで原文を表示</span>
                 </label>
               </div>
