@@ -536,6 +536,7 @@ export function PopupApp() {
             <header className="slide-header">
               <button type="button" className="back-button" onClick={() => setSlideView('main')}>← 戻る</button>
               <span className="slide-title">履歴</span>
+              <span className="slide-header-spacer" />
             </header>
             <div className="slide-body">
               {Object.values(pageIndex).length > 0 ? (
@@ -592,6 +593,7 @@ export function PopupApp() {
             <header className="slide-header">
               <button type="button" className="back-button" onClick={() => setSlideView('main')}>← 戻る</button>
               <span className="slide-title">設定</span>
+              <span className="slide-header-spacer" />
             </header>
             <div className="slide-body">
               <div className="settings-section">
