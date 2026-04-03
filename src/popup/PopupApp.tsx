@@ -501,7 +501,7 @@ export function PopupApp() {
                     {formatEstimatedCost(estimatedCost)}
                     {analysis && analysis.estimatedCacheHitRatio > 0.9
                       ? '（キャッシュあり）'
-                      : analysis && analysis.estimatedCacheHitRatio > 0.3
+                      : analysis && analysis.estimatedCacheHitRatio > 0.01
                         ? `（${Math.round(analysis.estimatedCacheHitRatio * 100)}% キャッシュ済み）`
                         : ''}
                   </p>
