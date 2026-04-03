@@ -859,6 +859,58 @@ export function isLikelyAlreadyTargetLanguage(text: string, targetLanguage: stri
   return scriptRatio >= 0.45;
 }
 
+const KANA_PATTERN = /[\u3040-\u30ff]/gu;
+
+/**
+ * Sample visible text from the page's main content area.
+ * Reuses resolveScopeRoot() and EXCLUDED_SELECTOR to stay aligned
+ * with the translation pipeline's content detection.
+ */
+export function sampleMainText(documentRef: Document, maxLength = 1500): string {
+  const root = resolveScopeRoot(documentRef, 'main');
+  const walker = documentRef.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const el = node.parentElement;
+      if (!el || el.closest(EXCLUDED_SELECTOR)) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  let collected = '';
+  while (walker.nextNode() && collected.length < maxLength) {
+    const text = walker.currentNode.textContent ?? '';
+    if (text.trim().length > 0) collected += text + ' ';
+  }
+  return collected.slice(0, maxLength);
+}
+
+/**
+ * Determine if the page's main content is likely already in the target language.
+ * Adds ja/zh disambiguation on top of isLikelyAlreadyTargetLanguage():
+ * - For ja target: requires kana presence (Chinese text has 0% kana)
+ * - For zh target: rejects if kana is present (Japanese text has kana)
+ */
+export function isLikelyPageInTargetLanguage(sample: string, targetLanguage: string): boolean {
+  if (!isLikelyAlreadyTargetLanguage(sample, targetLanguage)) return false;
+
+  const lang = targetLanguage.toLowerCase();
+  if (lang.startsWith('ja') || lang.startsWith('zh')) {
+    const letters = Array.from(sample).filter((c) => /\p{L}/u.test(c));
+    if (letters.length < 12) return false;
+    const kanaCount = (sample.match(KANA_PATTERN) ?? []).length;
+    const kanaRatio = kanaCount / letters.length;
+
+    if (lang.startsWith('ja')) {
+      // Japanese text must contain kana (>= 5%); Chinese text has 0%
+      return kanaRatio >= 0.05;
+    }
+    // Chinese target: reject if kana is present (>= 2%), meaning it's Japanese
+    return kanaRatio < 0.02;
+  }
+
+  return true;
+}
+
 /**
  * Detect if a translation result appears to still be in the source language
  * (i.e., the model returned source text instead of a real translation).

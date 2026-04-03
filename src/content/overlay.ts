@@ -1,4 +1,5 @@
 import { isBlockedSite } from '../shared/blocked-sites';
+import { sampleMainText, isLikelyPageInTargetLanguage } from '../core/blocks';
 import { localizeRuntimeError } from '../shared/error-messages';
 import { formatLanguageLabel } from '../shared/languages';
 import type { SessionWarningSummary, TranslationStatus, WidgetState } from '../shared/types';
@@ -528,21 +529,43 @@ export class TranslationOverlay {
     void isBlockedSite(window.location.hostname).then((blocked) => {
       if (blocked) return;
 
-      const lang = this.documentRef.documentElement.lang?.toLowerCase() ?? '';
       const normalizedTarget = targetLanguage.trim().toLowerCase();
       const targetPrimary = normalizedTarget.split('-')[0] || normalizedTarget;
-      const isSameAsTarget = targetPrimary ? lang.startsWith(targetPrimary) : false;
 
-      if (isSameAsTarget) return;
+      // Tier 1: HTML lang attribute (fastest path)
+      const lang = this.documentRef.documentElement.lang?.toLowerCase() ?? '';
+      if (targetPrimary && lang.startsWith(targetPrimary)) return;
 
-      const article = this.documentRef.querySelector('article');
-      const bodyText = this.documentRef.body?.innerText ?? '';
-      const hasSubstantialContent = article !== null || bodyText.length > 500;
+      // Tier 2: Meta-tag language hints
+      const metaLang = this.resolveMetaLanguage();
+      if (targetPrimary && metaLang.startsWith(targetPrimary)) return;
 
+      // Tier 3: Content-based script analysis (with ja/zh disambiguation)
+      const sample = sampleMainText(this.documentRef);
+      if (isLikelyPageInTargetLanguage(sample, targetLanguage)) return;
+
+      // Substantial content gate
+      const hasSubstantialContent =
+        this.documentRef.querySelector('article, main, [role="main"]') !== null
+        || sample.length > 500;
       if (!hasSubstantialContent) return;
 
       this.showPromptBubble(targetLanguage, 4000);
     }).catch(() => {});
+  }
+
+  private resolveMetaLanguage(): string {
+    const httpEquiv = this.documentRef
+      .querySelector('meta[http-equiv="content-language" i]')
+      ?.getAttribute('content');
+    if (httpEquiv) return httpEquiv.trim().toLowerCase();
+
+    const ogLocale = this.documentRef
+      .querySelector('meta[property="og:locale"]')
+      ?.getAttribute('content');
+    if (ogLocale) return ogLocale.trim().toLowerCase().replace('_', '-');
+
+    return '';
   }
 
   attachSelectionListener(): void {
