@@ -1,0 +1,103 @@
+{
+  "targetUrl": "https://en.wikipedia.org/wiki/Representation_theory_of_finite_groups",
+  "modelId": "google/gemini-3-flash-preview",
+  "elapsedMs": 92234,
+  "requestCount": 42,
+  "usage": {
+    "promptTokens": 45778,
+    "completionTokens": 29953
+  },
+  "finalState": {
+    "pageKey": "https://en.wikipedia.org/wiki/Representation_theory_of_finite_groups",
+    "status": "completed",
+    "displayState": "translated",
+    "hasTranslations": true,
+    "progressPercent": 100,
+    "targetLanguage": "ja",
+    "scope": "main",
+    "activeSessionId": null,
+    "lastError": null,
+    "warnings": null,
+    "metrics": {
+      "phaseTimings": {
+        "immediateCompletedMs": 1466,
+        "lazyVisibleCompletedMs": 8585,
+        "completedMs": 91802
+      },
+      "retryCounts": {
+        "total": 1,
+        "transient": 0,
+        "outputLimit": 0,
+        "fragmentCountMismatch": 0,
+        "invalidPayload": 0,
+        "batchSplits": 1,
+        "fragmentSplits": 0
+      },
+      "cacheStats": {
+        "memoryHits": 0,
+        "persistentHits": 0,
+        "misses": 759
+      },
+      "requestCountsByPhase": {
+        "immediate": 1,
+        "lazyVisible": 4,
+        "deferred": 21
+      },
+      "splitStats": {
+        "batchByContentMode": {
+          "text": 1,
+          "html": 0
+        },
+        "batchByMarkerPresence": {
+          "marked": 1,
+          "plain": 0
+        },
+        "batchBySize": {
+          "one": 0,
+          "two": 0,
+          "threeOrFour": 0,
+          "fiveOrMore": 1
+        },
+        "fragmentByContentMode": {
+          "text": 0,
+          "html": 0
+        }
+      },
+      "splitEventSamples": [
+        {
+          "phase": "deferred",
+          "bucketKey": "text",
+          "contentMode": "text",
+          "hasMarkers": true,
+          "itemCount": 28,
+          "flattenedFragmentCount": 76,
+          "averageEstimatedTokens": 50.393,
+          "maxGroupEstimatedTokens": 131,
+          "maxGroupFragmentCount": 5,
+          "reason": "Provider returned an invalid translations payload. details={\"candidateCount\":75,\"parsedSummary\":\"object(keys=translations,translations=len:27,itemKeys=i,t)\",\"excerpt\":\"{\\\"translations\\\":[{\\\"i\\\":\\\"0\\\",\\\"t\\\":\\\"このような写像は[[t0]][[x0]]線形[[/t0]]、あるいは[[t1]][[t2]]同変写像[[/t2]][[/t1]]とも呼ばれる。[[t3]]核[[/t3]]、[[t4]]像[[/t4]]、および[[t5]]余核[[/t5]]\\\"},{\\\"i\\\":\\\"1\\\",\\\"t\\\":\\\"はデフォルトで定義される。\"}"
+        }
+      ],
+      "immediateBatch": {
+        "groupCount": 1,
+        "fragmentCount": 1,
+        "contentMode": "text",
+        "preparedChars": 22,
+        "estimatedPromptTokens": 200,
+        "hasMarkers": false,
+        "providerLatencyMs": 1427,
+        "backgroundProviderLatencyMs": 1427,
+        "bridgeLatencyMs": 0
+      },
+      "qualitySignals": {
+        "sourceFallbackFragments": 0,
+        "protectedMarkerFallbackFragments": 14,
+        "mixedRegisterSignals": 0,
+        "labelPunctuationCorrections": 0,
+        "continuationContextFragments": 226,
+        "untranslatedResponses": 241,
+        "mixedLanguageDetections": 1
+      },
+      "warningStats": null
+    }
+  }
+}

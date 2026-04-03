@@ -1,0 +1,90 @@
+{
+  "targetUrl": "https://en.wikipedia.org/wiki/Representation_theory",
+  "modelId": "google/gemini-3-flash-preview",
+  "elapsedMs": 37689,
+  "requestCount": 21,
+  "usage": {
+    "promptTokens": 22830,
+    "completionTokens": 15049
+  },
+  "finalState": {
+    "pageKey": "https://en.wikipedia.org/wiki/Representation_theory",
+    "status": "completed",
+    "displayState": "translated",
+    "hasTranslations": true,
+    "progressPercent": 100,
+    "targetLanguage": "ja",
+    "scope": "main",
+    "activeSessionId": null,
+    "lastError": null,
+    "warnings": null,
+    "metrics": {
+      "phaseTimings": {
+        "immediateCompletedMs": 1529,
+        "lazyVisibleCompletedMs": 10923,
+        "completedMs": 37540
+      },
+      "retryCounts": {
+        "total": 0,
+        "transient": 0,
+        "outputLimit": 0,
+        "fragmentCountMismatch": 0,
+        "invalidPayload": 0,
+        "batchSplits": 0,
+        "fragmentSplits": 0
+      },
+      "cacheStats": {
+        "memoryHits": 0,
+        "persistentHits": 0,
+        "misses": 279
+      },
+      "requestCountsByPhase": {
+        "immediate": 1,
+        "lazyVisible": 5,
+        "deferred": 11
+      },
+      "splitStats": {
+        "batchByContentMode": {
+          "text": 0,
+          "html": 0
+        },
+        "batchByMarkerPresence": {
+          "marked": 0,
+          "plain": 0
+        },
+        "batchBySize": {
+          "one": 0,
+          "two": 0,
+          "threeOrFour": 0,
+          "fiveOrMore": 0
+        },
+        "fragmentByContentMode": {
+          "text": 0,
+          "html": 0
+        }
+      },
+      "splitEventSamples": [],
+      "immediateBatch": {
+        "groupCount": 1,
+        "fragmentCount": 1,
+        "contentMode": "text",
+        "preparedChars": 21,
+        "estimatedPromptTokens": 200,
+        "hasMarkers": false,
+        "providerLatencyMs": 1496,
+        "backgroundProviderLatencyMs": 1495,
+        "bridgeLatencyMs": 1
+      },
+      "qualitySignals": {
+        "sourceFallbackFragments": 0,
+        "protectedMarkerFallbackFragments": 4,
+        "mixedRegisterSignals": 0,
+        "labelPunctuationCorrections": 0,
+        "continuationContextFragments": 70,
+        "untranslatedResponses": 22,
+        "mixedLanguageDetections": 0
+      },
+      "warningStats": null
+    }
+  }
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "modelId": "google/gemini-3-flash-preview",
+    "slug": "google-gemini-3-flash-preview",
+    "elapsedMs": 123404,
+    "requestCount": 25,
+    "promptTokens": 27137,
+    "completionTokens": 23364,
+    "status": "completed",
+    "textLength": 25502
+  },
+  {
+    "modelId": "moonshotai/kimi-k2-0905",
+    "error": "OpenRouter request timed out."
+  },
+  {
+    "modelId": "deepseek/deepseek-v3.2",
+    "error": "OpenRouter request timed out."
+  },
+  {
+    "modelId": "google/gemini-2.5-flash-lite",
+    "slug": "google-gemini-2-5-flash-lite",
+    "elapsedMs": 54745,
+    "requestCount": 44,
+    "promptTokens": 38659,
+    "completionTokens": 22314,
+    "status": "completed_with_warnings",
+    "textLength": 33655
+  },
+  {
+    "modelId": "meta-llama/llama-4-scout",
+    "error": "OpenRouter request timed out."
+  },
+  {
+    "modelId": "google/gemini-3.1-flash-lite-preview",
+    "slug": "google-gemini-3-1-flash-lite-preview",
+    "elapsedMs": 49475,
+    "requestCount": 21,
+    "promptTokens": 22337,
+    "completionTokens": 15374,
+    "status": "completed",
+    "textLength": 25343
+  }
+]

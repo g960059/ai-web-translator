@@ -1,0 +1,103 @@
+{
+  "targetUrl": "https://en.wikipedia.org/wiki/Representation_theory_of_finite_groups",
+  "modelId": "google/gemini-3.1-flash-lite-preview",
+  "elapsedMs": 110974,
+  "requestCount": 44,
+  "usage": {
+    "promptTokens": 46420,
+    "completionTokens": 30941
+  },
+  "finalState": {
+    "pageKey": "https://en.wikipedia.org/wiki/Representation_theory_of_finite_groups",
+    "status": "completed",
+    "displayState": "translated",
+    "hasTranslations": true,
+    "progressPercent": 100,
+    "targetLanguage": "ja",
+    "scope": "main",
+    "activeSessionId": null,
+    "lastError": null,
+    "warnings": null,
+    "metrics": {
+      "phaseTimings": {
+        "immediateCompletedMs": 2483,
+        "lazyVisibleCompletedMs": 21341,
+        "completedMs": 110271
+      },
+      "retryCounts": {
+        "total": 1,
+        "transient": 0,
+        "outputLimit": 0,
+        "fragmentCountMismatch": 0,
+        "invalidPayload": 0,
+        "batchSplits": 1,
+        "fragmentSplits": 0
+      },
+      "cacheStats": {
+        "memoryHits": 0,
+        "persistentHits": 0,
+        "misses": 759
+      },
+      "requestCountsByPhase": {
+        "immediate": 1,
+        "lazyVisible": 4,
+        "deferred": 20
+      },
+      "splitStats": {
+        "batchByContentMode": {
+          "text": 0,
+          "html": 1
+        },
+        "batchByMarkerPresence": {
+          "marked": 1,
+          "plain": 0
+        },
+        "batchBySize": {
+          "one": 0,
+          "two": 0,
+          "threeOrFour": 0,
+          "fiveOrMore": 1
+        },
+        "fragmentByContentMode": {
+          "text": 0,
+          "html": 0
+        }
+      },
+      "splitEventSamples": [
+        {
+          "phase": "lazyVisible",
+          "bucketKey": "html:marked",
+          "contentMode": "html",
+          "hasMarkers": true,
+          "itemCount": 11,
+          "flattenedFragmentCount": 16,
+          "averageEstimatedTokens": 134.727,
+          "maxGroupEstimatedTokens": 172,
+          "maxGroupFragmentCount": 2,
+          "reason": "Provider response reached output limit."
+        }
+      ],
+      "immediateBatch": {
+        "groupCount": 1,
+        "fragmentCount": 1,
+        "contentMode": "text",
+        "preparedChars": 22,
+        "estimatedPromptTokens": 200,
+        "hasMarkers": false,
+        "providerLatencyMs": 2440,
+        "backgroundProviderLatencyMs": 2440,
+        "bridgeLatencyMs": 0
+      },
+      "qualitySignals": {
+        "sourceFallbackFragments": 0,
+        "protectedMarkerFallbackFragments": 17,
+        "mixedRegisterSignals": 0,
+        "labelPunctuationCorrections": 0,
+        "continuationContextFragments": 239,
+        "untranslatedResponses": 238,
+        "mixedLanguageDetections": 1
+      },
+      "warningStats": null
+    }
+  }
+}
