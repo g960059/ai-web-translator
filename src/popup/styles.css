@@ -77,6 +77,13 @@ body {
   gap: 8px;
 }
 
+.app-brand {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent-strong);
+  letter-spacing: -0.02em;
+}
+
 .header-icons {
   display: flex;
   gap: 4px;
@@ -101,23 +108,6 @@ body {
   color: var(--text);
 }
 
-.language-indicator {
-  border: none;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: rgba(192, 139, 26, 0.08);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: background 120ms;
-}
-
-.language-indicator:hover {
-  background: rgba(192, 139, 26, 0.16);
-}
 
 /* === Main Content === */
 .main-content {
