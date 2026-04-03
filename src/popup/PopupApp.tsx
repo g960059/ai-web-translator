@@ -84,6 +84,7 @@ export function PopupApp() {
   const [slideView, setSlideView] = useState<SlideView>('main');
   const [pageIndex, setPageIndex] = useState<Record<string, PageIndexEntry>>({});
   const [blockedSites, setBlockedSites] = useState<string[]>([]);
+  const [customModelSearch, setCustomModelSearch] = useState<string | null>(null);
   const activeTabIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -637,32 +638,59 @@ export function PopupApp() {
 
               <div className="settings-section">
                 <h3 className="section-title">モデル</h3>
-                <div className="segment-control" style={{ '--cols': 4 } as React.CSSProperties}>
-                  {(Object.keys(MODEL_PRESETS) as BuiltinModelPreset[]).map((preset) => (
-                    <button key={preset} type="button" className="segment-button" data-selected={settings.modelPreset === preset} onClick={() => updateSettings({ modelPreset: preset, customModelId: '' })}>
-                      {MODEL_PRESETS[preset].label.replace(/^[^\s]+\s/, '')}
-                    </button>
-                  ))}
-                  <button type="button" className="segment-button" data-selected={settings.modelPreset === 'custom'} onClick={() => updateSettings({ modelPreset: 'custom' })}>
-                    カスタム
-                  </button>
-                </div>
+                <label className="field">
+                  <select
+                    value={settings.modelPreset}
+                    onChange={(e) => updateSettings({ modelPreset: e.target.value as BuiltinModelPreset | 'custom', customModelId: e.target.value === 'custom' ? settings.customModelId : '' })}
+                  >
+                    {(Object.keys(MODEL_PRESETS) as BuiltinModelPreset[]).map((preset) => (
+                      <option key={preset} value={preset}>
+                        {MODEL_PRESETS[preset].label}{MODEL_PRESETS[preset].badge ? ` — ${MODEL_PRESETS[preset].badge}` : ''}
+                      </option>
+                    ))}
+                    <option value="custom">カスタムモデル...</option>
+                  </select>
+                </label>
                 {settings.modelPreset === 'custom' && (
                   <div className="custom-model-input-group">
                     <input
                       type="text"
                       className="custom-model-input"
-                      value={settings.customModelId}
-                      onChange={(e) => updateSettings({ customModelId: e.target.value, modelPreset: 'custom' })}
-                      placeholder="モデルIDを入力 (例: deepseek/deepseek-chat)"
-                      list="model-suggestions"
+                      value={customModelSearch ?? settings.customModelId}
+                      onChange={(e) => setCustomModelSearch(e.target.value)}
+                      onFocus={() => { if (customModelSearch === null) setCustomModelSearch(settings.customModelId); }}
+                      onBlur={() => { setTimeout(() => setCustomModelSearch(null), 200); }}
+                      placeholder="モデルを検索 (例: deepseek, gemma, qwen...)"
                     />
-                    <datalist id="model-suggestions">
-                      {models.slice(0, 50).map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </datalist>
-                    {settings.customModelId && !VERIFIED_MODELS.has(settings.customModelId) && (
+                    {customModelSearch !== null && (
+                      <div className="model-search-results">
+                        {models
+                          .filter((m) => {
+                            const q = customModelSearch.toLowerCase();
+                            return !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q);
+                          })
+                          .slice(0, 8)
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              className="model-search-item"
+                              data-selected={settings.customModelId === m.id}
+                              onMouseDown={(e) => { e.preventDefault(); updateSettings({ customModelId: m.id, modelPreset: 'custom' }); setCustomModelSearch(null); }}
+                            >
+                              <span className="model-search-name">{m.name}</span>
+                              <span className="model-search-id">{m.id}</span>
+                            </button>
+                          ))}
+                        {models.filter((m) => {
+                          const q = customModelSearch.toLowerCase();
+                          return !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q);
+                        }).length === 0 && (
+                          <p className="model-search-empty">一致するモデルがありません</p>
+                        )}
+                      </div>
+                    )}
+                    {settings.customModelId && !VERIFIED_MODELS.has(settings.customModelId) && customModelSearch === null && (
                       <p className="soft-note" style={{ color: 'var(--accent-text)' }}>⚠️ 未検証モデルです。翻訳品質に問題が出る場合があります。</p>
                     )}
                   </div>

@@ -322,6 +322,57 @@ body {
   font-family: monospace;
 }
 
+.model-search-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.model-search-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.model-search-item:hover {
+  background: rgba(192, 139, 26, 0.06);
+}
+
+.model-search-item[data-selected="true"] {
+  background: var(--accent-light);
+}
+
+.model-search-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.model-search-id {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-soft);
+}
+
+.model-search-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-soft);
+  margin: 0;
+}
+
 /* === Hero Area === */
 .hero-area {
   display: flex;
