@@ -638,19 +638,16 @@ export function PopupApp() {
 
               <div className="settings-section">
                 <h3 className="section-title">モデル</h3>
-                <label className="field">
-                  <select
-                    value={settings.modelPreset}
-                    onChange={(e) => updateSettings({ modelPreset: e.target.value as BuiltinModelPreset | 'custom', customModelId: e.target.value === 'custom' ? settings.customModelId : '' })}
-                  >
-                    {(Object.keys(MODEL_PRESETS) as BuiltinModelPreset[]).map((preset) => (
-                      <option key={preset} value={preset}>
-                        {MODEL_PRESETS[preset].label}{MODEL_PRESETS[preset].badge ? ` — ${MODEL_PRESETS[preset].badge}` : ''}
-                      </option>
-                    ))}
-                    <option value="custom">カスタムモデル...</option>
-                  </select>
-                </label>
+                <div className="segment-control" style={{ '--cols': 3 } as React.CSSProperties}>
+                  {(Object.keys(MODEL_PRESETS) as BuiltinModelPreset[]).map((preset) => (
+                    <button key={preset} type="button" className="segment-button" data-selected={settings.modelPreset === preset} onClick={() => updateSettings({ modelPreset: preset, customModelId: '' })}>
+                      {MODEL_PRESETS[preset].label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className={`button ${settings.modelPreset === 'custom' ? 'button-primary' : 'button-secondary'}`} onClick={() => updateSettings({ modelPreset: 'custom' })} style={{ fontSize: '12px', padding: '8px 12px' }}>
+                  {settings.modelPreset === 'custom' ? `カスタム: ${settings.customModelId || '未選択'}` : 'カスタムモデルを使う'}
+                </button>
                 {settings.modelPreset === 'custom' && (
                   <div className="custom-model-input-group">
                     <input
