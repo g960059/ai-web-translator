@@ -391,77 +391,17 @@ export function PopupApp() {
               <div className="focus-card">
                 <p className="helper-copy">通常の Web ページを開くと翻訳できます。</p>
               </div>
-            ) : popupMode === 'active' ? (
-              <div className="active-card">
-                <div className="progress-section">
-                  <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${tabState?.progressPercent ?? 0}%` }} />
-                  </div>
-                  <p className="soft-note">{translateStatus(tabState?.status ?? '')} {tabState?.progressPercent ?? 0}%</p>
-                </div>
-                <p className="soft-note" style={{ textAlign: 'center', opacity: 0.7 }}>閉じてもOK</p>
-                <button className="button button-danger" onClick={() => void handleCancelTranslation()} disabled={working || loading}>
-                  翻訳を停止する
-                </button>
-              </div>
-            ) : popupMode === 'translated' ? (
-              <div className="translated-card">
-                {/* 3-way display mode segment */}
-                <div className="display-segment">
-                  <div className="display-segment-track">
-                    <div
-                      className="display-segment-pill"
-                      style={{ transform: `translateX(${DISPLAY_MODES.findIndex((m) => m.value === currentDisplayState) * 100}%)` }}
-                    />
-                    {DISPLAY_MODES.map((mode) => (
-                      <button
-                        key={mode.value}
-                        type="button"
-                        className="display-segment-button"
-                        data-active={currentDisplayState === mode.value}
-                        onClick={() => void handleSetDisplayMode(mode.value)}
-                        disabled={working}
-                      >
-                        {mode.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <p className="soft-note" style={{ textAlign: 'center' }}>✓ 翻訳済み</p>
-
-                <label className="checkbox-row" style={{ justifyContent: 'center' }}>
-                  <input type="checkbox" checked={settings.showOriginalOnHover} onChange={(e) => updateSettings({ showOriginalOnHover: e.target.checked })} />
-                  <span>ホバーで原文を表示</span>
-                </label>
-
-                {canResumeCancelledTranslation && (
-                  <button className="button button-primary" onClick={() => void handleStartPageTranslation()} disabled={working || loading}>
-                    続きを再開する
-                  </button>
-                )}
-
-                {hasSelection && (
-                  <button className="button button-secondary" onClick={() => void handleSelectionTranslation(false)} disabled={working || loading}>
-                    この部分だけ読む
-                  </button>
-                )}
-
-                <button type="button" className="button-link" onClick={() => void handleClearPageCache()} disabled={working}>
-                  キャッシュを削除して再翻訳
-                </button>
-              </div>
             ) : (
-              /* ready */
+              /* Unified layout: ready / active / translated share 5 fixed slots */
               <>
-                {/* Model segment or custom indicator */}
-                {settings.modelPreset === 'custom' ? (
-                  <div className="custom-model-indicator">
-                    <span className="custom-model-label">カスタム: <span className="custom-model-name">{settings.customModelId || '未設定'}</span></span>
-                    <button type="button" className="button-link" onClick={() => setSlideView('settings')}>変更</button>
-                  </div>
-                ) : (
-                  <div className="segment-group">
+                {/* Slot 1: Model segment — always visible, disabled when not ready */}
+                <div className="segment-group" {...(popupMode !== 'ready' ? { inert: '' } : {})}>
+                  {settings.modelPreset === 'custom' ? (
+                    <div className="custom-model-indicator">
+                      <span className="custom-model-label">カスタム: <span className="custom-model-name">{settings.customModelId || '未設定'}</span></span>
+                      <button type="button" className="button-link" onClick={() => setSlideView('settings')}>変更</button>
+                    </div>
+                  ) : (
                     <div className="segment-control" style={{ '--cols': 3 } as React.CSSProperties}>
                       {(Object.keys(MODEL_PRESETS) as BuiltinModelPreset[]).map((preset) => (
                         <button
@@ -479,37 +419,100 @@ export function PopupApp() {
                         </button>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                {/* Hero translate button */}
-                <button className="button button-primary button-hero" onClick={() => void handleStartPageTranslation()} disabled={working || loading || (settings.modelPreset === 'custom' && !settings.customModelId.trim())}>
-                  {canResumeCancelledTranslation ? '続きを再開する' : 'このページを翻訳する'}
-                </button>
+                {/* Slot 2: Hero area — morphs by state */}
+                <div className="hero-area">
+                  {popupMode === 'active' ? (
+                    <>
+                      <div className="progress-section">
+                        <div className="progress-bar">
+                          <div className="progress-fill" style={{ width: `${tabState?.progressPercent ?? 0}%` }} />
+                        </div>
+                      </div>
+                      <button className="button button-danger" onClick={() => void handleCancelTranslation()} disabled={working || loading}>
+                        翻訳を停止する
+                      </button>
+                    </>
+                  ) : popupMode === 'translated' ? (
+                    <div className="display-segment">
+                      <div className="display-segment-track">
+                        <div
+                          className="display-segment-pill"
+                          style={{ transform: `translateX(${DISPLAY_MODES.findIndex((m) => m.value === currentDisplayState) * 100}%)` }}
+                        />
+                        {DISPLAY_MODES.map((mode) => (
+                          <button
+                            key={mode.value}
+                            type="button"
+                            className="display-segment-button"
+                            data-active={currentDisplayState === mode.value}
+                            onClick={() => void handleSetDisplayMode(mode.value)}
+                            disabled={working}
+                          >
+                            {mode.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="button button-primary button-hero" onClick={() => void handleStartPageTranslation()} disabled={working || loading || (settings.modelPreset === 'custom' && !settings.customModelId.trim())}>
+                      {canResumeCancelledTranslation ? '続きを再開する' : 'このページを翻訳する'}
+                    </button>
+                  )}
+                </div>
 
-                {/* Cost + cache status */}
-                {estimatedCost !== null && (
-                  <p className="cost-note">
-                    {formatEstimatedCost(estimatedCost)}
-                    {analysis && analysis.estimatedCacheHitRatio > 0.9
-                      ? '（キャッシュあり）'
-                      : analysis && analysis.estimatedCacheHitRatio > 0.01
-                        ? `（${Math.round(analysis.estimatedCacheHitRatio * 100)}% キャッシュ済み）`
-                        : ''}
-                  </p>
-                )}
+                {/* Slot 3: Status line — always present */}
+                <p className="cost-note">
+                  {popupMode === 'active'
+                    ? <span>{translateStatus(tabState?.status ?? '')} {tabState?.progressPercent ?? 0}% — 閉じてもOK</span>
+                    : popupMode === 'translated'
+                      ? <span>✓ 翻訳済み</span>
+                      : estimatedCost !== null
+                        ? <span>
+                            {formatEstimatedCost(estimatedCost)}
+                            {analysis && analysis.estimatedCacheHitRatio > 0.9
+                              ? '（キャッシュあり）'
+                              : analysis && analysis.estimatedCacheHitRatio > 0.01
+                                ? `（${Math.round(analysis.estimatedCacheHitRatio * 100)}% キャッシュ済み）`
+                                : ''}
+                          </span>
+                        : <span>{'\u00A0'}</span>}
+                </p>
 
-                {/* Selection translation */}
-                {hasSelection && (
-                  <button className="button button-secondary" onClick={() => void handleSelectionTranslation(false)} disabled={working || loading}>
-                    この部分だけ読む
-                  </button>
-                )}
+                {/* Slot 4: Hover toggle — always visible, always enabled */}
+                <label className="checkbox-row" style={{ justifyContent: 'center' }}>
+                  <input type="checkbox" checked={settings.showOriginalOnHover} onChange={(e) => updateSettings({ showOriginalOnHover: e.target.checked })} />
+                  <span>ホバーで原文を表示</span>
+                </label>
 
-                {/* Quick block */}
-                <button type="button" className="button-link" onClick={() => void handleBlockCurrentSite()}>
-                  このサイトを翻訳しない
-                </button>
+                {/* Slot 5: Secondary actions — contextual */}
+                <div className="secondary-actions">
+                  {popupMode === 'active' ? null : (
+                    <>
+                      {canResumeCancelledTranslation && (
+                        <button className="button button-primary" onClick={() => void handleStartPageTranslation()} disabled={working || loading}>
+                          続きを再開する
+                        </button>
+                      )}
+                      {hasSelection && (
+                        <button className="button button-secondary" onClick={() => void handleSelectionTranslation(false)} disabled={working || loading}>
+                          この部分だけ読む
+                        </button>
+                      )}
+                      {popupMode === 'translated' ? (
+                        <button type="button" className="button-link" onClick={() => void handleClearPageCache()} disabled={working}>
+                          キャッシュを削除して再翻訳
+                        </button>
+                      ) : (
+                        <button type="button" className="button-link" onClick={() => void handleBlockCurrentSite()}>
+                          このサイトを翻訳しない
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </>
             )}
           </section>

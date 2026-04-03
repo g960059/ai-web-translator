@@ -187,21 +187,6 @@ body {
   text-align: center;
 }
 
-/* === Active Card === */
-.active-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 8px 0;
-}
-
-/* === Translated Card === */
-.translated-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px 0;
-}
 
 /* === 3-Way Display Segment === */
 .display-segment {
@@ -335,6 +320,26 @@ body {
   font: inherit;
   font-size: 12px;
   font-family: monospace;
+}
+
+/* === Hero Area === */
+.hero-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Disabled slots via inert attribute */
+[inert] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.secondary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
 }
 
 /* === Buttons === */
