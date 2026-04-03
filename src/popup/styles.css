@@ -77,6 +77,11 @@ body {
   gap: 8px;
 }
 
+.header-icons {
+  display: flex;
+  gap: 4px;
+}
+
 .header-icon {
   display: flex;
   align-items: center;
