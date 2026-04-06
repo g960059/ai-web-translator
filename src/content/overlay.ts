@@ -33,6 +33,8 @@ export class TranslationOverlay {
   private restingAction: RestingActionKind = 'none';
   private currentErrorMessage = '';
   private selectionListenerAttached = false;
+  private pageMatchesTarget = false;
+  private detectGeneration = 0;
   private targetLanguage = chrome.i18n?.getUILanguage?.() ?? 'ja';
 
   onStartTranslation: (() => void) | null = null;
@@ -382,6 +384,8 @@ export class TranslationOverlay {
     this.restingAction = 'none';
     this.setState('off');
     this.currentErrorMessage = '';
+    this.pageMatchesTarget = false;
+    ++this.detectGeneration;
     this.setVisible(false);
   }
 
@@ -392,6 +396,8 @@ export class TranslationOverlay {
 
   setTargetLanguage(targetLanguage: string): void {
     this.targetLanguage = targetLanguage.trim() || (chrome.i18n?.getUILanguage?.() ?? 'ja');
+    this.pageMatchesTarget = false;
+    ++this.detectGeneration;
   }
 
   showIdleIcon(): void {
@@ -525,8 +531,11 @@ export class TranslationOverlay {
 
   detectAndPrompt(targetLanguage: string): void {
     this.setTargetLanguage(targetLanguage);
+    this.pageMatchesTarget = false;
+    const generation = ++this.detectGeneration;
 
     void isBlockedSite(window.location.hostname).then((blocked) => {
+      if (generation !== this.detectGeneration) return;
       if (blocked) return;
 
       const normalizedTarget = targetLanguage.trim().toLowerCase();
@@ -534,15 +543,24 @@ export class TranslationOverlay {
 
       // Tier 1: HTML lang attribute (fastest path)
       const lang = this.documentRef.documentElement.lang?.toLowerCase() ?? '';
-      if (targetPrimary && lang.startsWith(targetPrimary)) return;
+      if (targetPrimary && lang.startsWith(targetPrimary)) {
+        this.pageMatchesTarget = true;
+        return;
+      }
 
       // Tier 2: Meta-tag language hints
       const metaLang = this.resolveMetaLanguage();
-      if (targetPrimary && metaLang.startsWith(targetPrimary)) return;
+      if (targetPrimary && metaLang.startsWith(targetPrimary)) {
+        this.pageMatchesTarget = true;
+        return;
+      }
 
       // Tier 3: Content-based script analysis (with ja/zh disambiguation)
       const sample = sampleMainText(this.documentRef);
-      if (isLikelyPageInTargetLanguage(sample, targetLanguage)) return;
+      if (isLikelyPageInTargetLanguage(sample, targetLanguage)) {
+        this.pageMatchesTarget = true;
+        return;
+      }
 
       // Substantial content gate
       const hasSubstantialContent =
@@ -826,6 +844,7 @@ export class TranslationOverlay {
   }
 
   private handleSelectionChange(): void {
+    if (this.pageMatchesTarget) return;
     if (this.currentState === 'working' || this.currentState === 'retrying') {
       return;
     }
